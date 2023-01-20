@@ -1,5 +1,6 @@
 #include <mitsuba/core/properties.h>
 #include <mitsuba/render/medium.h>
+#include <mitsuba/render/mueller.h>
 #include <mitsuba/render/phase.h>
 #include <mitsuba/python/python.h>
 
@@ -10,17 +11,22 @@ public:
 
     PyPhaseFunction(const Properties &props) : PhaseFunction(props) {}
 
-    std::pair<Vector3f, Float> sample(const PhaseFunctionContext &ctx,
+    std::pair<Vector3f, Spectrum> sample(const PhaseFunctionContext &ctx,
                     const MediumInteraction3f &mi,
                     Float sample1, const Point2f &sample2,
                     Mask active) const override {
-        using Return = std::pair<Vector3f, Float>;
+        using Return = std::pair<Vector3f, Spectrum>;
         PYBIND11_OVERRIDE_PURE(Return, PhaseFunction, sample, ctx, mi, sample1, sample2, active);
     }
 
-    Float eval(const PhaseFunctionContext &ctx, const MediumInteraction3f &mi,
+    Spectrum eval(const PhaseFunctionContext &ctx, const MediumInteraction3f &mi,
+                  const Vector3f &wo, Mask active) const override {
+        PYBIND11_OVERRIDE_PURE(Spectrum, PhaseFunction, eval, ctx, mi, wo, active);
+    }
+
+    Float pdf(const PhaseFunctionContext &ctx, const MediumInteraction3f &mi,
                const Vector3f &wo, Mask active) const override {
-        PYBIND11_OVERRIDE_PURE(Float, PhaseFunction, eval, ctx, mi, wo, active);
+        PYBIND11_OVERRIDE_PURE(Float, PhaseFunction, pdf, ctx, mi, wo, active);
     }
 
     Float projected_area(const MediumInteraction3f &mi, Mask active) const override {
@@ -54,6 +60,11 @@ template <typename Ptr, typename Cls> void bind_phase_generic(Cls &cls) {
                Mask active) { return ptr->eval(ctx, mi, wo, active); },
             "ctx"_a, "mi"_a, "wo"_a, "active"_a = true,
             D(PhaseFunction, eval))
+        .def("pdf",
+            [](Ptr ptr, const PhaseFunctionContext &ctx,
+               const MediumInteraction3f &mi, const Vector3f &wo,
+               Mask active) { return ptr->pdf(ctx, mi, wo, active); },
+            "ctx"_a, "mi"_a, "wo"_a, "active"_a = true)
        .def("projected_area",
             [](Ptr ptr, const MediumInteraction3f &mi,
                Mask active) { return ptr->projected_area(mi, active); },

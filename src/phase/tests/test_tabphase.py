@@ -58,7 +58,7 @@ def test_eval(variant_scalar_rgb):
     mei.wi = wi
     tab_eval = np.zeros_like(ref_eval)
     for i, wo in enumerate(wos):
-        tab_eval[i] = tab.eval(ctx, mei, wo)
+        tab_eval[i] = tab.eval(ctx, mei, wo)[0]
 
     # Compare reference and plugin outputs
     assert np.allclose(ref_eval, tab_eval)

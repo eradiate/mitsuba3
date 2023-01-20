@@ -69,11 +69,11 @@ public:
                (temp * dr::sqrt(temp));
     }
 
-    std::pair<Vector3f, Float> sample(const PhaseFunctionContext & /* ctx */,
-                                      const MediumInteraction3f &mi,
-                                      Float /* sample1 */,
-                                      const Point2f &sample2,
-                                      Mask active) const override {
+    std::pair<Vector3f, Spectrum> sample(const PhaseFunctionContext & /* ctx */,
+                                         const MediumInteraction3f &mi,
+                                         Float /* sample1 */,
+                                         const Point2f &sample2,
+                                         Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::PhaseFunctionSample, active);
 
         Float sqr_term  = (1.f - dr::sqr(m_g)) / (1.f - m_g + 2.f * m_g * sample2.x()),
@@ -84,14 +84,19 @@ public:
 
         Float sin_theta = dr::safe_sqrt(1.f - dr::sqr(cos_theta));
         auto [sin_phi, cos_phi] = dr::sincos(2.f * dr::Pi<ScalarFloat> * sample2.y());
-
-        Vector3f wo = mi.to_world(
-            Vector3f(sin_theta * cos_phi, sin_theta * sin_phi, -cos_theta));
-
-        return { wo, eval_hg(-cos_theta) };
+        Vector3f wo = Vector3f(sin_theta * cos_phi, sin_theta * sin_phi, -cos_theta);
+        wo = mi.to_world(wo);
+        UnpolarizedSpectrum value = eval_hg(-cos_theta);
+        return { wo, depolarizer<Spectrum>(value)};
     }
 
-    Float eval(const PhaseFunctionContext & /* ctx */, const MediumInteraction3f &mi,
+    Spectrum eval(const PhaseFunctionContext & /* ctx */, const MediumInteraction3f &mi,
+                  const Vector3f &wo, Mask active) const override {
+        MI_MASKED_FUNCTION(ProfilerPhase::PhaseFunctionEvaluate, active);
+        return UnpolarizedSpectrum(eval_hg(dr::dot(wo, mi.wi)));
+    }
+
+    Float pdf(const PhaseFunctionContext & /* ctx */, const MediumInteraction3f &mi,
                const Vector3f &wo, Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::PhaseFunctionEvaluate, active);
         return eval_hg(dr::dot(wo, mi.wi));

@@ -4,6 +4,7 @@
 #include <mitsuba/render/fwd.h>
 #include <mitsuba/render/fresnel.h>
 #include <drjit/matrix.h>
+#include <drjit/sphere.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -261,6 +262,43 @@ MuellerMatrix<Float> specular_transmission(Float cos_theta_i, Float eta) {
         b, a, 0, 0,
         0, 0, c, 0,
         0, 0, 0, c
+    );
+}
+
+/**
+ * \brief Calculates the Mueller matrix of a Rayleigh scatter event given
+ * the scattering angle according to eq. (2.15) in 
+ * :cite:`Hansen1974LightScattering`.
+ *
+ * \param cos_theta
+ *      Cosine of the scattering angle.
+ * 
+ * \param rho
+ *      Depolarization factor.
+ * 
+ */
+template <typename Float>
+MuellerMatrix<Float> rayleigh_scatter(Float cos_theta, Float rho) {
+
+    Float delta = (1.f - rho) / (1 + rho / 2.f);
+    Float delta_prime = (1.f - 2 * rho) / (1 - rho);
+
+    Float cos_theta2 = dr::sqr(cos_theta);
+    Float x = 3.f * cos_theta2 - 1;
+    Float y = cos_theta2 - 1;
+
+    Float a = 1.f + (delta / 4.f) * x;
+    Float b = (-3.f * delta / 4.f) * y;
+    Float c = (3.f * delta / 4.f) * cos_theta;
+    Float d = (3.f * delta_prime / 4.f) * cos_theta;
+
+    Float norm = Float(1.f / 4.f) * dr::InvPi<Float>;
+    
+    return norm * MuellerMatrix<Float>(
+        a, b, 0, 0,
+        b, a, 0, 0, 
+        0, 0, c, 0,
+        0, 0, 0, d
     );
 }
 

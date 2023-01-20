@@ -60,6 +60,11 @@ MI_PY_EXPORT(mueller) {
     m.def("specular_transmission", &mueller::specular_transmission<UnpolarizedSpectrum>,
           "cos_theta_i"_a, "eta"_a, D(mueller, specular_transmission));
 
+    m.def("rayleigh_scatter", &mueller::rayleigh_scatter<Float>,
+          "cos_theta"_a, "rho"_a); // TODO: Generate docs
+    m.def("rayleigh_scatter", &mueller::rayleigh_scatter<UnpolarizedSpectrum>,
+          "cos_theta"_a, "rho"_a); // TODO: Generate docs
+          
     m.def("stokes_basis", &mueller::stokes_basis<Vector3f>,
           "w"_a, D(mueller, stokes_basis));
 
