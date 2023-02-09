@@ -271,7 +271,7 @@ MuellerMatrix<Float> specular_transmission(Float cos_theta_i, Float eta) {
  * :cite:`Hansen1974LightScattering`.
  *
  * \param cos_theta
- *      Cosine of the scattering angle.
+ *      Cosine of the scattering angle (physics convention).
  * 
  * \param rho
  *      Depolarization factor.

@@ -48,6 +48,7 @@ public:
     }
 
     MI_INLINE Float eval_rayleigh_pdf(Float cos_theta) const {
+        // cos_theta in physics convention
         return (3.f / 16.f) * dr::InvPi<Float> * (1.f + dr::sqr(cos_theta));
     }
 
@@ -58,7 +59,7 @@ public:
         Spectrum phase_val;
 
         if constexpr (is_polarized_v<Spectrum>) {
-            //Float sin_theta = dr::safe_sqrt(1.0f - dr::sqr(cos_theta));
+            /* cos_theta in physics convention */
             phase_val = mueller::rayleigh_scatter(cos_theta, (Float) m_depolarization);
 
             /* Due to the coordinate system rotations for polarization-aware
@@ -108,13 +109,19 @@ public:
         Float tmp = dr::sqrt(dr::sqr(z) + 1.f);
         Float A   = dr::cbrt(z + tmp);
         Float B   = dr::cbrt(z - tmp);
-        Float cos_theta = A + B;
+        Float cos_theta = A + B; /* cos_theta in physics convention */
         Float sin_theta = dr::safe_sqrt(1.0f - dr::sqr(cos_theta));
         auto [sin_phi, cos_phi] = dr::sincos(dr::TwoPi<Float> * sample.y());
 
-        auto wo = Vector3f( sin_theta * cos_phi, sin_theta * sin_phi, cos_theta );
+        /* if θ is the scattering angle in physics convention, and θ' 
+        the scattering angle in graphics convention, then θ' = π - θ
+        and cos(θ') = -cos(θ) and sin(θ') = sin(θ)*/
+        Vector3f wo = Vector3f( sin_theta * cos_phi, sin_theta * sin_phi, -cos_theta );
+
+        /* eval_rayleigh_pdf expects cos(θ) in physics convention */
         Float pdf = eval_rayleigh_pdf(cos_theta);
 
+        /* eval_rayleigh expects cos(θ) in physics convention */
         Spectrum phase_val = eval_rayleigh(ctx, mi, wo, cos_theta) * dr::rcp(pdf);
 
         return { wo, phase_val };
@@ -124,6 +131,8 @@ public:
                const MediumInteraction3f &mi, const Vector3f &wo,
                Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::PhaseFunctionEvaluate, active);
+        /* given that wo and wi are in graphics convention
+        cos_theta is in physics convention: dot(wo, -mi.wi) */
         return eval_rayleigh(ctx, mi, wo, dot(wo, -mi.wi));
     }
 
@@ -131,6 +140,9 @@ public:
               const MediumInteraction3f &mi, const Vector3f &wo,
                Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::PhaseFunctionEvaluate, active);
+        /* if the incident direction is ω in graphics convention, it
+        is -ω in physics convention.
+        eval_rayleigh expects cos(θ) in physics convention  */
         return eval_rayleigh_pdf(dot(wo, -mi.wi));
     }
 
