@@ -617,8 +617,8 @@ def PhaseFunctionAdapter(phase_type, extra, wi=[0, 0, 1], ctx=None):
         plugin = instantiate(args)
         mei, ctx = make_context(n)
         wo, weight = plugin.sample(ctx, mei, sample[0], [sample[1], sample[2]])
-        w = dr.full(mi.Spectrum, 1.0, dr.width(weight))
-        w[dr.eq(weight, 0)] = 0
+        w = dr.full(mi.Float, 1.0, dr.width(weight))
+        w[dr.all(dr.eq(weight, 0))] = 0
         return wo, w
 
     def pdf_functor(wo, *args):
