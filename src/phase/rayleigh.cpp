@@ -101,6 +101,9 @@ public:
                                          Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::PhaseFunctionSample, active);
 
+        /* The importance sampling below corresponds to the "direct sampling of
+        spherical coordinate" scheme described by
+        :cite:`Frisvad2011ImportanceSamplingRayleigh` (section 3.B) */ 
         Float z   = 2.f * (2.f * sample.x() - 1.f);
         Float tmp = dr::sqrt(dr::sqr(z) + 1.f);
         Float A   = dr::cbrt(z + tmp);
