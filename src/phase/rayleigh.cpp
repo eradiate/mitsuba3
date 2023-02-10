@@ -118,11 +118,8 @@ public:
         and cos(θ') = -cos(θ) and sin(θ') = sin(θ)*/
         Vector3f wo = Vector3f( sin_theta * cos_phi, sin_theta * sin_phi, -cos_theta );
 
-        /* eval_rayleigh_pdf expects cos(θ) in physics convention */
-        Float pdf = eval_rayleigh_pdf(cos_theta);
-
         /* eval_rayleigh expects cos(θ) in physics convention */
-        Spectrum phase_val = eval_rayleigh(ctx, mi, wo, cos_theta) * dr::rcp(pdf);
+        Spectrum phase_val = eval_rayleigh(ctx, mi, wo, cos_theta);
 
         return { wo, phase_val };
     }
