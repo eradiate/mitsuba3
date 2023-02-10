@@ -48,8 +48,11 @@ public:
     }
 
     MI_INLINE Float eval_rayleigh_pdf(Float cos_theta) const {
+        Float rho = (Float) m_depolarization,
+              r1 = (1.f - rho) / (1.f + rho / 2.f),
+              r2 = (1.f + rho) / (1.f - rho);
         // cos_theta in physics convention
-        return (3.f / 16.f) * dr::InvPi<Float> * (1.f + dr::sqr(cos_theta));
+        return (3.f / 16.f) * dr::InvPi<Float> * r1 * (r2 + dr::sqr(cos_theta));
     }
 
     MI_INLINE Spectrum eval_rayleigh(const PhaseFunctionContext &ctx, 
@@ -63,7 +66,7 @@ public:
             phase_val = mueller::rayleigh_scatter(cos_theta, (Float) m_depolarization);
 
             /* Due to the coordinate system rotations for polarization-aware
-                pBSDFs below we need to know the propagation direction of light.
+                phase below we need to know the propagation direction of light.
                 In the following, light arrives along `-wo_hat` and leaves along
                 `+wi_hat`. */
             Vector3f wo_hat = ctx.mode == TransportMode::Radiance ? wo : mi.wi,
@@ -128,8 +131,9 @@ public:
                const MediumInteraction3f &mi, const Vector3f &wo,
                Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::PhaseFunctionEvaluate, active);
-        /* given that wo and wi are in graphics convention
-        cos_theta is in physics convention: dot(wo, -mi.wi) */
+        /* if the incident direction is ω in graphics convention, it
+        is -ω in physics convention.
+        eval_rayleigh expects cos(θ) in physics convention  */
         return eval_rayleigh(ctx, mi, wo, dot(wo, -mi.wi));
     }
 
@@ -139,7 +143,7 @@ public:
         MI_MASKED_FUNCTION(ProfilerPhase::PhaseFunctionEvaluate, active);
         /* if the incident direction is ω in graphics convention, it
         is -ω in physics convention.
-        eval_rayleigh expects cos(θ) in physics convention  */
+        eval_rayleigh_pdf expects cos(θ) in physics convention  */
         return eval_rayleigh_pdf(dot(wo, -mi.wi));
     }
 
