@@ -107,8 +107,8 @@ public:
         :cite:`Frisvad2011ImportanceSamplingRayleigh` (section 3.B) */ 
         Float z   = 2.f * (2.f * sample.x() - 1.f);
         Float tmp = dr::sqrt(dr::sqr(z) + 1.f);
-        Float A   = dr::cbrt(z + tmp);
-        Float B   = dr::cbrt(z - tmp);
+        Float A   = dr::cbrt(-z + tmp);
+        Float B   = dr::cbrt(-z - tmp);
         Float cos_theta = A + B; /* cos_theta in physics convention */
         Float sin_theta = dr::safe_sqrt(1.0f - dr::sqr(cos_theta));
         auto [sin_phi, cos_phi] = dr::sincos(dr::TwoPi<Float> * sample.y());
