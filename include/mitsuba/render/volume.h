@@ -1,5 +1,6 @@
 #pragma once
 
+#include <drjit/tensor.h>
 #include <mitsuba/core/spectrum.h>
 #include <mitsuba/core/profiler.h>
 #include <mitsuba/core/transform.h>
@@ -59,6 +60,14 @@ public:
      * Pointer allocation/deallocation must be performed by the caller.
      */
     virtual void max_per_channel(ScalarFloat *out) const;
+
+    /**
+     * \brief Returns the local maxima for each cell of a lower resolution grid.
+     *
+     * Only available for grid-based volumes.
+     */
+    virtual TensorXf local_majorants(ScalarVector3i resolution_factor,
+                                     ScalarFloat value_scale = 1.f);
 
     /// Returns the bounding box of the volume
     ScalarBoundingBox3f bbox() const { return m_bbox; }

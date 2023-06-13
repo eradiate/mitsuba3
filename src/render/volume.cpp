@@ -56,6 +56,12 @@ Volume<Float, Spectrum>::max_per_channel(ScalarFloat * /*out*/) const {
     NotImplementedError("max_per_channel");
 }
 
+MI_VARIANT typename Volume<Float, Spectrum>::TensorXf
+Volume<Float, Spectrum>::local_majorants(ScalarVector3i /*resolution_factor*/,
+                                         ScalarFloat /*value_scale*/) {
+    NotImplementedError("local_majorants");
+}
+
 MI_VARIANT typename Volume<Float, Spectrum>::ScalarVector3i
 Volume<Float, Spectrum>::resolution() const {
     return ScalarVector3i(1, 1, 1);

@@ -65,6 +65,8 @@ MI_PY_EXPORT(Volume) {
                 return max_values;
             },
             D(Volume, max_per_channel))
+        .def_method(Volume, local_majorants, "resolution_factor"_a,
+                    "value_scale"_a = 1.0f)
         .def_method(Volume, eval, "it"_a, "active"_a = true)
         .def_method(Volume, eval_1, "it"_a, "active"_a = true)
         .def_method(Volume, eval_3, "it"_a, "active"_a = true)

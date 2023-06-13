@@ -499,6 +499,97 @@ protected:
         }
     }
 
+    TensorXf local_majorants(ScalarVector3i resolution_factor,
+                             ScalarFloat value_scale) override {
+        MI_IMPORT_TYPES()
+        using Value   = mitsuba::DynamicBuffer<Float>;
+        using Index   = mitsuba::DynamicBuffer<UInt32>;
+        using Index3i = mitsuba::Vector<mitsuba::DynamicBuffer<Int32>, 3>;
+
+        if (m_accel)
+            NotImplementedError("local_majorants() with m_accel");
+
+        if (m_texture.shape()[3] != 1)
+            NotImplementedError("local_majorants() when Channels != 1");
+
+        if constexpr (dr::is_jit_v<Float>) {
+            dr::eval(m_texture.value());
+            dr::sync_thread();
+        }
+
+        // This is the real (user-facing) resolution, but recall
+        // that the layout in memory is (Z, Y, X, C).
+        const ScalarVector3i full_resolution = resolution();
+        if ((full_resolution.x() % resolution_factor.x()) != 0 ||
+            (full_resolution.y() % resolution_factor.y()) != 0 ||
+            (full_resolution.z() % resolution_factor.z()) != 0) {
+            Throw("Supergrid construction: grid resolution %s must be "
+                  "divisible by %s",
+                  full_resolution, resolution_factor);
+        }
+        const ScalarVector3i resolution(full_resolution / resolution_factor);
+
+        Log(Debug,
+            "Constructing supergrid of resolution %s from full grid of "
+            "resolution %s",
+            resolution, full_resolution);
+        size_t n     = dr::prod(resolution);
+        Value result = dr::full<Value>(-dr::Infinity<Float>, n);
+
+        // Z is the slowest axis, X is the fastest.
+        auto [Z, Y, X] =
+            dr::meshgrid(dr::arange<Index>(resolution.z()),
+                         dr::arange<Index>(resolution.y()),
+                         dr::arange<Index>(resolution.x()), /*index_xy*/ false);
+        Index3i cell_indices = resolution_factor * Index3i(X, Y, Z);
+
+        // We have to include all values that participate in interpolated
+        // lookups if we want the true maximum over a region.
+        ScalarVector3i begin_offset, end_offset;
+        switch (m_texture.filter_mode()) {
+            case dr::FilterMode::Nearest: {
+                begin_offset = { 0, 0, 0 };
+                end_offset   = resolution_factor;
+                break;
+            }
+            case dr::FilterMode::Linear: {
+                begin_offset = { -1, -1, -1 };
+                end_offset   = resolution_factor + 1;
+                break;
+            }
+        };
+
+        Value scaled_data = value_scale * dr::detach(m_texture.value());
+
+        // TODO: any way to do this without the many operations?
+        for (int32_t dz = begin_offset.z(); dz < end_offset.z(); ++dz) {
+            for (int32_t dy = begin_offset.y(); dy < end_offset.y(); ++dy) {
+                for (int32_t dx = begin_offset.x(); dx < end_offset.x(); ++dx) {
+                    // Ensure valid lookups with clamping
+                    Index3i offset_indices =
+                        Index3i(dr::clamp(cell_indices.x() + dx, 0,
+                                          full_resolution.x() - 1),
+                                dr::clamp(cell_indices.y() + dy, 0,
+                                          full_resolution.y() - 1),
+                                dr::clamp(cell_indices.z() + dz, 0,
+                                          full_resolution.z() - 1));
+                    // Linearize indices
+                    const Index idx = offset_indices.x() +
+                                      offset_indices.y() * full_resolution.x() +
+                                      offset_indices.z() * full_resolution.x() *
+                                          full_resolution.y();
+
+                    Value values = dr::gather<Value>(scaled_data, idx);
+                    result       = dr::maximum(result, values);
+                }
+            }
+        }
+
+        size_t shape[4] = { (size_t) resolution.z(), (size_t) resolution.y(),
+                            (size_t) resolution.x(), 1 };
+        return TensorXf(result, 4, shape);
+    }
+
     /**
      * \brief Evaluates the volume at the given interaction
      *
