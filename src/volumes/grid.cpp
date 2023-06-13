@@ -500,8 +500,7 @@ protected:
     }
 
     TensorXf local_majorants(ScalarVector3i resolution_factor,
-                             ScalarFloat value_scale) override {
-        MI_IMPORT_TYPES()
+                             ScalarFloat value_scale) const override {
         using Value   = mitsuba::DynamicBuffer<Float>;
         using Index   = mitsuba::DynamicBuffer<UInt32>;
         using Index3i = mitsuba::Vector<mitsuba::DynamicBuffer<Int32>, 3>;
@@ -588,6 +587,57 @@ protected:
         size_t shape[4] = { (size_t) resolution.z(), (size_t) resolution.y(),
                             (size_t) resolution.x(), 1 };
         return TensorXf(result, 4, shape);
+    }
+
+    std::tuple<Float, Vector3f, Vector3f>
+    prepare_majorant_grid_traversal(
+        const Ray3f &ray, Float mint, Float maxt, Mask /*active*/) const override {
+        const auto extents = m_bbox.extents();
+        Ray3f local_ray(
+            /* o */ (ray.o - m_bbox.min) / extents,
+            /* d */ ray.d / extents, ray.time, ray.wavelengths);
+        const ScalarVector3i res  = resolution();
+        Vector3f local_voxel_size = 1.f / res;
+
+        // The id of the first and last voxels hit by the ray
+        Vector3i current_voxel(dr::floor(local_ray(mint) / local_voxel_size));
+        Vector3i last_voxel(dr::floor(local_ray(maxt) / local_voxel_size));
+        // By definition, current and last voxels should be valid voxel indices.
+        current_voxel = dr::clamp(current_voxel, 0, res - 1);
+        last_voxel    = dr::clamp(last_voxel, 0, res - 1);
+
+        // Increment (in number of voxels) to take at each step
+        Vector3i step = dr::select(local_ray.d >= 0, 1, -1);
+
+        // Distance along the ray to the next voxel border from the current
+        // position
+        Vector3f next_voxel_boundary =
+            (current_voxel + step) * local_voxel_size;
+        next_voxel_boundary +=
+            dr::select(dr::neq(current_voxel, last_voxel) && (local_ray.d < 0),
+                       local_voxel_size, 0);
+
+        // Value of ray parameter until next intersection with voxel-border
+        // along each axis
+        auto ray_nonzero  = dr::neq(local_ray.d, 0);
+        Vector3f dda_tmax = dr::select(
+            ray_nonzero, (next_voxel_boundary - local_ray.o) / local_ray.d,
+            dr::Infinity<Float>);
+
+        // How far along each component of the ray we must move to move by one
+        // voxel
+        Vector3f dda_tdelta =
+            dr::select(ray_nonzero, step * local_voxel_size / local_ray.d,
+                       dr::Infinity<Float>);
+
+        // Current ray parameter throughout DDA traversal
+        Float dda_t = mint;
+
+        // Note: `t` parameters on the reparametrized ray yield locations on the
+        // normalized majorant supergrid in [0, 1]^3. But they are also directly
+        // valid parameters on the original ray, yielding positions in the
+        // bbox-aligned supergrid.
+        return { dda_t, dda_tmax, dda_tdelta };
     }
 
     /**

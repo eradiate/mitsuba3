@@ -69,6 +69,14 @@ public:
     virtual TensorXf local_majorants(ScalarVector3i resolution_factor,
                                      ScalarFloat value_scale = 1.f);
 
+    /**
+     * \brief Returns the data required to initialize a majorant grid traversal
+     * loop.
+     */
+    virtual std::tuple<Float, Vector3f, Vector3f>
+    prepare_majorant_grid_traversal(
+        const Ray3f &ray, Float mint, Float maxt, Mask /*active*/) const;
+
     /// Returns the bounding box of the volume
     ScalarBoundingBox3f bbox() const { return m_bbox; }
 

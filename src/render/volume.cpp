@@ -62,6 +62,13 @@ Volume<Float, Spectrum>::local_majorants(ScalarVector3i /*resolution_factor*/,
     NotImplementedError("local_majorants");
 }
 
+MI_VARIANT std::tuple<Float, typename Volume<Float, Spectrum>::Vector3f,
+                      typename Volume<Float, Spectrum>::Vector3f>
+Volume<Float, Spectrum>::prepare_majorant_grid_traversal(
+    const Ray3f & /*ray*/, Float /*mint*/, Float /*maxt*/, Mask /*active*/) const {
+    NotImplementedError("prepare_majorant_grid_traversal");
+}
+
 MI_VARIANT typename Volume<Float, Spectrum>::ScalarVector3i
 Volume<Float, Spectrum>::resolution() const {
     return ScalarVector3i(1, 1, 1);
