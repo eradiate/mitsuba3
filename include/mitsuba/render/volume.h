@@ -67,11 +67,22 @@ public:
      * Only available for grid-based volumes.
      */
     virtual TensorXf local_majorants(ScalarVector3i resolution_factor,
-                                     ScalarFloat value_scale = 1.f);
+                                     ScalarFloat value_scale = 1.f) const;
+
+    /**
+     * \brief Instantiates a plugin containing the local maxima for each cell of
+     * a lower resolution grid.
+     *
+     * Only available for grid-based volumes.
+     */
+    virtual ref<Volume<Float, Spectrum>> get_majorant_grid(
+        ScalarVector3i resolution_factor, ScalarFloat value_scale = 1.f) const;
 
     /**
      * \brief Returns the data required to initialize a majorant grid traversal
      * loop.
+     *
+     * Returns (initial t, tmax, tdelta).
      */
     virtual std::tuple<Float, Vector3f, Vector3f>
     prepare_majorant_grid_traversal(

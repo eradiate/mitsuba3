@@ -589,6 +589,37 @@ protected:
         return TensorXf(result, 4, shape);
     }
 
+    ref<Volume<Float, Spectrum>>
+    get_majorant_grid(ScalarVector3i resolution_factor,
+                      ScalarFloat value_scale) const override {
+        // Compute majorants
+        TensorXf majorants = local_majorants(resolution_factor, value_scale);
+        dr::eval(majorants);
+        const auto &shape = majorants.shape();
+
+        // Initialize a volume texture with these
+        ref<VolumeGrid> majorant_grid = new VolumeGrid(
+            ScalarVector3u(shape[2], shape[1], shape[0]),
+            (uint32_t) shape[3]
+        );
+        memcpy(majorant_grid->data(), majorants.data(), majorant_grid->buffer_size());
+
+        // These are technically useless, but we set them anyway for consistency
+        majorant_grid->set_max(m_volume_grid->max());
+        majorant_grid->set_max_per_channel((ScalarFloat*) &m_max_per_channel[0]);
+
+        // Initialize a gridvolume plugin with those data
+        Properties props("gridvolume");
+        props.set_string("filter_type", "nearest");
+        props.set_string("wrap_mode", "clamp");
+        props.set_transform("to_world", m_to_local.inverse());
+        props.set_object("grid", majorant_grid.get());
+        ref<Volume<Float, Spectrum>> result =
+            PluginManager::instance()->create_object<Volume<Float, Spectrum>>(props);
+
+        return result.get();
+    }
+
     std::tuple<Float, Vector3f, Vector3f>
     prepare_majorant_grid_traversal(
         const Ray3f &ray, Float mint, Float maxt, Mask /*active*/) const override {

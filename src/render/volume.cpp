@@ -58,8 +58,14 @@ Volume<Float, Spectrum>::max_per_channel(ScalarFloat * /*out*/) const {
 
 MI_VARIANT typename Volume<Float, Spectrum>::TensorXf
 Volume<Float, Spectrum>::local_majorants(ScalarVector3i /*resolution_factor*/,
-                                         ScalarFloat /*value_scale*/) {
+                                         ScalarFloat /*value_scale*/) const {
     NotImplementedError("local_majorants");
+}
+
+MI_VARIANT ref<Volume<Float, Spectrum>>
+Volume<Float, Spectrum>::get_majorant_grid(ScalarVector3i /*resolution_factor*/,
+                                           ScalarFloat /*value_scale*/) const {
+    NotImplementedError("get_majorant_grid");
 }
 
 MI_VARIANT std::tuple<Float, typename Volume<Float, Spectrum>::Vector3f,
