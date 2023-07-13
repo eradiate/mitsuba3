@@ -4,6 +4,7 @@
 #include <mitsuba/core/spectrum.h>
 #include <mitsuba/core/traits.h>
 #include <mitsuba/render/fwd.h>
+#include <mitsuba/render/volume.h>
 #include <drjit/vcall.h>
 
 NAMESPACE_BEGIN(mitsuba)
@@ -11,7 +12,7 @@ NAMESPACE_BEGIN(mitsuba)
 template <typename Float, typename Spectrum>
 class MI_EXPORT_LIB Medium : public Object {
 public:
-    MI_IMPORT_TYPES(PhaseFunction, Sampler, Scene, Texture);
+    MI_IMPORT_TYPES(PhaseFunction, Sampler, Scene, Texture, Volume);
 
     /// Intersects a ray with the medium's bounding box
     virtual std::tuple<Mask, Float, Float>
@@ -69,6 +70,14 @@ public:
     eval_tr_and_pdf(const MediumInteraction3f &mi,
                     const SurfaceInteraction3f &si, Mask active) const;
 
+    /**
+     * Compute the ray-medium overlap range and prepare a
+     * medium interaction to be filled by a sampling routine.
+     * Exposed as part of the API to enable testing.
+     */
+    std::tuple<MediumInteraction3f, Float, Float, Mask>
+    prepare_interaction_sampling(const Ray3f &ray, Mask active) const;
+
     /// Return the phase function of this medium
     MI_INLINE const PhaseFunction *phase_function() const {
         return m_phase_function.get();
@@ -104,9 +113,24 @@ protected:
     Medium(const Properties &props);
     virtual ~Medium();
 
+    static Float extract_channel(Spectrum value, UInt32 channel);
+
 protected:
     ref<PhaseFunction> m_phase_function;
     bool m_sample_emitters, m_is_homogeneous, m_has_spectral_extinction;
+
+    /// Resolution factor for the majorant grid
+    ScalarVector3u m_majorant_resolution_factor;
+
+    /// Majorant grid, if applicable
+    ref<Volume> m_majorant_grid;
+
+    /**
+     * Factor to apply to the majorant, helps ensure that we are not using
+     * a majorant that is exactly equal to the max density (useful with some
+     * integrators).
+     */
+    ScalarFloat m_majorant_factor;
 
     /// Identifier (if available)
     std::string m_id;

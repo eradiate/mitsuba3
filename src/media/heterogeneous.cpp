@@ -149,7 +149,8 @@ template <typename Float, typename Spectrum>
 class HeterogeneousMedium final : public Medium<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
-                    m_phase_function)
+                   m_phase_function, m_majorant_grid, m_majorant_factor,
+                   m_majorant_resolution_factor)
     MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume)
 
     HeterogeneousMedium(const Properties &props) : Base(props) {
@@ -162,8 +163,22 @@ public:
 
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
 
+        m_majorant_factor = props.get<ScalarFloat>("majorant_factor", 1.f);
+        m_majorant_resolution_factor = props.get<ScalarPoint3f>("majorant_resolution_factor", ScalarVector3u{ 0, 0, 0 });
+        update_majorant_supergrid();
+
         dr::set_attr(this, "is_homogeneous", m_is_homogeneous);
         dr::set_attr(this, "has_spectral_extinction", m_has_spectral_extinction);
+    }
+
+    void update_majorant_supergrid() {
+        if (dr::all(m_majorant_resolution_factor <= 0))
+            return;
+
+        // Build a majorant grid, with the scale factor baked-in for convenience
+        m_majorant_grid = m_sigmat->get_majorant_grid(
+            m_majorant_resolution_factor, m_majorant_factor * m_scale);
+        Log(Warn, "Majorant supergrid updated (resolution: %s)", m_majorant_grid->resolution());
     }
 
     void traverse(TraversalCallback *callback) override {
@@ -175,26 +190,36 @@ public:
 
     void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override {
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
+        // TODO: recompute majorant grid
     }
 
     UnpolarizedSpectrum
-    get_majorant(const MediumInteraction3f & /* mi */,
+    get_majorant(const MediumInteraction3f & mei,
                  Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
-        return m_max_density;
+        if (m_majorant_grid)
+            return m_majorant_grid->eval_1(mei, active);
+        else
+            return m_max_density;
     }
 
     std::tuple<UnpolarizedSpectrum, UnpolarizedSpectrum, UnpolarizedSpectrum>
-    get_scattering_coefficients(const MediumInteraction3f &mi,
+    get_scattering_coefficients(const MediumInteraction3f &mei,
                                 Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
 
-        auto sigmat = m_scale * m_sigmat->eval(mi, active);
+        auto sigmat = m_scale * m_sigmat->eval(mei, active);
         if (has_flag(m_phase_function->flags(), PhaseFunctionFlags::Microflake))
-            sigmat *= m_phase_function->projected_area(mi, active);
+            sigmat *= m_phase_function->projected_area(mei, active);
 
-        auto sigmas = sigmat * m_albedo->eval(mi, active);
-        auto sigman = m_max_density - sigmat;
+        auto sigmas = sigmat * m_albedo->eval(mei, active);
+
+        UnpolarizedSpectrum local_majorant =
+            bool(m_majorant_grid)
+                ? m_majorant_grid->eval_1(mei, active)
+                : m_max_density;
+        auto sigman = local_majorant - sigmat;
+
         return { sigmas, sigman, sigmat };
     }
 
@@ -206,9 +231,10 @@ public:
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "HeterogeneousMedium[" << std::endl
-            << "  albedo  = " << string::indent(m_albedo) << std::endl
-            << "  sigma_t = " << string::indent(m_sigmat) << std::endl
-            << "  scale   = " << string::indent(m_scale) << std::endl
+            << "  albedo = " << string::indent(m_albedo) << "," << std::endl
+            << "  sigma_t = " << string::indent(m_sigmat) << "," << std::endl
+            << "  scale = " << string::indent(m_scale) << "," << std::endl
+            << "  majorant_grid = " << string::indent(m_majorant_grid) << std::endl
             << "]";
         return oss.str();
     }
