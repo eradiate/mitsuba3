@@ -79,6 +79,7 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
     auto [mei, mint, maxt, active] = prepare_interaction_sampling(ray, _active);
 
     const Float desired_tau = -dr::log(1.f - sample);
+    Log(Info, "desired_tau = %s", desired_tau);
     Float sampled_t;
     if (m_majorant_grid) {
         // --- Spatially-variying majorant (supergrid).
@@ -95,13 +96,22 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
         Mask active_dda = active;
         Mask reached    = false;
         Float tau_acc   = 0.f;
+        size_t i = 0;
         dr::Loop<Mask> dda_loop("Medium::sample_interaction_dda");
         dda_loop.put(active_dda, reached, dda_t, dda_tmax, tau_acc, mei);
         dda_loop.init();
+
+        Log(Info, "---- i = %s ----", i);
+        Log(Info, "reached = %s", reached);
+        Log(Info, "dda_t = %s", dda_t);
+        Log(Info, "dda_tmax = %s", dda_tmax);
+        Log(Info, "tau_acc = %s", tau_acc);
+
         while (dda_loop(dr::detach(active_dda))) {
             // Figure out which axis we hit first.
             // `t_next` is the ray's `t` parameter when hitting that axis.
             Float t_next = dr::min(dda_tmax);
+            Log(Info, "t_next = %s", t_next);
             Vector3f tmax_update;
             Mask got_assigned = false;
             for (size_t k = 0; k < 3; ++k) {
@@ -117,7 +127,9 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
             // TODO: avoid this vcall, could lookup directly from the array
             // of floats (but we still need to account for the bbox, etc).
             Float majorant = m_majorant_grid->eval_1(mei, active_dda);
+            Log(Info, "majorant = %s", majorant);
             Float tau_next = tau_acc + majorant * (t_next - dda_t);
+            Log(Info, "tau_next = %s", tau_next);
 
             // For rays that will stop within this cell, figure out
             // the precise `t` parameter where `desired_tau` is reached.
@@ -131,6 +143,13 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
             active_dda &= !reached && (t_next < maxt);
             dr::masked(dda_tmax, active_dda) = dda_tmax + tmax_update;
             dr::masked(tau_acc, active_dda)  = tau_next;
+            i++;
+
+            Log(Info, "---- i = %s ----", i);
+            Log(Info, "reached = %s", reached);
+            Log(Info, "dda_t = %s", dda_t);
+            Log(Info, "dda_tmax = %s", dda_tmax);
+            Log(Info, "tau_acc = %s", tau_acc);
         }
         // Adopt the stopping location, making sure to convert to the main
         // ray's parametrization.
@@ -141,6 +160,7 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
         Float m   = extract_channel(mei.combined_extinction, channel);
         sampled_t = mint + (desired_tau / m);
     }
+    Log(Info, "sampled_t = %s", sampled_t);
 
     Mask valid_mei = active && (sampled_t <= maxt);
     mei.t          = dr::select(valid_mei, sampled_t, dr::Infinity<Float>);
