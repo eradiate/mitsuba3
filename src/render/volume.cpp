@@ -68,11 +68,11 @@ Volume<Float, Spectrum>::get_majorant_grid(ScalarVector3i /*resolution_factor*/,
     NotImplementedError("get_majorant_grid");
 }
 
-MI_VARIANT std::tuple<Float, typename Volume<Float, Spectrum>::Vector3f,
-                      typename Volume<Float, Spectrum>::Vector3f>
-Volume<Float, Spectrum>::prepare_majorant_grid_traversal(
-    const Ray3f & /*ray*/, Float /*mint*/, Float /*maxt*/, Mask /*active*/) const {
-    NotImplementedError("prepare_majorant_grid_traversal");
+MI_VARIANT Float
+Volume<Float, Spectrum>::traverse_majorant_grid(
+        const Float /*desired_tau*/, const Ray3f & /*ray*/,
+        const Float /*mint*/, const Float /*maxt*/, Mask /*active*/) const {
+    NotImplementedError("traverse_majorant_grid");
 }
 
 MI_VARIANT typename Volume<Float, Spectrum>::ScalarVector3i

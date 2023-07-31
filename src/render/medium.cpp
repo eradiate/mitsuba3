@@ -75,85 +75,15 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
                                             UInt32 channel, Mask _active) const {
     MI_MASKED_FUNCTION(ProfilerPhase::MediumSample, _active);
 
-    // initialize basic medium interaction fields
+    // Initialize basic medium interaction fields
     auto [mei, mint, maxt, active] = prepare_interaction_sampling(ray, _active);
 
     const Float desired_tau = -dr::log(1.f - sample);
     Log(Info, "desired_tau = %s", desired_tau);
     Float sampled_t;
     if (m_majorant_grid) {
-        // --- Spatially-variying majorant (supergrid).
-        // 1. Prepare for DDA traversal
-        // Adapted from:
-        // https://github.com/francisengelmann/fast_voxel_traversal/blob/9664f0bde1943e69dbd1942f95efc31901fbbd42/main.cpp
-        // TODO: allow precomputing all this (but be careful when ray origin is
-        // updated)
-        auto [dda_t, dda_tmax, dda_tdelta] =
-            m_majorant_grid->prepare_majorant_grid_traversal(ray, mint, maxt, active);
-
-        // 2. Traverse the medium with DDA until we reach the desired
-        // optical depth.
-        Mask active_dda = active;
-        Mask reached    = false;
-        Float tau_acc   = 0.f;
-        size_t i = 0;
-        dr::Loop<Mask> dda_loop("Medium::sample_interaction_dda");
-        dda_loop.put(active_dda, reached, dda_t, dda_tmax, tau_acc, mei);
-        dda_loop.init();
-
-        Log(Info, "---- i = %s ----", i);
-        Log(Info, "reached = %s", reached);
-        Log(Info, "dda_t = %s", dda_t);
-        Log(Info, "dda_tmax = %s", dda_tmax);
-        Log(Info, "tau_acc = %s", tau_acc);
-
-        while (dda_loop(dr::detach(active_dda))) {
-            // Figure out which axis we hit first.
-            // `t_next` is the ray's `t` parameter when hitting that axis.
-            Float t_next = dr::min(dda_tmax);
-            Log(Info, "t_next = %s", t_next);
-            Vector3f tmax_update;
-            Mask got_assigned = false;
-            for (size_t k = 0; k < 3; ++k) {
-                Mask active_k = dr::eq(dda_tmax[k], t_next);
-                tmax_update[k] =
-                    dr::select(!got_assigned && active_k, dda_tdelta[k], 0);
-                got_assigned |= active_k;
-            }
-
-            // Lookup and accumulate majorant in current cell.
-            dr::masked(mei.t, active_dda) = 0.5f * (dda_t + t_next);
-            dr::masked(mei.p, active_dda) = ray(mei.t);
-            // TODO: avoid this vcall, could lookup directly from the array
-            // of floats (but we still need to account for the bbox, etc).
-            Float majorant = m_majorant_grid->eval_1(mei, active_dda);
-            Log(Info, "majorant = %s", majorant);
-            Float tau_next = tau_acc + majorant * (t_next - dda_t);
-            Log(Info, "tau_next = %s", tau_next);
-
-            // For rays that will stop within this cell, figure out
-            // the precise `t` parameter where `desired_tau` is reached.
-            Float t_precise = dda_t + (desired_tau - tau_acc) / majorant;
-            reached |= active_dda && (majorant > 0) && (t_precise < maxt) &&
-                       (tau_next >= desired_tau);
-            dr::masked(dda_t, active_dda) =
-                dr::select(reached, t_precise, t_next);
-
-            // Prepare for next iteration
-            active_dda &= !reached && (t_next < maxt);
-            dr::masked(dda_tmax, active_dda) = dda_tmax + tmax_update;
-            dr::masked(tau_acc, active_dda)  = tau_next;
-            i++;
-
-            Log(Info, "---- i = %s ----", i);
-            Log(Info, "reached = %s", reached);
-            Log(Info, "dda_t = %s", dda_t);
-            Log(Info, "dda_tmax = %s", dda_tmax);
-            Log(Info, "tau_acc = %s", tau_acc);
-        }
-        // Adopt the stopping location, making sure to convert to the main
-        // ray's parametrization.
-        sampled_t = dr::select(reached, dda_t, dr::Infinity<Float>);
+        sampled_t = m_majorant_grid->traverse_majorant_grid(
+            desired_tau, ray, mint, maxt, active);
     } else {
         // --- A single majorant for the whole volume.
         mei.combined_extinction = dr::detach(get_majorant(mei, active));

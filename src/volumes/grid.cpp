@@ -621,8 +621,7 @@ protected:
     }
 
     std::tuple<Float, Vector3f, Vector3f>
-    prepare_majorant_grid_traversal(
-        const Ray3f &ray, Float mint, Float maxt, Mask /*active*/) const override {
+    prepare_majorant_grid_traversal(const Ray3f &ray, Float mint, Float maxt) const {
         const auto extents = m_bbox.extents();
         Ray3f local_ray(
             /* o */ (ray.o - m_bbox.min) / extents,
@@ -665,10 +664,88 @@ protected:
         Float dda_t = mint;
 
         // Note: `t` parameters on the reparametrized ray yield locations on the
-        // normalized majorant supergrid in [0, 1]^3. But they are also directly
+        // normalized majorant supergrid constin [0, 1]^3. But they are also directly
         // valid parameters on the original ray, yielding positions in the
         // bbox-aligned supergrid.
         return { dda_t, dda_tmax, dda_tdelta };
+    }
+
+    Float traverse_majorant_grid(
+            const Float desired_tau, const Ray3f &ray,
+            const Float mint, const Float maxt, Mask active) const override {
+
+        // 1. Prepare for DDA traversal
+        // Adapted from:
+        // https://github.com/francisengelmann/fast_voxel_traversal/blob/9664f0bde1943e69dbd1942f95efc31901fbbd42/main.cpp
+        // TODO: allow precomputing all this (but be careful when ray origin is
+        // updated)
+        auto [dda_t, dda_tmax, dda_tdelta] =
+            prepare_majorant_grid_traversal(ray, mint, maxt);
+        MediumInteraction3f mei = dr::zeros<MediumInteraction3f>();
+
+        // 2. Traverse the medium with DDA until we reach the desired
+        // optical depth.
+        Mask active_dda = active;
+        Mask reached    = false;
+        Float tau_acc   = 0.f;
+        size_t i = 0;
+        dr::Loop<Mask> dda_loop("Volume::traverse_majorant_grid");
+        dda_loop.put(active_dda, reached, dda_t, dda_tmax, tau_acc, mei);
+        dda_loop.init();
+
+        Log(Info, "---- i = %s ----", i);
+        Log(Info, "reached = %s", reached);
+        Log(Info, "dda_t = %s", dda_t);
+        Log(Info, "dda_tmax = %s", dda_tmax);
+        Log(Info, "tau_acc = %s", tau_acc);
+
+        while (dda_loop(dr::detach(active_dda))) {
+            // Figure out which axis we hit first.
+            // `t_next` is the ray's `t` parameter when hitting that axis.
+            Float t_next = dr::min(dda_tmax);
+            Log(Info, "t_next = %s", t_next);
+            Vector3f tmax_update;
+            Mask got_assigned = false;
+            for (size_t k = 0; k < 3; ++k) {
+                Mask active_k = dr::eq(dda_tmax[k], t_next);
+                tmax_update[k] =
+                    dr::select(!got_assigned && active_k, dda_tdelta[k], 0);
+                got_assigned |= active_k;
+            }
+
+            // Lookup and accumulate majorant in current cell.
+            dr::masked(mei.t, active_dda) = 0.5f * (dda_t + t_next);
+            dr::masked(mei.p, active_dda) = ray(mei.t);
+            // TODO: avoid this vcall, could lookup directly from the array
+            // of floats (but we still need to account for the bbox, etc).
+            Float majorant = eval_1(mei, active_dda);
+            Log(Info, "majorant = %s", majorant);
+            Float tau_next = tau_acc + majorant * (t_next - dda_t);
+            Log(Info, "tau_next = %s", tau_next);
+
+            // For rays that will stop within this cell, figure out
+            // the precise `t` parameter where `desired_tau` is reached.
+            Float t_precise = dda_t + (desired_tau - tau_acc) / majorant;
+            reached |= active_dda && (majorant > 0) && (t_precise < maxt) &&
+                       (tau_next >= desired_tau);
+            dr::masked(dda_t, active_dda) =
+                dr::select(reached, t_precise, t_next);
+
+            // Prepare for next iteration
+            active_dda &= !reached && (t_next < maxt);
+            dr::masked(dda_tmax, active_dda) = dda_tmax + tmax_update;
+            dr::masked(tau_acc, active_dda)  = tau_next;
+            i++;
+
+            Log(Info, "---- i = %s ----", i);
+            Log(Info, "reached = %s", reached);
+            Log(Info, "dda_t = %s", dda_t);
+            Log(Info, "dda_tmax = %s", dda_tmax);
+            Log(Info, "tau_acc = %s", tau_acc);
+        }
+        // Adopt the stopping location, making sure to convert to the main
+        // ray's parametrization.
+        return dr::select(reached, dda_t, dr::Infinity<Float>);
     }
 
     /**
