@@ -36,9 +36,10 @@ print(f"{volume_majorants_array.max() = }")
 print()
 
 # Majorant grid traversal preparation tests
-ray = mi.Ray3f([0, 0, 0], [0.5, 0.5, 1])
+ray = mi.Ray3f([0.5, 0.5, 0], [0.0, 0.0, 1.0])
 traversal_parameters = volume.prepare_majorant_grid_traversal(ray, 0.0, 1e10)
 print(f"{traversal_parameters = }")
+print()
 
 # Medium majorant supergrid tests
 medium = mi.load_dict(

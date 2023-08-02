@@ -621,20 +621,36 @@ protected:
     }
 
     std::tuple<Float, Vector3f, Vector3f>
-    prepare_majorant_grid_traversal(const Ray3f &ray, Float mint, Float maxt) const {
+    prepare_majorant_grid_traversal(const Ray3f &ray, Float mint, Float maxt,
+                                    Mask /*active*/) const override {
         const auto extents = m_bbox.extents();
         Ray3f local_ray(
             /* o */ (ray.o - m_bbox.min) / extents,
             /* d */ ray.d / extents, ray.time, ray.wavelengths);
         const ScalarVector3i res  = resolution();
         Vector3f local_voxel_size = 1.f / res;
+        // Log(Warn, "local_voxel_size = %s", local_voxel_size);
 
         // The id of the first and last voxels hit by the ray
-        Vector3i current_voxel(dr::floor(local_ray(mint) / local_voxel_size));
-        Vector3i last_voxel(dr::floor(local_ray(maxt) / local_voxel_size));
+        Vector3f current_voxel_coord(dr::clamp(local_ray(mint) / local_voxel_size, 0.f, res - 1.f));
+        Vector3f last_voxel_coord(dr::clamp(local_ray(maxt) / local_voxel_size, 0.f, res - 1.f));
+        Log(Warn, "current_voxel_coord = %s", current_voxel_coord);
+        Log(Warn, "last_voxel_coord = %s", last_voxel_coord);
+        Vector3u current_voxel(dr::floor(current_voxel_coord));
+        Vector3u last_voxel(dr::floor(last_voxel_coord));
+        Log(Warn, "current_voxel = %s", current_voxel);
+        Log(Warn, "last_voxel = %s", last_voxel);
+        if (dr::any_nested(last_voxel < 0)) {
+            Log(Error, "negative voxel index detected: %s", last_voxel);
+        }
+
         // By definition, current and last voxels should be valid voxel indices.
-        current_voxel = dr::clamp(current_voxel, 0, res - 1);
-        last_voxel    = dr::clamp(last_voxel, 0, res - 1);
+        // current_voxel = dr::clamp(current_voxel, 0, res - 1);
+        // last_voxel    = dr::clamp(last_voxel, 0, res - 1);
+
+        // Log(Warn, "res = %s", res);
+        // Log(Warn, "current_voxel = %s", current_voxel);
+        // Log(Warn, "last_voxel = %s", last_voxel);
 
         // Increment (in number of voxels) to take at each step
         Vector3i step = dr::select(local_ray.d >= 0, 1, -1);
@@ -680,7 +696,7 @@ protected:
         // TODO: allow precomputing all this (but be careful when ray origin is
         // updated)
         auto [dda_t, dda_tmax, dda_tdelta] =
-            prepare_majorant_grid_traversal(ray, mint, maxt);
+            prepare_majorant_grid_traversal(ray, mint, maxt, active);
         MediumInteraction3f mei = dr::zeros<MediumInteraction3f>();
 
         // 2. Traverse the medium with DDA until we reach the desired
