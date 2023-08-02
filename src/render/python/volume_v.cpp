@@ -69,6 +69,8 @@ MI_PY_EXPORT(Volume) {
                     "value_scale"_a = 1.0f)
         .def_method(Volume, get_majorant_grid, "resolution_factor"_a,
                     "value_scale"_a = 1.0f)
+        .def_method(Volume, prepare_majorant_grid_traversal, "ray"_a, "mint"_a,
+                    "maxt"_a, "active"_a = true)
         .def_method(Volume, traverse_majorant_grid, "desired_tau"_a, "ray"_a,
                     "mint"_a, "maxt"_a, "active"_a = true)
         .def_method(Volume, eval, "it"_a, "active"_a = true)

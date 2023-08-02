@@ -79,6 +79,16 @@ public:
         ScalarVector3i resolution_factor, ScalarFloat value_scale = 1.f) const;
 
     /**
+     * \brief Returns the data required to initialize a majorant grid traversal
+     * loop.
+     *
+     * Returns (initial t, tmax, tdelta).
+     */
+    virtual std::tuple<Float, Vector3f, Vector3f>
+    prepare_majorant_grid_traversal(
+        const Ray3f &ray, Float mint, Float maxt, Mask /*active*/) const;
+
+    /**
      * \brief Samples a distance using a majorant grid traversal algorithm.
      */
     virtual Float
