@@ -632,14 +632,18 @@ protected:
         // Log(Warn, "local_voxel_size = %s", local_voxel_size);
 
         // The id of the first and last voxels hit by the ray
-        Vector3f current_voxel_coord(dr::clamp(local_ray(mint) / local_voxel_size, 0.f, res - 1.f));
-        Vector3f last_voxel_coord(dr::clamp(local_ray(maxt) / local_voxel_size, 0.f, res - 1.f));
-        Log(Warn, "current_voxel_coord = %s", current_voxel_coord);
-        Log(Warn, "last_voxel_coord = %s", last_voxel_coord);
-        Vector3u current_voxel(dr::floor(current_voxel_coord));
-        Vector3u last_voxel(dr::floor(last_voxel_coord));
-        Log(Warn, "current_voxel = %s", current_voxel);
-        Log(Warn, "last_voxel = %s", last_voxel);
+        Vector3f current_voxel_coords(
+            dr::clamp(local_ray(mint) / local_voxel_size, 0.f, res - 1.f)
+        );
+        Vector3f last_voxel_coord(
+            dr::clamp(local_ray(maxt) / local_voxel_size, 0.f, res - 1.f)
+        );
+        // Log(Warn, "current_voxel_coords = %s", current_voxel_coords);
+        // Log(Warn, "last_voxel_coord = %s", last_voxel_coord);
+        Vector3i current_voxel(dr::floor(current_voxel_coords));
+        Vector3i last_voxel(dr::floor(last_voxel_coord));
+        // Log(Warn, "current_voxel = %s", current_voxel);
+        // Log(Warn, "last_voxel = %s", last_voxel);
         if (dr::any_nested(last_voxel < 0)) {
             Log(Error, "negative voxel index detected: %s", last_voxel);
         }
@@ -680,7 +684,7 @@ protected:
         Float dda_t = mint;
 
         // Note: `t` parameters on the reparametrized ray yield locations on the
-        // normalized majorant supergrid constin [0, 1]^3. But they are also directly
+        // normalized majorant supergrid in [0, 1]^3. But they are also directly
         // valid parameters on the original ray, yielding positions in the
         // bbox-aligned supergrid.
         return { dda_t, dda_tmax, dda_tdelta };
