@@ -190,7 +190,7 @@ public:
 
     void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override {
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
-        // TODO: recompute majorant grid
+        update_majorant_supergrid();
     }
 
     UnpolarizedSpectrum
