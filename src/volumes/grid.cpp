@@ -629,32 +629,24 @@ protected:
             /* d */ ray.d / extents, ray.time, ray.wavelengths);
         const ScalarVector3i res  = resolution();
         Vector3f local_voxel_size = 1.f / res;
-        // Log(Warn, "local_voxel_size = %s", local_voxel_size);
 
         // The id of the first and last voxels hit by the ray
         Vector3f current_voxel_coords(
             dr::clamp(local_ray(mint) / local_voxel_size, 0.f, res - 1.f)
         );
-        Vector3f last_voxel_coord(
+        Vector3f last_voxel_coords(
             dr::clamp(local_ray(maxt) / local_voxel_size, 0.f, res - 1.f)
         );
-        // Log(Warn, "current_voxel_coords = %s", current_voxel_coords);
-        // Log(Warn, "last_voxel_coord = %s", last_voxel_coord);
         Vector3i current_voxel(dr::floor(current_voxel_coords));
-        Vector3i last_voxel(dr::floor(last_voxel_coord));
-        // Log(Warn, "current_voxel = %s", current_voxel);
-        // Log(Warn, "last_voxel = %s", last_voxel);
-        if (dr::any_nested(last_voxel < 0)) {
-            Log(Error, "negative voxel index detected: %s", last_voxel);
-        }
+        Vector3i last_voxel(dr::floor(last_voxel_coords));
+        Log(Info, "current_voxel = %s", current_voxel);
+        Log(Info, "last_voxel = %s", last_voxel);
 
         // By definition, current and last voxels should be valid voxel indices.
         // current_voxel = dr::clamp(current_voxel, 0, res - 1);
         // last_voxel    = dr::clamp(last_voxel, 0, res - 1);
-
-        // Log(Warn, "res = %s", res);
-        // Log(Warn, "current_voxel = %s", current_voxel);
-        // Log(Warn, "last_voxel = %s", last_voxel);
+        // if (dr::any_nested(last_voxel < 0) || dr::any_nested(last_voxel > res - 1))
+        //     Log(Error, "invalid voxel index detected: %s", last_voxel);
 
         // Increment (in number of voxels) to take at each step
         Vector3i step = dr::select(local_ray.d >= 0, 1, -1);
@@ -704,7 +696,7 @@ protected:
         MediumInteraction3f mei = dr::zeros<MediumInteraction3f>();
 
         // 2. Traverse the medium with DDA until we reach the desired
-        // optical depth.
+        // optical depth
         Mask active_dda = active;
         Mask reached    = false;
         Float tau_acc   = 0.f;
@@ -712,14 +704,17 @@ protected:
         dr::Loop<Mask> dda_loop("Volume::traverse_majorant_grid");
         dda_loop.put(active_dda, reached, dda_t, dda_tmax, tau_acc, mei);
         dda_loop.init();
+        Log(Info, "Entering DDA loop");
+        Log(Info, "active_dda = %s", active_dda);
 
-        Log(Info, "---- i = %s ----", i);
-        Log(Info, "reached = %s", reached);
-        Log(Info, "dda_t = %s", dda_t);
-        Log(Info, "dda_tmax = %s", dda_tmax);
-        Log(Info, "tau_acc = %s", tau_acc);
 
         while (dda_loop(dr::detach(active_dda))) {
+            Log(Info, "---- i = %s ----", i);
+            Log(Info, "reached = %s", reached);
+            Log(Info, "dda_t = %s", dda_t);
+            Log(Info, "dda_tmax = %s", dda_tmax);
+            Log(Info, "tau_acc = %s", tau_acc);
+
             // Figure out which axis we hit first.
             // `t_next` is the ray's `t` parameter when hitting that axis.
             Float t_next = dr::min(dda_tmax);
@@ -734,10 +729,8 @@ protected:
             }
 
             // Lookup and accumulate majorant in current cell.
-            dr::masked(mei.t, active_dda) = 0.5f * (dda_t + t_next);
+            dr::masked(mei.t, active_dda) = .5f * (dda_t + t_next);
             dr::masked(mei.p, active_dda) = ray(mei.t);
-            // TODO: avoid this vcall, could lookup directly from the array
-            // of floats (but we still need to account for the bbox, etc).
             Float majorant = eval_1(mei, active_dda);
             Log(Info, "majorant = %s", majorant);
             Float tau_next = tau_acc + majorant * (t_next - dda_t);
@@ -756,15 +749,17 @@ protected:
             dr::masked(dda_tmax, active_dda) = dda_tmax + tmax_update;
             dr::masked(tau_acc, active_dda)  = tau_next;
             i++;
-
-            Log(Info, "---- i = %s ----", i);
-            Log(Info, "reached = %s", reached);
-            Log(Info, "dda_t = %s", dda_t);
-            Log(Info, "dda_tmax = %s", dda_tmax);
-            Log(Info, "tau_acc = %s", tau_acc);
         }
         // Adopt the stopping location, making sure to convert to the main
         // ray's parametrization.
+        Log(Info, "Exiting DDA loop");
+
+        Log(Info, "---- i = %s ----", i);
+        Log(Info, "reached = %s", reached);
+        Log(Info, "dda_t = %s", dda_t);
+        Log(Info, "dda_tmax = %s", dda_tmax);
+        Log(Info, "tau_acc = %s", tau_acc);
+
         return dr::select(reached, dda_t, dr::Infinity<Float>);
     }
 
