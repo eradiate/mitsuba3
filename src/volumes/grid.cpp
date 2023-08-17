@@ -630,7 +630,7 @@ protected:
         const ScalarVector3i res  = resolution();
         Vector3f local_voxel_size = 1.f / res;
 
-        // The id of the first and last voxels hit by the ray
+        // The ID of the first and last voxels hit by the ray
         Vector3f current_voxel_coords(
             dr::clamp(local_ray(mint) / local_voxel_size, 0.f, res - 1.f)
         );

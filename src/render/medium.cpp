@@ -82,10 +82,11 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
     Log(Info, "desired_tau = %s", desired_tau);
     Float sampled_t;
     if (m_majorant_grid) {
+        // --- Medium has a majorant supergrid
         sampled_t = m_majorant_grid->traverse_majorant_grid(
             desired_tau, ray, mint, maxt, active);
     } else {
-        // --- A single majorant for the whole volume.
+        // --- Medium only has global majorant for the whole volume
         mei.combined_extinction = dr::detach(get_majorant(mei, active));
         Float m   = extract_channel(mei.combined_extinction, channel);
         sampled_t = mint + (desired_tau / m);
