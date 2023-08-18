@@ -1,5 +1,6 @@
 import os
 
+import drjit as dr
 import mitsuba as mi
 
 mi.set_variant("llvm_rgb")
@@ -75,9 +76,11 @@ def make_test_scene(integrator: dict = None):
             "far_clip": 1e8,
         },
         "illumination": {
-            "type": "directional",
-            "direction": [0, -1, -1],
-            "irradiance": 5.0,
+            # "type": "directional",
+            # "direction": [0, -1, -1],
+            # "irradiance": 5.0,
+            "type": "constant",
+            "radiance": 5.0,
         },
         "integrator": {"type": "path"} if integrator is None else integrator,
     }
@@ -93,16 +96,23 @@ def test_01_volpathgrid_basic():
     scene_dict = make_test_scene()
     scene = mi.load_dict(scene_dict)
     integrators = {
-        "volpath": mi.load_dict(
+        # "volpath": mi.load_dict(
+        #     {
+        #         "type": "volpath",
+        #         "max_depth": 64,
+        #         "rr_depth": 999,
+        #     }
+        # ),
+        "volpathgridpy": mi.load_dict(
             {
-                "type": "volpath",
+                "type": "volpathgridpy",
                 "max_depth": 64,
                 "rr_depth": 999,
             }
         ),
-        "volpathgridpy": mi.load_dict(
+        "prbvolpath": mi.load_dict(
             {
-                "type": "volpathgridpy",
+                "type": "prbvolpath",
                 "max_depth": 64,
                 "rr_depth": 999,
             }
@@ -115,7 +125,7 @@ def test_01_volpathgrid_basic():
 
         @render_cache(fname, overwrite=True)
         def fn():
-            return mi.render(scene, integrator=integrator, spp=32)
+            return mi.render(scene, integrator=integrator, spp=4)
 
         results[k] = fn()
 
@@ -129,4 +139,16 @@ def test_01_volpathgrid_basic():
 
 if __name__ == "__main__":
     mi.set_variant("llvm_rgb")
-    integrator = mi.load_dict({"type": "volpathgridpy"})
+    integrator = mi.load_dict({"type": "prbvolpath"})
+    print(integrator)
+    scene = mi.load_dict(make_test_scene())
+    sampler = mi.load_dict({"type": "independent"})
+    ray = dr.zeros(mi.Ray3f)
+    ray.o = mi.ScalarPoint3f(0.0, -2, 0.0)
+    ray.d = mi.ScalarVector3f(0, 1, 0)
+    ray.maxt = dr.inf
+    print(ray)
+    # for _ in range(10):
+    #     print(integrator.sample(scene, sampler, ray, None))
+
+    print(mi.render(scene, integrator=integrator, spp=4))

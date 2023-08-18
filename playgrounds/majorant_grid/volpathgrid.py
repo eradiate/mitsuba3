@@ -4,10 +4,30 @@ import typing as t
 import drjit as dr
 import mitsuba as mi
 
+
 MI_PATH = "/home/leroyv/Documents/src/thirdparty/mitsuba3/build/python"
 
 if MI_PATH not in sys.path:
     sys.path.insert(0, MI_PATH)
+
+
+def mis_weight(pdf_a, pdf_b):
+    """
+    Compute the Multiple Importance Sampling (MIS) weight given the densities
+    of two sampling strategies according to the power heuristic.
+    """
+    a2 = dr.sqr(pdf_a)
+    b2 = dr.sqr(pdf_b)
+    w = a2 / (a2 + b2)
+    return dr.detach(dr.select(dr.isfinite(w), w, 0))
+
+
+def index_spectrum(spec, idx):
+    m = spec[0]
+    if mi.is_rgb:
+        m[dr.eq(idx, 1)] = spec[1]
+        m[dr.eq(idx, 2)] = spec[2]
+    return m
 
 
 class VolPathGridIntegratorPy(mi.SamplingIntegrator):
@@ -20,8 +40,33 @@ class VolPathGridIntegratorPy(mi.SamplingIntegrator):
 
     def __init__(self, props):
         super().__init__(props)
-        self.max_depth = props.get("max_depth", 999)
+        self.max_depth = props.get("max_depth", -1)
         self.rr_depth = props.get("rr_depth", 5)
+        self.hide_emitters = props.get("hide_emitters", False)
+
+        self.use_nee = False
+        self.nee_handle_homogeneous = False
+        self.handle_null_scattering = False
+        self.is_prepared = False
+
+    def prepare_scene(self, scene):
+        if self.is_prepared:
+            return
+
+        for shape in scene.shapes():
+            for medium in [shape.interior_medium(), shape.exterior_medium()]:
+                if medium:
+                    # Enable NEE if a medium specifically asks for it
+                    self.use_nee = self.use_nee or medium.use_emitter_sampling()
+                    self.nee_handle_homogeneous = (
+                        self.nee_handle_homogeneous or medium.is_homogeneous()
+                    )
+                    self.handle_null_scattering = self.handle_null_scattering or (
+                        not medium.is_homogeneous()
+                    )
+        self.is_prepared = True
+        # By default enable always NEE in case there are surfaces
+        self.use_nee = True
 
     def sample(
         self,
@@ -32,324 +77,365 @@ class VolPathGridIntegratorPy(mi.SamplingIntegrator):
         active: mi.Bool = None,
     ) -> t.Tuple[mi.Spectrum, mi.Bool, mi.Spectrum]:
         """
-        This is basically Merlin's VolPathSimple.sample() implementation
-        with the AD parts removed (at least this is the intention).
-
         TODO: Add surface interaction handling
         TODO: Fix basic issues
         """
 
         ray = mi.Ray3f(ray_)
-        wavefront_size = dr.width(ray.d)
-        result = mi.Spectrum(0.0)
-        throughput = mi.Spectrum(1.0)
-        medium = initial_medium
-        mei = dr.zeros(mi.MediumInteraction3f)
-        depth = dr.zeros(mi.Int32, wavefront_size)
+        depth = mi.UInt32(0)
+        result = mi.Spectrum(0.0)  # Radiance accumulator
+        throughput = mi.Spectrum(1.0)  # Path throughput weight
+        eta = mi.Float(1.0)  # TODO: add refractive index tracking
         active = mi.Mask(True)
 
-        si, escaped = self.reach_medium(
-            scene, ray, active
-        )  # TODO: this assumes ray starts outside of medium
-        needs_intersection = mi.Mask(True)
+        si = dr.zeros(mi.SurfaceInteraction3f)
+        needs_intersection = mi.Bool(True)
         last_scatter_it = dr.zeros(mi.Interaction3f)
         last_scatter_direction_pdf = mi.Float(1.0)
-        has_scattered = mi.Mask(False)
+
+        # # TODO: Support sensors inside media
+        # medium = mi.MediumPtr(medium)
+        medium = dr.zeros(mi.MediumPtr)
+
+        channel = 0
+        valid_ray = mi.Bool(False)
+
+        if mi.is_rgb:  # Sample a color channel to sample free-flight distances
+            n_channels = dr.size_v(mi.Spectrum)
+            channel = dr.minimum(n_channels * sampler.next_1d(active), n_channels - 1)
 
         loop = mi.Loop(
-            "VolPathGridIntegratorPy::Sample loop",
-            lambda: (
+            name="Volumetric path tracing with local majorant grid",
+            state=lambda: (
+                sampler,
                 active,
                 depth,
                 ray,
-                throughput,
+                medium,
                 si,
+                throughput,
                 result,
-                sampler,
+                needs_intersection,
                 last_scatter_it,
                 last_scatter_direction_pdf,
+                valid_ray,
             ),
         )
 
         while loop(active):
-            # Russian Roulette (taking eta = 1.0)
-            # RR threshold 0.95 in volpath, 0.99 in volpathsimple
-            q = dr.minimum(dr.max(throughput), 0.95)
+            active &= dr.any(dr.neq(throughput, 0.0))
+            q = dr.minimum(dr.max(throughput) * dr.sqr(eta), 0.99)
             perform_rr = depth > self.rr_depth
-            active &= dr.any(dr.neq(throughput, 0.0)) & (
-                (~perform_rr | (sampler.next_1d(active) < q))
-            )
-            throughput[perform_rr] = throughput * dr.rcp(dr.detach(q))
+            active &= (sampler.next_1d(active) < q) | ~perform_rr
+            throughput[perform_rr] = throughput * dr.rcp(q)
+
+            active_medium = active & dr.neq(medium, None)  # TODO this is not necessary
+            active_surface = active & ~active_medium
 
             # Handle medium sampling and potential medium escape
-            mei, mei_weight = self.sample_real_interaction(medium, ray, sampler, active)
-            throughput[active] = throughput * mei_weight
+            u = sampler.next_1d(active_medium)
+            mei = medium.sample_interaction(ray, u, channel, active_medium)
+            mei.t = dr.detach(mei.t)
 
-            did_escape = active & (~mei.is_valid())
-            still_in_medium = active & mei.is_valid()
+            ray.maxt[active_medium & medium.is_homogeneous() & mei.is_valid()] = mei.t
+            intersect = needs_intersection & active_medium
+            si_new = scene.ray_intersect(ray, intersect)
+            si[intersect] = si_new
+
+            needs_intersection &= ~active_medium
+            mei.t[active_medium & (si.t < mei.t)] = dr.inf
+
+            # Evaluate ratio of transmittance and free-flight PDF
+            tr, free_flight_pdf = medium.eval_tr_and_pdf(mei, si, active_medium)
+            tr_pdf = index_spectrum(free_flight_pdf, channel)
+            weight = mi.Spectrum(1.0)
+            weight[active_medium] *= dr.select(
+                tr_pdf > 0.0, tr / dr.detach(tr_pdf), 0.0
+            )
+
+            escaped_medium = active_medium & ~mei.is_valid()
+            active_medium &= mei.is_valid()
 
             # Handle null and real scatter events
-            did_scatter = mi.Mask(still_in_medium)
+            if self.handle_null_scattering:
+                scatter_prob = index_spectrum(mei.sigma_t, channel) / index_spectrum(
+                    mei.combined_extinction, channel
+                )
+                act_null_scatter = (
+                    sampler.next_1d(active_medium) >= scatter_prob
+                ) & active_medium
+                act_medium_scatter = ~act_null_scatter & active_medium
+                weight[act_null_scatter] *= mei.sigma_n / dr.detach(1 - scatter_prob)
+            else:
+                scatter_prob = mi.Float(1.0)
+                act_medium_scatter = active_medium
 
-            # Rays that have still not escaped but reached max depth
-            # are killed inside of the medium (zero contribution)
-            depth[did_scatter] = depth + 1
-            active &= still_in_medium & (depth < self.max_depth)
+            depth[act_medium_scatter] += 1
+            last_scatter_it[act_medium_scatter] = dr.detach(mei)
 
-            # --- Emitter sampling
+            # Don't estimate lighting if we exceeded number of bounces
+            active &= depth < self.max_depth
+            act_medium_scatter &= active
+            if self.handle_null_scattering:
+                ray.o[act_null_scatter] = dr.detach(mei.p)
+                si.t[act_null_scatter] = si.t - dr.detach(mei.t)
+
+            weight[act_medium_scatter] *= mei.sigma_s / dr.detach(scatter_prob)
+            throughput[active_medium] *= dr.detach(weight)
+
+            mei = dr.detach(mei)
             phase_ctx = mi.PhaseFunctionContext(sampler)
             phase = mei.medium.phase_function()
-            phase[~did_scatter] = dr.zeros(mi.PhaseFunctionPtr, 1)
-            active_e = did_scatter & active
-            nee_contrib = self.sample_emitter_for_nee(
-                mei, scene, sampler, medium, phase_ctx, phase, throughput, active_e
-            )
-            result[active_e] += nee_contrib
-            del nee_contrib
-            # ----------
+            phase[~act_medium_scatter] = dr.zeros(mi.PhaseFunctionPtr)
 
-            # --- Phase function sampling
-            # Note: assuming phase_pdf = 1 (perfect importance sampling)
-            wo, phase_pdf = phase.sample(
-                phase_ctx,
-                mei,
-                sampler.next_1d(did_scatter),
-                sampler.next_2d(did_scatter),
-                did_scatter,
-            )
+            valid_ray |= act_medium_scatter
+            with dr.suspend_grad():
+                wo, phase_pdf = phase.sample(
+                    phase_ctx,
+                    mei,
+                    sampler.next_1d(act_medium_scatter),
+                    sampler.next_2d(act_medium_scatter),
+                    act_medium_scatter,
+                )
+            act_medium_scatter &= phase_pdf > 0.0
             new_ray = mei.spawn_ray(wo)
-            ray[did_scatter] = new_ray
-            # ----------
+            ray[act_medium_scatter] = new_ray
+            needs_intersection |= act_medium_scatter
+            last_scatter_direction_pdf[act_medium_scatter] = phase_pdf
 
-            # --- Handle escaped rays: cross the null boundary
-            ray[did_escape] = si.spawn_ray(
-                ray.d
-            )  # Continue on the other side of the boundary
-            escaped |= did_escape
-            # ----------
+            # --------------------- Surface Interactions ---------------------
+            active_surface |= escaped_medium
+            intersect = active_surface & needs_intersection
+            si[intersect] = scene.ray_intersect(ray, intersect)
 
-        # --- Envmap contribution
-        si_update_needed = escaped & si.is_valid()
-        si[si_update_needed] = scene.ray_intersect(ray, si_update_needed)
-        # All escaped rays can now query the envmap
-        emitter = si.emitter(scene)
-        active_e = (
-            escaped & dr.neq(emitter, None) & ~((depth <= 0) & self.hide_emitters)
-        )
-
-        if self.use_nee:
-            assert last_scatter_it is not None
-            ds = mi.DirectionSample3f(scene, si, last_scatter_it)
-            emitter_pdf = emitter.pdf_direction(last_scatter_it, ds, active_e)
-            # MIS should be disabled (i.e. MIS weight = 1) if there wasn't even
-            # a valid interaction from which the emitter could have been sampled,
-            # e.g. in the case a ray escaped directly.
-            emitter_pdf = dr.select(has_scattered, emitter_pdf, 0.0)
-            hit_mis_weight = mi.ad.common.mis_weight(
-                last_scatter_direction_pdf, emitter_pdf
+            # ---------------- Intersection with emitters ----------------
+            ray_from_camera = active_surface & dr.eq(depth, 0)
+            count_direct = ray_from_camera  # | specular_chain
+            emitter = si.emitter(scene)
+            active_e = (
+                active_surface
+                & dr.neq(emitter, None)
+                & ~(dr.eq(depth, 0) & self.hide_emitters)
             )
-        else:
-            emitter_pdf = None
-            hit_mis_weight = 1.0
 
-        # TODO: envmap gradients
-        contrib = emitter.eval(si, active_e)
-        result[active_e] += throughput * hit_mis_weight * contrib
+            # Get the PDF of sampling this emitter using next event estimation
+            ds = mi.DirectionSample3f(scene, si, last_scatter_it)
+            if self.use_nee:
+                emitter_pdf = scene.pdf_emitter_direction(last_scatter_it, ds, active_e)
+            else:
+                emitter_pdf = 0.0
+            emitted = emitter.eval(si, active_e)
+            contrib = dr.select(
+                count_direct,
+                throughput * emitted,
+                throughput
+                * mis_weight(last_scatter_direction_pdf, emitter_pdf)
+                * emitted,
+            )
+            result[active_e] += dr.detach(contrib)
 
-        del si_update_needed, emitter, active_e, contrib
+            active_surface &= si.is_valid()
+            ctx = mi.BSDFContext()
+            bsdf = si.bsdf(ray)
 
-        return result, active, result
+            # --------------------- Emitter sampling ---------------------
+            if self.use_nee:
+                active_e_surface = (
+                    active_surface
+                    & mi.has_flag(bsdf.flags(), mi.BSDFFlags.Smooth)
+                    & (depth + 1 < self.max_depth)
+                )
+                sample_emitters = mei.medium.use_emitter_sampling()
+                # specular_chain &= ~act_medium_scatter
+                # specular_chain |= act_medium_scatter & ~sample_emitters
+                active_e_medium = act_medium_scatter & sample_emitters
+                active_e = active_e_surface | active_e_medium
+                ref_interaction = dr.zeros(mi.Interaction3f)
+                ref_interaction[act_medium_scatter] = mei
+                ref_interaction[active_surface] = si
+                nee_sampler = sampler  # if is_primal else sampler.clone()
+                emitted, ds = self.sample_emitter(
+                    ref_interaction,
+                    scene,
+                    nee_sampler,
+                    medium,
+                    channel,
+                    active_e,
+                )
+                # Query the BSDF for that emitter-sampled direction
+                bsdf_val, bsdf_pdf = bsdf.eval_pdf(
+                    ctx, si, si.to_local(ds.d), active_e_surface
+                )
+                phase_val = phase.eval(phase_ctx, mei, ds.d, active_e_medium)
+                nee_weight = dr.select(active_e_surface, bsdf_val, phase_val)
+                nee_directional_pdf = dr.select(
+                    ds.delta, 0.0, dr.select(active_e_surface, bsdf_pdf, phase_val)
+                )
 
-    def reach_medium(self, scene, ray, active):
-        """
-        In this simplified setting, rays either hit the medium's bbox and
-        go in or escape directly to infinity.
-        Warning: this function mutates its inputs.
-        """
-        si = scene.ray_intersect(ray, active)
-        escaped = active & (~si.is_valid())
-        active &= si.is_valid()
-        # By convention, crossing the medium's bbox does *not*
-        # count as an interaction (depth++) when it's a null BSDF.
+                contrib = (
+                    throughput
+                    * nee_weight
+                    * mis_weight(ds.pdf, nee_directional_pdf)
+                    * emitted
+                )
+                result[active_e] += dr.detach(contrib)
 
-        # Continue on the other side of the boundary and find
-        # the opposite side (exit point from the medium).
-        ray[active] = si.spawn_ray(ray.d)
-        si_new = scene.ray_intersect(ray, active)
-        # We might have hit a corner case and escaped despite
-        # originally hitting the medium bbox.
-        active &= si_new.is_valid()
+            # ----------------------- BSDF sampling ----------------------
+            with dr.suspend_grad():
+                bs, bsdf_weight = bsdf.sample(
+                    ctx,
+                    si,
+                    sampler.next_1d(active_surface),
+                    sampler.next_2d(active_surface),
+                    active_surface,
+                )
+                active_surface &= bs.pdf > 0
 
-        # If we lifted the restriction on the number of media,
-        # we would need to get the correct pointers now.
-        # medium[active] = si.target_medium(ray.d)
+            bsdf_eval = bsdf.eval(ctx, si, bs.wo, active_surface)
 
-        ray.maxt[active] = dr.select(
-            dr.isfinite(si_new.t), si_new.t, dr.largest(mi.Float)
+            throughput[active_surface] *= bsdf_weight
+            eta[active_surface] *= bs.eta
+            bsdf_ray = si.spawn_ray(si.to_world(bs.wo))
+            ray[active_surface] = bsdf_ray
+
+            needs_intersection |= active_surface
+            non_null_bsdf = active_surface & ~mi.has_flag(
+                bs.sampled_type, mi.BSDFFlags.Null
+            )
+            depth[non_null_bsdf] += 1
+
+            # update the last scatter PDF event if we encountered a non-null scatter event
+            last_scatter_it[non_null_bsdf] = si
+            last_scatter_direction_pdf[non_null_bsdf] = bs.pdf
+
+            valid_ray |= non_null_bsdf
+            # specular_chain |= non_null_bsdf & mi.has_flag(
+            #     bs.sampled_type, mi.BSDFFlags.Delta
+            # )
+            # specular_chain &= ~(
+            #     active_surface & mi.has_flag(bs.sampled_type, mi.BSDFFlags.Smooth)
+            # )
+            has_medium_trans = active_surface & si.is_medium_transition()
+            medium[has_medium_trans] = si.target_medium(ray.d)
+            active &= active_surface | active_medium
+
+        return result, valid_ray, result
+
+    def sample_emitter(
+        self,
+        ref_interaction,
+        scene,
+        sampler,
+        medium,
+        channel,
+        active,
+    ):
+        active = mi.Bool(active)
+        medium = dr.select(active, medium, dr.zeros(mi.MediumPtr))
+
+        ds, emitter_val = scene.sample_emitter_direction(
+            ref_interaction, sampler.next_2d(active), False, active
         )
-        si[active] = si_new
+        ds = dr.detach(ds)
+        invalid = dr.eq(ds.pdf, 0.0)
+        emitter_val[invalid] = 0.0
+        active &= ~invalid
 
-        return si, escaped
-
-    def sample_real_interaction(self, medium, ray, sampler, _active):
-        """
-        `Medium::sample_interaction` returns an interaction that could be a null interaction.
-        Here, we loop until a real interaction is sampled.
-
-        The given ray's `maxt` value must correspond to the closest surface
-        interaction (e.g. medium bounding box) in the direction of the ray.
-        """
-        # TODO: could make this faster for the homogeneous special case
-        # TODO: could make this faster when there's a majorant supergrid
-        #       by performing both DDA and "real interaction" sampling in
-        #       the same loop.
-        # We will keep updating the origin of the ray during traversal.
-        running_ray = dr.detach(type(ray)(ray))
-        # So we also keep track of the offset w.r.t. the original ray's origin.
-        running_t = mi.Float(0.0)
-
-        active = mi.Mask(_active)
-        weight = mi.Spectrum(1.0)
-        mei = dr.zeros(mi.MediumInteraction3f, dr.width(ray))
-        mei.t = dr.select(active, dr.nan, dr.inf)
-
+        ray = ref_interaction.spawn_ray(ds.d)
+        total_dist = mi.Float(0.0)
+        si = dr.zeros(mi.SurfaceInteraction3f)
+        needs_intersection = mi.Bool(True)
+        transmittance = mi.Spectrum(1.0)
         loop = mi.Loop(
-            "medium_sample_interaction_real",
-            lambda: (active, weight, mei, running_ray, running_t, sampler),
+            name=f"VolPathGrid Next Event Estimation",
+            state=lambda: (
+                sampler,
+                active,
+                medium,
+                ray,
+                total_dist,
+                needs_intersection,
+                si,
+                transmittance,
+            ),
         )
         while loop(active):
-            mei_next = medium.sample_interaction(
-                running_ray, sampler.next_1d(active), channel, active
+            remaining_dist = ds.dist * (1.0 - mi.math.ShadowEpsilon) - total_dist
+            ray.maxt = dr.detach(remaining_dist)
+            active &= remaining_dist > 0.0
+
+            # This ray will not intersect if it reached the end of the segment
+            needs_intersection &= active
+            si[needs_intersection] = scene.ray_intersect(ray, needs_intersection)
+            needs_intersection &= False
+
+            active_medium = active & dr.neq(medium, None)
+            active_surface = active & ~active_medium
+
+            # Handle medium interactions / transmittance
+            mei = medium.sample_interaction(
+                ray, sampler.next_1d(active_medium), channel, active_medium
             )
-            mei[active] = mei_next
-            mei.t[active] = mei.t + running_t
+            mei.t[active_medium & (si.t < mei.t)] = dr.inf
+            mei.t = dr.detach(mei.t)
 
-            majorant = mei_next.combined_extinction[channel]
-            r = dr.select(dr.neq(majorant, 0), mei_next.sigma_t[channel] / majorant, 0)
+            tr_multiplier = mi.Spectrum(1.0)
 
-            # Some lanes escaped the medium. Others will continue sampling
-            # until they find a real interaction.
-            active &= mei_next.is_valid()
-            did_null_scatter = active & (sampler.next_1d(active) >= r)
+            # Special case for homogeneous media: directly advance to the next
+            # surface / end of the segment
+            if self.nee_handle_homogeneous:
+                active_homogeneous = active_medium & medium.is_homogeneous()
+                mei.t[active_homogeneous] = dr.minimum(remaining_dist, si.t)
+                tr_multiplier[active_homogeneous] = medium.eval_tr_and_pdf(
+                    mei, si, active_homogeneous
+                )[0]
+                mei.t[active_homogeneous] = dr.inf
 
-            active &= did_null_scatter
-            # Update ray to only sample points further than the
-            # current null interaction.
-            next_t = dr.detach(mei_next.t)
-            running_ray.o[active] = running_ray.o + next_t * running_ray.d
-            running_ray.maxt[active] = running_ray.maxt - next_t
-            running_t[active] = running_t + next_t
+            escaped_medium = active_medium & ~mei.is_valid()
 
-        did_sample = _active & mei.is_valid()
-        mei.p = dr.select(did_sample, ray(mei.t), dr.nan)
-        mei.mint = mi.Float(
-            dr.nan
-        )  # Value was probably wrong, so we make sure it's unused
-        with dr.resume_grad(when=not is_primal):
-            mei.sigma_s, mei.sigma_n, mei.sigma_t = medium.get_scattering_coefficients(
-                mei, did_sample
+            # Ratio tracking transmittance computation
+            active_medium &= mei.is_valid()
+            ray.o[active_medium] = dr.detach(mei.p)
+            si.t[active_medium] = dr.detach(si.t - mei.t)
+            tr_multiplier[active_medium] *= mei.sigma_n / mei.combined_extinction
+
+            # Handle interactions with surfaces
+            active_surface |= escaped_medium
+            active_surface &= si.is_valid() & ~active_medium
+            bsdf = si.bsdf(ray)
+            bsdf_val = bsdf.eval_null_transmission(si, active_surface)
+            tr_multiplier[active_surface] = tr_multiplier * bsdf_val
+
+            transmittance *= dr.detach(tr_multiplier)
+
+            # Update the ray with new origin & t parameter
+            new_ray = si.spawn_ray(mi.Vector3f(ray.d))
+            ray[active_surface] = dr.detach(new_ray)
+            ray.maxt = dr.detach(remaining_dist)
+            needs_intersection |= active_surface
+
+            # Continue tracing through scene if non-zero weights exist
+            active &= (active_medium | active_surface) & dr.any(
+                dr.neq(transmittance, 0.0)
             )
+            total_dist[active] += dr.select(active_medium, mei.t, si.t)
 
-        return mei, weight
-
-    def sample_emitter(self, ref_interaction, scene, sampler, medium, channel, active):
-        """
-        Starting from the given `ref_interaction` inside of a medium, samples a direction
-        toward an emitter and estimates transmittance with ratio tracking.
-
-        This simplified implementation does not support:
-        - presence of surfaces within the medium
-        - propagating adjoint radiance (adjoint pass)
-        """
-        active = mi.Mask(active)
-
-        dir_sample = sampler.next_2d(active)
-        ds, emitter_val = scene.sample_emitter_direction(
-            ref_interaction, dir_sample, False, active
-        )
-        sampling_worked = dr.neq(ds.pdf, 0.0)
-        emitter_val &= sampling_worked
-        active &= sampling_worked
-
-        # Trace a ray toward the emitter and find the medium's bbox
-        # boundary in that direction.
-        ray = ref_interaction.spawn_ray(ds.d)
-        si = scene.ray_intersect(ray, active)
-        ray.maxt = si.t
-        transmittance = self.estimate_transmittance(
-            ray,
-            0,
-            si.t,
-            medium,
-            sampler,
-            channel,
-            active & si.is_valid(),
-        )
+            # If a medium transition is taking place: Update the medium pointer
+            has_medium_trans = active_surface & si.is_medium_transition()
+            medium[has_medium_trans] = si.target_medium(ray.d)
 
         return emitter_val * transmittance, ds
 
-    def estimate_transmittance(
-        self, ray_full, tmin, tmax, medium, sampler, channel, active
-    ):
-        """Estimate the transmittance between two points along a ray.
-
-        This simplified implementation does not support:
-        - presence of surfaces within the medium
-        - propagating adjoint radiance (adjoint pass)
-        """
-
-        # Support tmax < tmin, but not negative tmin or tmax
-        needs_swap = tmax < tmin
-        tmp = tmin
-        tmin = dr.select(needs_swap, tmax, tmin)
-        tmax = dr.select(needs_swap, tmp, tmax)
-        del needs_swap, tmp
-
-        active = mi.Mask(active)
-        ray = type(ray_full)(ray_full)
-        ray.o = ray_full(tmin)
-        tmax = tmax - tmin
-        ray.maxt = tmax
-        del ray_full, tmin
-
-        transmittance = mi.Spectrum(dr.select(active, 1.0, 0.0))
-
-        # --- Estimate transmittance with Ratio Tracking
-        # Simplified assuming that we start from within a medium, there's a single
-        # medium in the scene and no surfaces.
-        loop = mi.Loop(
-            "VolpathSimpleNEELoop", lambda: (active, ray, tmax, transmittance, sampler)
+    def to_string(self):
+        return "\n".join(
+            [
+                "VolPathGridIntegratorPy[",
+                f"  max_depth = {self.max_depth},",
+                f"  rr_depth = {self.rr_depth},",
+                f"  hide_emitters = {self.hide_emitters}",
+                "]",
+            ]
         )
-        while loop(active):
-            # TODO: support majorant supergrid in-line to avoid restarting DDA traversal each time
-            # Handle medium interactions / transmittance
-            mei = medium.sample_interaction(
-                ray, sampler.next_1d(active), channel, active
-            )
-            # Ratio tracking for transmittance estimation:
-            # update throughput estimate with probability of sampling a null-scattering event.
-            tr_contribution = dr.select(
-                dr.neq(mei.combined_extinction, 0),
-                mei.sigma_n / mei.combined_extinction,
-                mei.sigma_n,
-            )
-
-            # If interaction falls out of bounds, we don't have anything
-            # valid to accumulate.
-            mei.t[active & (mei.t > tmax)] = dr.inf
-            active &= mei.is_valid()
-
-            # Apply effect of this interaction
-            transmittance[active] *= tr_contribution
-            # Adopt newly sampled position in the medium
-            ray.o[active] = mei.p
-            tmax[active] = tmax - mei.t
-            ray.maxt[active] = tmax
-
-            # Continue walking through medium
-            active &= dr.any(dr.neq(transmittance, 0.0))
-
-        return transmittance
 
 
 mi.register_integrator("volpathgridpy", lambda props: VolPathGridIntegratorPy(props))
