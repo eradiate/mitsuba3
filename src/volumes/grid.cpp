@@ -643,7 +643,7 @@ protected:
         memcpy(majorant_grid->data(), majorants.data(), majorant_grid->buffer_size());
 
         // These are technically useless, but we set them anyway for consistency
-        majorant_grid->set_max(m_volume_grid->max());
+        majorant_grid->set_max(m_max);
         majorant_grid->set_max_per_channel((ScalarFloat*) &m_max_per_channel[0]);
 
         // Initialize a gridvolume plugin with those data
