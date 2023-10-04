@@ -15,9 +15,16 @@ Stokes vector integrator (:monosp:`stokes`)
 
  * - (Nested plugin)
    - :paramtype:`integrator`
-   - Sub-integrator (only one can be specified) which will be sampled along the Stokes
+   - Sub-integrator (only one can be specified) which will be sampled along the
      integrator. In polarized rendering modes, its output Stokes vector is written
      into distinct images.
+
+ * - meridian_align
+   - |bool|
+   - Specifies whether the stokes vector incident to the sensor is aligned to
+     the meridian plane (spanned by the vertical vector and the ray) or to the
+     sensors X direction.
+
 
 This integrator returns a multi-channel image describing the complete measured
 polarization state at the sensor, represented as a Stokes vector :math:`\mathbf{s}`.
@@ -81,6 +88,8 @@ public:
             m_integrator = integrator;
         }
 
+        m_meridian_align = props.get<bool>("meridian_align", false);
+
         if (!m_integrator)
             Throw("Must specify a sub-integrator!");
     }
@@ -101,11 +110,35 @@ public:
                one last rotation here s.t. it aligns with the sensor's x-axis. */
             auto sensor = scene->sensors()[0];
             Vector3f current_basis = mueller::stokes_basis(-ray.d);
-            Vector3f vertical = sensor->world_transform() * Vector3f(0.f, 1.f, 0.f);
-            Vector3f target_basis = dr::cross(ray.d, vertical);
-            spec = mueller::rotate_stokes_basis(-ray.d,
-                                                 current_basis,
-                                                 target_basis) * spec;
+
+            Vector3f target_basis = dr::zeros<Vector3f>();
+
+            if (m_meridian_align) {
+                // IPRT Convention : Align to meridian plane.
+                Vector3f vertical = Vector3f(0.f, 0.f, 1.f);
+                Vector3f tmp      = dr::cross(vertical, -ray.d);
+
+                // Ray is pointing straight along vertical
+                Mask ray_is_vertical = dr::norm(tmp) < math::RayEpsilon<Float>;
+
+                // TODO: Ideally, the target basis should be rotated according
+                // to the up vector of the sensor when the ray is vertical.
+                // However, this breaks when using batch sensors.. Waiting for
+                // the reply from mitsuba Discussion #1295 target_basis[
+                // ray_is_vertical] = sensor->world_transform() *
+                // Vector3f(0.f, 1.f, 0.f);
+                target_basis[ray_is_vertical] = Vector3f(1.f, 0.f, 0.f);
+                target_basis[!ray_is_vertical] =
+                    dr::cross(dr::normalize(tmp), -ray.d);
+            } else {
+                Vector3f vertical =
+                    sensor->world_transform() * Vector3f(0.f, 1.f, 0.f);
+                target_basis = dr::cross(ray.d, vertical);
+            }
+
+            spec = mueller::rotate_stokes_basis(-ray.d, current_basis,
+                                                target_basis) *
+                   spec;
 
             auto const &stokes = spec.entry(0);
             for (int i = 0; i < 4; ++i) {
@@ -144,6 +177,7 @@ public:
     MI_DECLARE_CLASS()
 private:
     ref<Base> m_integrator;
+    bool m_meridian_align;
 };
 
 MI_IMPLEMENT_CLASS_VARIANT(StokesIntegrator, SamplingIntegrator)
