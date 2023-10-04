@@ -4,6 +4,7 @@
 #include <mitsuba/render/fwd.h>
 #include <mitsuba/render/fresnel.h>
 #include <drjit/matrix.h>
+#include <drjit/sphere.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
