@@ -362,44 +362,44 @@ public:
             Mask active_surface = active && !active_medium;
 
             if (dr::any_or<true>(active_medium)) {
-                auto mi = medium->sample_interaction(ray, sampler->next_1d(active_medium), channel, active_medium);
-                dr::masked(ray.maxt, active_medium && medium->is_homogeneous() && mi.is_valid()) = dr::minimum(mi.t, remaining_dist);
+                auto mei = medium->sample_interaction(ray, sampler->next_1d(active_medium), channel, active_medium);
+                dr::masked(ray.maxt, active_medium && medium->is_homogeneous() && mei.is_valid()) = dr::minimum(mei.t, remaining_dist);
                 Mask intersect = needs_intersection && active_medium;
                 if (dr::any_or<true>(intersect))
                     dr::masked(si, intersect) = scene->ray_intersect(ray, intersect);
 
-                dr::masked(mi.t, active_medium && (si.t < mi.t)) = dr::Infinity<Float>;
+                dr::masked(mei.t, active_medium && (si.t < mei.t)) = dr::Infinity<Float>;
                 needs_intersection &= !(active_medium && si.is_valid());
 
                 Mask is_spectral = medium->has_spectral_extinction() && active_medium;
                 Mask not_spectral = !is_spectral && active_medium;
                 if (dr::any_or<true>(is_spectral)) {
-                    Float t      = dr::minimum(remaining_dist, dr::minimum(mi.t, si.t)) - mi.mint;
-                    UnpolarizedSpectrum tr  = dr::exp(-t * mi.combined_extinction);
-                    UnpolarizedSpectrum free_flight_pdf = dr::select(si.t < mi.t || mi.t > remaining_dist, tr, tr * mi.combined_extinction);
+                    Float t      = dr::minimum(remaining_dist, dr::minimum(mei.t, si.t)) - mei.mint;
+                    UnpolarizedSpectrum tr  = dr::exp(-t * mei.combined_extinction);
+                    UnpolarizedSpectrum free_flight_pdf = dr::select(si.t < mei.t || mei.t > remaining_dist, tr, tr * mei.combined_extinction);
                     Float tr_pdf = index_spectrum(free_flight_pdf, channel);
                     dr::masked(transmittance, is_spectral) *= dr::select(tr_pdf > 0.f, tr / tr_pdf, 0.f);
                 }
 
                 // Handle exceeding the maximum distance by medium sampling
-                dr::masked(total_dist, active_medium && (mi.t > remaining_dist) && mi.is_valid()) = ds.dist;
-                dr::masked(mi.t, active_medium && (mi.t > remaining_dist)) = dr::Infinity<Float>;
+                dr::masked(total_dist, active_medium && (mei.t > remaining_dist) && mei.is_valid()) = ds.dist;
+                dr::masked(mei.t, active_medium && (mei.t > remaining_dist)) = dr::Infinity<Float>;
 
-                escaped_medium = active_medium && !mi.is_valid();
-                active_medium &= mi.is_valid();
+                escaped_medium = active_medium && !mei.is_valid();
+                active_medium &= mei.is_valid();
                 is_spectral &= active_medium;
                 not_spectral &= active_medium;
 
-                dr::masked(total_dist, active_medium) += mi.t;
+                dr::masked(total_dist, active_medium) += mei.t;
 
                 if (dr::any_or<true>(active_medium)) {
-                    dr::masked(ray.o, active_medium)    = mi.p;
-                    dr::masked(si.t, active_medium) = si.t - mi.t;
+                    dr::masked(ray.o, active_medium)    = mei.p;
+                    dr::masked(si.t, active_medium) = si.t - mei.t;
 
                     if (dr::any_or<true>(is_spectral))
-                        dr::masked(transmittance, is_spectral) *= mi.sigma_n;
+                        dr::masked(transmittance, is_spectral) *= mei.sigma_n;
                     if (dr::any_or<true>(not_spectral))
-                        dr::masked(transmittance, not_spectral) *= mi.sigma_n / mi.combined_extinction;
+                        dr::masked(transmittance, not_spectral) *= mei.sigma_n / mei.combined_extinction;
                 }
             }
 

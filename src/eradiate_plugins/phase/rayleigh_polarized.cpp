@@ -62,6 +62,11 @@ public:
         );
     }
 
+    MI_INLINE Float eval_rayleigh_pdf(Float cos_theta) const {
+        // TODO: Check vs Frisvad (2011)
+        return (3.f / 16.f) * dr::InvPi<Float> * (1.f + dr::sqr(cos_theta));
+    }
+
     MI_INLINE Spectrum eval_rayleigh(const PhaseFunctionContext &ctx,
                                      const MediumInteraction3f &mei,
                                      const Vector3f &wo,
@@ -105,11 +110,6 @@ public:
         }
 
         return phase_val;
-    }
-
-    MI_INLINE Float eval_rayleigh_pdf(Float cos_theta) const {
-        // TODO: Check vs Frisvad (2011)
-        return (3.f / 16.f) * dr::InvPi<Float> * (1.f + dr::sqr(cos_theta));
     }
 
     std::tuple<Vector3f, Spectrum, Float>
