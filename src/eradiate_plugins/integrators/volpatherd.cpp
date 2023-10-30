@@ -227,10 +227,9 @@ public:
                 Mask active_e = act_medium_scatter && sample_emitters;
                 if (dr::any_or<true>(active_e)) {
                     auto [emitted, ds] = sample_emitter(mei, scene, sampler, medium, channel, active_e);
-                    Vector3f wo = ds.d;
-                    // Vector3f wo = mei.to_local(ds.d);
+                    Vector3f wo        = mei.to_local(ds.d);
                     auto [phase_val, phase_pdf] = phase->eval_pdf(phase_ctx, mei, wo, active_e);
-                    // phase_val = mei.to_world_mueller(phase_val, -wo, mei.wi);
+                    phase_val = mei.to_world_mueller(phase_val, -wo, mei.wi);
                     dr::masked(result, active_e) += throughput * phase_val * emitted *
                                                     mis_weight(ds.pdf, dr::select(ds.delta, 0.f, phase_pdf));
                 }
@@ -241,9 +240,9 @@ public:
                     sampler->next_1d(act_medium_scatter),
                     sampler->next_2d(act_medium_scatter),
                     act_medium_scatter);
-                // phase_weight = mei.to_world_mueller(phase_weight, -wo, mei.wi);
+                phase_weight = mei.to_world_mueller(phase_weight, -wo, mei.wi);
                 act_medium_scatter &= phase_pdf > 0.f;
-                // dr::masked(throughput, act_medium_scatter) *= phase_weight;
+                dr::masked(throughput, act_medium_scatter) *= phase_weight;
 
                 Ray3f new_ray  = mei.spawn_ray(mei.to_world(wo));
                 dr::masked(ray, act_medium_scatter) = new_ray;
