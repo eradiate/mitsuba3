@@ -78,7 +78,7 @@ public:
             phase_val = rayleigh_scatter(cos_theta, (Float) m_depolarization);
 
             /* Due to the coordinate system rotations for polarization-aware
-               phase below we need to know the propagation direction of light.
+               phase functions, we need to know the propagation direction of light.
                In the following, light arrives along `-wo_hat` and leaves along
                `+wi_hat`. */
             Vector3f wo_hat = ctx.mode == TransportMode::Radiance ? wo : mei.wi,
