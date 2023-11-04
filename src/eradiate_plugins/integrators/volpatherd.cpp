@@ -172,7 +172,7 @@ public:
                 Mask intersect = needs_intersection && active_medium;
                 if (dr::any_or<true>(intersect))
                     dr::masked(si, intersect) = scene->ray_intersect(ray, intersect);
-                needs_intersection &= !(active_medium && si.is_valid());
+                needs_intersection &= !active_medium;
 
                 dr::masked(mei.t, active_medium && (si.t < mei.t)) = dr::Infinity<Float>;
                 if (dr::any_or<true>(is_spectral)) {
@@ -227,7 +227,8 @@ public:
                 Mask active_e = act_medium_scatter && sample_emitters;
                 if (dr::any_or<true>(active_e)) {
                     auto [emitted, ds] = sample_emitter(mei, scene, sampler, medium, channel, active_e);
-                    Vector3f wo        = mei.to_local(ds.d);
+                    // Vector3f wo        = mei.to_local(ds.d);
+                    Vector3f wo        = ds.d;
                     auto [phase_val, phase_pdf] = phase->eval_pdf(phase_ctx, mei, wo, active_e);
                     phase_val = mei.to_world_mueller(phase_val, -wo, mei.wi);
                     dr::masked(result, active_e) += throughput * phase_val * emitted *
