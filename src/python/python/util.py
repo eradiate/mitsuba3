@@ -566,7 +566,9 @@ def cornell_box():
     '''
     Returns a dictionary containing a description of the Cornell Box scene.
     '''
-    T = mi.scalar_rgb.Transform4f
+    T = mi.Transform4f
+
+
     return {
         'type': 'scene',
         'integrator': {
