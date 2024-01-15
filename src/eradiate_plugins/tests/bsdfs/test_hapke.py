@@ -15,7 +15,7 @@ from mitsuba.scalar_rgb.test.util import find_resource
 @pytest.fixture
 def static_reference():
 
-    references = find_resource("src/eradiate_plugins/tests/references")
+    references = find_resource("resources/tests/eradiate_plugins/bsdfs")
 
     hapke_reference_filename = join(references, "hapke_principal_plane_example.nc")
 
