@@ -106,7 +106,7 @@ def test_sample(variant_scalar_rgb):
     assert dr.allclose(pdf, 0.5 / dr.pi)
 
 
-def test_chi2(variants_vec_backends_once_rgb):
+def test_chi2(variant_llvm_rgb):
     sample_func, pdf_func = mi.chi2.PhaseFunctionAdapter(
         "tabphase_irregular",
         (

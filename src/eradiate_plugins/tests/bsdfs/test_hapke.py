@@ -163,7 +163,7 @@ def test_hapke_backward(variant_scalar_mono):
     assert np.allclose(values, 0.19555340)
 
 
-def test_hapke_principal_plane(variant_llvm_mono_double):
+def test_hapke_principal_plane(variant_llvm_rgb):
 
     c = 0.273
     c = (1 + c) / 2
@@ -197,7 +197,7 @@ def test_hapke_principal_plane(variant_llvm_mono_double):
     plt.close()
 
 
-def test_hapke_deviated_plane(variant_llvm_mono_double):
+def test_hapke_deviated_plane(variant_llvm_rgb):
 
     c = 0.273
     c = (1 + c) / 2
@@ -231,7 +231,7 @@ def test_hapke_deviated_plane(variant_llvm_mono_double):
     plt.close()
 
 
-def test_hapke_hemisphere(variant_llvm_mono_double):
+def test_hapke_hemisphere(variant_llvm_rgb):
 
     c = 0.273
     c = (1 + c) / 2
@@ -275,7 +275,7 @@ def test_hapke_hemisphere(variant_llvm_mono_double):
     plt.close()
 
 
-def test_hapke_static_reference(variant_llvm_mono_double, static_reference):
+def test_hapke_static_reference(variant_llvm_rgb, static_reference):
 
     hapke = mi.load_dict({ # Pommerol et al. (2013)
         "type": "hapke",
@@ -309,7 +309,7 @@ def test_hapke_static_reference(variant_llvm_mono_double, static_reference):
     assert np.allclose(ref, values)
 
 
-def test_chi2_hapke(variant_llvm_mono_double):
+def test_chi2_hapke(variant_llvm_rgb):
     from mitsuba.chi2 import BSDFAdapter, ChiSquareTest, SphericalDomain
 
     sample_func, pdf_func = BSDFAdapter("hapke",

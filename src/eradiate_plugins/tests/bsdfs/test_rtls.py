@@ -206,7 +206,7 @@ def test_rtls_scalar_combinations(variant_scalar_mono, f_iso, f_vol, f_geo):
 @pytest.mark.parametrize("f_iso", [0.004, 0.1, 0.497])
 @pytest.mark.parametrize("f_vol", [0.29, 0.086, 0.2])
 @pytest.mark.parametrize("f_geo", [0.543, 0.634, 0.851])
-def test_rtls_vect(variant_llvm_ad_rgb, f_iso, f_vol, f_geo):
+def test_rtls_vect(variant_llvm_rgb, f_iso, f_vol, f_geo):
     rtls = mi.load_dict(
         {"type": "rtls", "f_iso": f_iso, "f_vol": f_vol, "f_geo": f_geo}
     )
@@ -301,7 +301,7 @@ rami4atm_RLI_parameters = [
 
 
 @pytest.mark.parametrize("f_iso,f_vol,f_geo", rami4atm_RLI_parameters)
-def test_rami4atm_sanity_check(variant_llvm_ad_rgb, f_iso, f_geo, f_vol, np_rng):
+def test_rami4atm_sanity_check(variant_llvm_rgb, f_iso, f_geo, f_vol, np_rng):
     # Given a set of parameters taken from the RAMI4ATM benchmark, assumed to be
     # physically correct, test the BRDF common properties:
     #  - Take positive values

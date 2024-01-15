@@ -124,7 +124,7 @@ def test_eval(variant_scalar_rgb, plugin, theta_o, phi_o, theta_i, phi_i, expect
     assert dr.allclose(value, expected * dr.cos(theta_o), atol=1e-6)
 
 
-def test_chi2(variants_vec_backends_once_rgb, tmp_path):
+def test_chi2(variant_llvm_rgb, tmp_path):
     from mitsuba.chi2 import BSDFAdapter, ChiSquareTest, SphericalDomain
 
     filename = str(tmp_path / "data.vol")

@@ -40,7 +40,7 @@ def test_instantiation(variant_scalar_rgb):
     ],
     ids=["front", "front_oblique", "back", "back_oblique"],
 )
-def test_eval_pdf_vector(variant_llvm_ad_rgb, r, t, wi):
+def test_eval_pdf_vector(variant_llvm_rgb, r, t, wi):
     def sph_to_dir(theta, phi):
         """Map spherical to Euclidean coordinates"""
         st, ct = dr.sincos(theta)
@@ -95,7 +95,7 @@ def test_eval_pdf_vector(variant_llvm_ad_rgb, r, t, wi):
         [0.0, 0.0],
     ],
 )
-def test_chi2(variant_llvm_ad_rgb, r, t):
+def test_chi2(variant_llvm_rgb, r, t):
     from mitsuba.python.chi2 import BSDFAdapter, ChiSquareTest, SphericalDomain
 
     xml = f"""
