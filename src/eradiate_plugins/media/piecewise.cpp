@@ -550,7 +550,7 @@ public:
         return oss.str();
     }
 
-    static Float extract_channel(Spectrum value, UInt32 channel) {
+    static Float extract_channel(UnpolarizedSpectrum value, UInt32 channel) {
         Float result = value[0];
         if constexpr (is_rgb_v<Spectrum>) { // Handle RGB rendering
             dr::masked(result, dr::eq(channel, 1u)) = value[1];
