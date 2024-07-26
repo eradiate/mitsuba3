@@ -25,14 +25,14 @@ Piecewise volumetric path tracer (:monosp:`volpath`)
  * - max_depth
    - |int|
    - Specifies the longest path depth in the generated output image (where -1
-corresponds to :math:`\infty`). A value of 1 will only render directly visible
-light sources. 2 will lead to single-bounce (direct-only) illumination, and so
-on. (Default: -1)
+     corresponds to :math:`\infty`). A value of 1 will only render directly
+     visible light sources. 2 will lead to single-bounce (direct-only)
+     illumination, and so on. (Default: -1)
 
  * - rr_depth
    - |int|
    - Specifies the minimum path depth, after which the implementation will start
-to use the *russian roulette* path termination criterion. (Default: 5)
+     to use the *russian roulette* path termination criterion. (Default: 5)
 
  * - hide_emitters
    - |bool|
@@ -57,8 +57,8 @@ to, say, a :ref:`dielectric <bsdf-dielectric>` or :ref:`roughdielectric
 
 .. note:: This integrator does not implement good sampling strategies to render
     participating media with a spectrally varying extinction coefficient. For
-    these cases, it is better to use the more advanced :ref:`volumetric path tracer
-    with spectral MIS <integrator-volpathmis>`, which will produce in a
+    these cases, it is better to use the more advanced :ref:`volumetric path
+    tracer with spectral MIS <integrator-volpathmis>`, which will produce in a
     significantly less noisy rendered image.
 
 .. warning:: This integrator does not support forward-mode differentiation.

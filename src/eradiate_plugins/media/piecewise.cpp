@@ -42,16 +42,16 @@ Piecewise medium (:monosp:`piecewise`)
  * - sample_emitters
    - |bool|
    - Flag to specify whether shadow rays should be cast from inside the volume
-    (Default: |true|) If the medium is enclosed in a :ref:`dielectric
-    <bsdf-dielectric>` boundary, shadow rays are ineffective and turning them off
-    will significantly reduce render time. This can reduce render time up to 50%
-    when rendering objects with subsurface scattering.
+     (Default: |true|) If the medium is enclosed in a :ref:`dielectric
+     <bsdf-dielectric>` boundary, shadow rays are ineffective and turning them
+off will significantly reduce render time. This can reduce render time up to 50%
+     when rendering objects with subsurface scattering.
 
  * - (Nested plugin)
    - |phase|
    - A nested phase function that describes the directional scattering
-    properties of the medium. When none is specified, the renderer will
-    automatically use an instance of isotropic.
+     properties of the medium. When none is specified, the renderer will
+     automatically use an instance of isotropic.
    - |exposed|, |differentiable|
 
 
