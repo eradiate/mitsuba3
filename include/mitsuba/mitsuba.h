@@ -35,7 +35,7 @@
     MI_TOSTRING(ERD_MI_VERSION_PATCH)
 
 /// Authors list
-#define MI_AUTHORS "Realistic Graphics Lab, EPFL, Rayference"
+#define MI_AUTHORS "Realistic Graphics Lab, EPFL; Rayference"
 
 #include <mitsuba/core/config.h>
 #include <mitsuba/core/platform.h>
