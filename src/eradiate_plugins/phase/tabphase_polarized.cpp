@@ -18,11 +18,11 @@ NAMESPACE_BEGIN(mitsuba)
  * type of eval_data(). Also note that the size of data should be a multiple of
  * the size of nodes.
  *
- * TODO : Ideally, I would like it not to have m11, m12, etc.. but to use
- * a templated size for the number of coefficients. The crux of this is
- * that each individual property needs to be updatable individually.
+ * TODO : This class doesn't fully use vectorization to its advantage. Ideally
+ * we want an array of VectorXf, the crux still being that we want to 
+ * access each column of the nested array to update parameters.
  */
-template <typename Float> struct IrregularInterpolant {
+template <typename Float, int Size> struct IrregularInterpolant {
 
     using FloatStorage   = DynamicBuffer<Float>;
     using UInt32         = dr::uint32_array_t<Float>;
@@ -32,29 +32,35 @@ template <typename Float> struct IrregularInterpolant {
     using ScalarFloat    = dr::scalar_t<Float>;
     using ScalarVector2f = dr::Array<ScalarFloat, 2>;
 
-    using Vector3f = dr::Array<Float, 3>;
+    using VectorXf = dr::Array<Float, Size>;
 
 public:
     /// Create an uninitialized IrregularInterpolant instance
     IrregularInterpolant() {}
 
-    /// Initialize from a given floating point array
-    IrregularInterpolant(const ScalarFloat *nodes, const ScalarFloat *m12,
-                         const ScalarFloat *m33, const ScalarFloat *m34,
+    // Constructor with data
+    IrregularInterpolant(const ScalarFloat *nodes, 
+                         std::array<std::vector<ScalarFloat>, Size> data,
                          size_t nodes_size)
-        : m_nodes(dr::load<FloatStorage>(nodes, nodes_size)),
-          m_m12(dr::load<FloatStorage>(m12, nodes_size)),
-          m_m33(dr::load<FloatStorage>(m33, nodes_size)),
-          m_m34(dr::load<FloatStorage>(m34, nodes_size)) {
+        : m_nodes(dr::load<FloatStorage>(nodes, nodes_size)){
+
+        for(size_t i = 0; i < Size; ++i)
+            m_data[i] = dr::load<FloatStorage>(data[i].data(), nodes_size);
+
         update();
+
     }
+
 
     /// Update the internal state. Must be invoked when changing the data or
     /// range.
     void update() {
 
-        if (m_m12.size() != m_nodes.size() || m_m33.size() != m_nodes.size() ||
-            m_m34.size() != m_nodes.size())
+        bool valid_size = true;
+        for(int i = 0; i < Size; ++i)
+            valid_size &= m_data[i].size() == m_nodes.size();
+
+        if (!valid_size)
             Throw("IrregularInterpolant: 'data' and 'nodes' size "
                   "mismatch!");
 
@@ -98,17 +104,11 @@ public:
     const FloatStorage &nodes() const { return m_nodes; }
 
     /// Return the unnormalized discretized probability density function
-    FloatStorage &m12() { return m_m12; }
-    const FloatStorage &m12() const { return m_m12; }
-
-    FloatStorage &m33() { return m_m33; }
-    const FloatStorage &m33() const { return m_m33; }
-
-    FloatStorage &m34() { return m_m34; }
-    const FloatStorage &m34() const { return m_m34; }
+    FloatStorage &data(int i) { return m_data[i]; }
+    const FloatStorage &data(int i) const { return m_data[i]; }
 
     /// Evaluate the data value at position x
-    Vector3f eval_data(Float x, Mask active = true) const {
+    VectorXf eval_data(Float x, Mask active = true) const {
         MI_MASK_ARGUMENT(active);
 
         active &= x >= m_range.x() && x <= m_range.y();
@@ -122,18 +122,15 @@ public:
                             1u) -
                 1u;
 
-        Vector3f y0, y1 = dr::zeros<Vector3f>();
+        VectorXf y0, y1 = dr::zeros<VectorXf>();
 
         Float x0 = dr::gather<Float>(m_nodes, index, active),
               x1 = dr::gather<Float>(m_nodes, index + 1u, active);
 
-        y0.x() = dr::gather<Float>(m_m12, index, active);
-        y0.y() = dr::gather<Float>(m_m33, index, active);
-        y0.z() = dr::gather<Float>(m_m34, index, active);
-
-        y1.x() = dr::gather<Float>(m_m12, index + 1u, active);
-        y1.y() = dr::gather<Float>(m_m33, index + 1u, active);
-        y1.z() = dr::gather<Float>(m_m34, index + 1u, active);
+        for(size_t i = 0; i< Size; ++i) {
+            y0[i] = dr::gather<Float>(m_data[i], index, active);
+            y1[i] = dr::gather<Float>(m_data[i], index + 1u, active);
+        }
 
         x = (x - x0) / (x1 - x0);
 
@@ -142,11 +139,10 @@ public:
 
 private:
     FloatStorage m_nodes;
-    FloatStorage m_m12;
-    FloatStorage m_m33;
-    FloatStorage m_m34;
+    dr::Array<FloatStorage, Size> m_data;
     ScalarVector2f m_range{ 0.f, 0.f };
 };
+
 
 /**!
 
@@ -160,33 +156,45 @@ Lookup table (polarized) phase function (:monosp:`tabphase_polarized`)
  * - m11
    - |string|
    - A comma-separated list of phase matrix coefficient 1,1 of the
-     phase funciton, parametrized by the cosine of the scattering angle.
+     phase function, parametrized by the cosine of the scattering angle.
    - |exposed|
 
 * - m12
-   - |string|
-   - A comma-separated list of phase matrix coefficient 1,2 of the
-     phase funciton, parametrized by the cosine of the scattering angle.
-   - |exposed|
+  - |string|
+  - A comma-separated list of phase matrix coefficient 1,2 of the
+     phase function, parametrized by the cosine of the scattering angle.
+  - |exposed|
+
+* - m22
+  - |string|
+  - A comma-separated list of phase matrix coefficient 2,2 of the
+     phase function, parametrized by the cosine of the scattering angle.
+  - |exposed|
 
 * - m33
-   - |string|
-   - A comma-separated list of phase matrix coefficient 3,3 of the
-     phase funciton, parametrized by the cosine of the scattering angle.
-   - |exposed|
+  - |string|
+  - A comma-separated list of phase matrix coefficient 3,3 of the
+     phase function, parametrized by the cosine of the scattering angle.
+  - |exposed|
 
 * - m34
-   - |string|
-   - A comma-separated list of phase matrix coefficient 3,4 of the
-     phase funciton, parametrized by the cosine of the scattering angle.
-   - |exposed|
+  - |string|
+  - A comma-separated list of phase matrix coefficient 3,4 of the
+     phase function, parametrized by the cosine of the scattering angle.
+  - |exposed|
+
+* - m44
+  - |string|
+  - A comma-separated list of phase matrix coefficient 4,4 of the
+     phase function, parametrized by the cosine of the scattering angle.
+  - |exposed|
 
 * - nodes
-   - |string|
-   - A comma-separated list of :math:`\cos \theta` specifying the grid on which
+  - |string|
+  - A comma-separated list of :math:`\cos \theta` specifying the grid on which
      `values` are defined. Bounds must be [-1, 1] and values must be strictly
      increasing. Must have the same length as `values`.
-   - |exposed|
+  - |exposed|
 
 This plugin implements a generic phase function model for isotropic media
 parametrized by a lookup table giving values of the phase function as a
@@ -214,15 +222,17 @@ public:
     MI_IMPORT_BASE(PhaseFunction, m_flags, m_components)
     MI_IMPORT_TYPES(PhaseFunctionContext)
 
-    using SomeArray = std::array<std::vector<ScalarFloat>, 3>;
+    using VectorArray5 = std::array<std::vector<ScalarFloat>, 5>;
+    using Vector5f = dr::Array<Float, 5>;
+
     TabulatedPolarizedPhaseFunction(const Properties &props) : Base(props) {
+        
         if (props.type("m11") == Properties::Type::String) {
 
             // Extract required properties, nodes (cos_theta) and m11.
             std::vector<std::string> cos_theta_str =
                 string::tokenize(props.string("nodes"), " ,");
-            std::vector<std::string> entry_str1,
-                m11_str = string::tokenize(props.string("m11"), " ,");
+            std::vector<std::string> m11_str = string::tokenize(props.string("m11"), " ,");
 
             if (cos_theta_str.size() != m11_str.size()) {
                 Throw("TabulatedPolarizedPhaseFunction: 'cos_theta_str' and "
@@ -251,32 +261,47 @@ public:
                 }
             }
 
+            // Initialize the distribution which will drive the phase function
             m_m11 = IrregularContinuousDistribution<Float>(
                 cos_theta.data(), m11.data(), m11.size());
 
-            // Initial the other phase matrix coefs with zeros
-            SomeArray ms_vec;
-            ms_vec[0].reserve(m11_str.size() * 3);
-            ms_vec[1].reserve(m11_str.size() * 3);
-            ms_vec[2].reserve(m11_str.size() * 3);
-            for (size_t i = 0; i < cos_theta_str.size() * 3; ++i) {
-                ms_vec[0].push_back(ScalarFloat(0.f));
-                ms_vec[1].push_back(ScalarFloat(0.f));
-                ms_vec[2].push_back(ScalarFloat(0.f));
+            size_t size = 5;
+            std::array<std::string, 5> coef_names;
+            coef_names = { "m12", "m22", "m33", "m34", "m44" };
+
+            std::array<std::vector<ScalarFloat>, 5> ms_vec;
+
+            for (size_t i = 0; i < size; ++i) {
+                // Initialize coefficients to 0 in case no value is passed.
+                ms_vec[i] = std::vector<ScalarFloat>(cos_theta_str.size(), 0.f);
+                const std::string &raw = props.string(coef_names[i], "");
+
+                bool is_init = raw != "";
+                size_t node_size = cos_theta_str.size();
+
+                // only need to extract non-default properties.
+                if (is_init) {
+                    std::vector<std::string> coef_str = string::tokenize(raw, " ,");
+
+                    if (node_size != coef_str.size()) {
+                        Throw("TabulatedPolarizedPhaseFunction: the provided "
+                              "parameters must have the same size as 'cos_theta_str'!");
+                    }
+
+                    for (size_t j = 0; j < node_size; ++j) {
+                        try {
+                            ms_vec[i][j] = string::stof<ScalarFloat>(coef_str[j]);
+                        } catch (...) {
+                            Throw("Could not parse floating point value '%s'",
+                                coef_str[i]);
+                        }
+                    }
+                }
             }
 
-            // Extract the optional phase matrix coefs
-            const std::string &raw_m12 = props.string("m12", "");
-            const std::string &raw_m33 = props.string("m33", "");
-            const std::string &raw_m34 = props.string("m34", "");
-
-            extract_phase_coef(ms_vec, raw_m12, 0, cos_theta_str.size());
-            extract_phase_coef(ms_vec, raw_m33, 1, cos_theta_str.size());
-            extract_phase_coef(ms_vec, raw_m34, 2, cos_theta_str.size());
-
-            m_mvec = IrregularInterpolant<Float>(
-                cos_theta.data(), ms_vec[0].data(), ms_vec[1].data(),
-                ms_vec[2].data(), cos_theta.size());
+            m_mvec = IrregularInterpolant<Float, 5>(
+                cos_theta.data(), ms_vec, cos_theta.size()
+            );
         }
 
         m_flags = +PhaseFunctionFlags::Anisotropic;
@@ -332,10 +357,13 @@ public:
 
         if constexpr (is_polarized_v<Spectrum>) {
 
-            Vector3f ms = m_mvec.eval_data(cos_theta, active);
+            Vector5f ms = m_mvec.eval_data(cos_theta, active);
             phase_val =
-                MuellerMatrix<Float>(m11, ms.x(), 0, 0, ms.x(), m11, 0, 0, 0, 0,
-                                     ms.y(), ms.z(), 0, 0, -ms.z(), ms.y());
+                MuellerMatrix<Float>(m11,   ms[0], 0, 0, 
+                                     ms[0], ms[1], 0, 0, 
+                                     0, 0,  ms[2], ms[3], 
+                                     0, 0, -ms[3], ms[4]);
+
             phase_val *= m11_norm * dr::InvTwoPi<ScalarFloat>;
 
             /* Due to the coordinate system rotations for polarization-aware
@@ -370,15 +398,19 @@ public:
 
     void traverse(TraversalCallback *callback) override {
 
+        callback->put_parameter("m12", m_mvec.data(0),
+                                +ParamFlags::NonDifferentiable);
+        callback->put_parameter("m22", m_mvec.data(1),
+                                +ParamFlags::NonDifferentiable);
+        callback->put_parameter("m33", m_mvec.data(2),
+                                +ParamFlags::NonDifferentiable);
+        callback->put_parameter("m34", m_mvec.data(3),
+                                +ParamFlags::NonDifferentiable);
+        callback->put_parameter("m44", m_mvec.data(4),
+                                +ParamFlags::NonDifferentiable);
+        
         callback->put_parameter("m11", m_m11.pdf(),
                                 +ParamFlags::NonDifferentiable);
-        callback->put_parameter("m12", m_mvec.m12(),
-                                +ParamFlags::NonDifferentiable);
-        callback->put_parameter("m33", m_mvec.m33(),
-                                +ParamFlags::NonDifferentiable);
-        callback->put_parameter("m34", m_mvec.m34(),
-                                +ParamFlags::NonDifferentiable);
-
         callback->put_parameter("nodes", m_m11.nodes(),
                                 +ParamFlags::NonDifferentiable);
         callback->put_parameter("nodes", m_mvec.nodes(),
@@ -399,40 +431,12 @@ public:
         return oss.str();
     }
 
-private:
-    void extract_phase_coef(SomeArray &output, const std::string &raw,
-                            size_t offset, size_t node_size) {
-        bool is_init = raw != "";
-
-        // only need to extract non-default properties.
-        if (is_init) {
-            std::vector<std::string> coef_str = string::tokenize(raw, " ,");
-
-            if (node_size != coef_str.size()) {
-                Throw("TabulatedPolarizedPhaseFunction: the provided "
-                      "parameters must have the same size as 'cos_theta_str'!");
-            }
-
-            for (size_t i = 0; i < node_size; ++i) {
-                try {
-                    // output[i*3+offset] =
-                    // string::stof<ScalarFloat>(coef_str[i]);
-                    output[offset][i] = string::stof<ScalarFloat>(coef_str[i]);
-                } catch (...) {
-                    Throw("Could not parse floating point value '%s'",
-                          coef_str[i]);
-                }
-            }
-        }
-    }
-
     MI_DECLARE_CLASS()
 private:
     // m11 of the mueller matrix, used to sample the phase function
     IrregularContinuousDistribution<Float> m_m11;
     // rest of the relevant mueller matrix' terms.
-    // IrregularInterpolant<Vector3f> m_mvec;
-    IrregularInterpolant<Float> m_mvec;
+    IrregularInterpolant<Float, 5> m_mvec;
 };
 
 MI_IMPLEMENT_CLASS_VARIANT(TabulatedPolarizedPhaseFunction, PhaseFunction)
