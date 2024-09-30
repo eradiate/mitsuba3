@@ -5,6 +5,56 @@ Being an experimental research framework, Mitsuba 3 does not strictly follow the
 `Semantic Versioning <https://semver.org/>`_ convention. That said, we will
 strive to document breaking API changes in the release notes below.
 
+Mitsuba 3.5.2
+-------------
+
+*June 5, 2024*
+
+Most likely the last release which uses `pybind11 <https://pybind11.readthedocs.io>`_.
+
+- OptiX scene clean-ups could segfault
+  `[03f5e13] <https://github.com/mitsuba-renderer/mitsuba3/commit/03f5e1362d0cf1cc8c4edbd6e0e7bfd5ee8705a0>`_
+
+Mitsuba 3.5.1
+-------------
+
+*June 5, 2024*
+
+- Upgrade Dr.Jit to `[v0.4.6] <https://github.com/mitsuba-renderer/drjit/releases/tag/v0.4.6>`_
+- More robust scene clean-up when using Embree
+  `[7bb672c] <https://github.com/mitsuba-renderer/mitsuba3/commit/7bb672c32d64ad9a4996d3c7700d445d2c5750bc>`_
+- Support for AOV fields in Python AD integrators
+  `[f3b427e] <https://github.com/mitsuba-renderer/mitsuba3/commit/f3b427e02ca9dd1fb2e0fb9b993c67a2779d2052>`_
+- Fix potential segfault during OptiX scene clean-up
+  `[0bcfc72] <https://github.com/mitsuba-renderer/mitsuba3/commit/0bcfc72b846cd5483109b1323301755e23926e76>`_
+- Improve and fix Mesh PMF computations
+  `[ced7b22] <https://github.com/mitsuba-renderer/mitsuba3/commit/ced7b2204d7d8beefa149a6c5b43e2ff5796a725>`_ .. `[7d2951a] <https://github.com/mitsuba-renderer/mitsuba3/commit/7d2951a5f3f55a0bda4f40e3c4299441f05e70d5>`_
+- ``Shape.parameters_grad_enabled`` now only applies to parameters that introduce visibility discontinuities
+  `[3013adb] <https://github.com/mitsuba-renderer/mitsuba3/commit/3013adb4f12a491f8dd37c32bcedf55c7998f9e8>`_
+- The ``measuredpolarized`` plugin is now supported in vectorized variants
+  `[68b3a5f] <https://github.com/mitsuba-renderer/mitsuba3/commit/68b3a5f20ea00eb83631a7c48585162c6d901a7d>`_
+- Fix an issue where the ``constant`` plugin would not reuse kernels
+  `[deebe4c] <https://github.com/mitsuba-renderer/mitsuba3/commit/deebe4c64586c129bb0b0280bbaf376e2315991c>`_
+- Minor changes to support Nvidia v555 drivers
+  `[19bf5a4] <https://github.com/mitsuba-renderer/mitsuba3/commit/19bf5a4d82e760614f766067baf0c8add3bc8a41>`_
+- Many numerical and performance improvements to the ``sdfgrid`` shape
+  `[455de40] <https://github.com/mitsuba-renderer/mitsuba3/commit/455de408abf7660e1667a1ed810fc6fd903b9db3>`_ .. `[9e156bd] <https://github.com/mitsuba-renderer/mitsuba3/commit/9e156bdf3a33042b16593e3f5de40acb7d22da64>`_
+
+
+Mitsuba 3.5.0
+-------------
+
+*December 11, 2023*
+
+- New projective sampling based integrators, see PR `#997 <https://github.com/mitsuba-renderer/mitsuba3/pull/997>`_ for more details.
+  Here's a brief overview of some of the major or breaking changes:
+
+  - New ``prb_projective`` and ``direct_projective`` integrators
+  - New curve/shadow optimization tutorial
+  - Removed reparameterizations
+  - Can no longer differentiate ``instance``, ``sdfgrid`` and ``Sensor``'s positions
+
+
 Mitsuba 3.4.1
 -------------
 
@@ -37,6 +87,7 @@ Mitsuba 3.4.1
   `[3d902a4] <https://github.com/mitsuba-renderer/mitsuba3/commit/3d902a4dbf176c8c8d08e5493f23623659295197>`_
 - Other various minor bug fixes
 
+
 Mitsuba 3.4.0
 -------------
 
@@ -59,7 +110,7 @@ Mitsuba 3.4.0
   `[cfc425a] <https://github.com/mitsuba-renderer/mitsuba3/commit/cfc425a2b5753127aeb818dab0ebab828dc8f060>`_ .. `[c345d70] <https://github.com/mitsuba-renderer/mitsuba3/commit/c345d700bb273832d4ce2fd753929374fd076d64>`_
 - New ``sdfgrid`` shape: a signed distance field on a regular grid
   `[272a5bf] <https://github.com/mitsuba-renderer/mitsuba3/commit/272a5bf10e3590d9ae35144d0819396181bdaef2>`_ .. `[618da87] <https://github.com/mitsuba-renderer/mitsuba3/commit/618da871d19cb36a3879230d3799f3341a657c08>`_
-- Support for adjoint differentiation methods through the ``aov`` integrator 
+- Support for adjoint differentiation methods through the ``aov`` integrator
   `[c9df8de] <https://github.com/mitsuba-renderer/mitsuba3/commit/c9df8de011e2d835402a4fcc8fe6ef832b4ce40a>`_ .. `[bff5cf2] <https://github.com/mitsuba-renderer/mitsuba3/commit/bff5cf240ad1676eea398c99e32f4d49f0f44925>`_
 - Various fixes to ``prbvolpath``
   `[6d78f2e] <https://github.com/mitsuba-renderer/mitsuba3/commit/6d78f2ed30e746a718567a85a740db365e44407b>`_, `[a946691] <https://github.com/mitsuba-renderer/mitsuba3/commit/a946691a0d5272a80ea45f7b5f22f31d697cf290>`_ , `[91b0b7e] <https://github.com/mitsuba-renderer/mitsuba3/commit/91b0b7e7c2732a131fac9149bf1db81429e946b0>`_

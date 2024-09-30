@@ -419,11 +419,6 @@ public:
      * illumination sample is important for differentiable rendering. For
      * example, we might want to track derivatives in the sampled direction
      * (<tt>ds.d</tt>) without also differentiating the sampling technique.
-     * Alternatively (or additionally), it may be necessary to apply a
-     * spherical reparameterization to <tt>ds.d</tt>  to handle
-     * visibility-induced discontinuities during differentiation. Both steps
-     * require re-evaluating the contribution of the emitter while tracking
-     * derivative information through the calculation.
      *
      * In contrast to \ref pdf_emitter_direction(), evaluating this function can
      * yield a nonzero result in the case of emission profiles containing a
@@ -443,6 +438,55 @@ public:
     Spectrum eval_emitter_direction(const Interaction3f &ref,
                                     const DirectionSample3f &ds,
                                     Mask active = true) const;
+
+    //! @}
+    // =============================================================
+
+    // =============================================================
+    //! @{ \name Silhouette sampling interface
+    // =============================================================
+
+    /**
+     * \brief Map a point sample in boundary sample space to a silhouette
+     * segment
+     *
+     * This method will sample a \ref SilhouetteSample3f object from all the
+     * shapes in the scene that are being differentiated and have non-zero
+     * sampling weight (see \ref Shape::silhouette_sampling_weight).
+     *
+     * \param sample
+     *      The boundary space sample (a point in the unit cube).
+     *
+     * \param flags
+     *      Flags to select the type of silhouettes to sample from (see 
+     *      \ref DiscontinuityFlags). Multiple types of discontinuities can be
+     *      sampled in a single call.
+     *      If a single type of silhouette is specified, shapes that do not have
+     *      that types might still be sampled. In which case, the
+     *      \ref SilhouetteSample3f field \c discontinuity_type will be
+     *      \ref DiscontinuityFlags::Empty.
+     *
+     * \return
+     *     Silhouette sample record.
+     */
+    SilhouetteSample3f sample_silhouette(const Point3f &sample,
+                                         uint32_t flags,
+                                         Mask active = true) const;
+
+    /**
+     * \brief Map a silhouette segment to a point in boundary sample space
+     *
+     * This method is the inverse of \ref sample_silhouette(). The mapping
+     * from boundary sample space to boundary segments is bijective.
+     *
+     * \param ss
+     *      The sampled boundary segment
+     *
+     * \return
+     *     The corresponding boundary sample space point
+     */
+    Point3f invert_silhouette_sample(const SilhouetteSample3f &ss,
+                                     Mask active = true) const;
 
     //! @}
     // =============================================================
@@ -472,6 +516,9 @@ public:
     /// Return the list of shapes
     const std::vector<ref<Shape>> &shapes() const { return m_shapes; }
 
+    /// Return the list of shapes that can have their silhouette sampled
+    const std::vector<ref<Shape>> &silhouette_shapes() const { return m_silhouette_shapes; }
+
     /// Return the scene's integrator
     Integrator* integrator() { return m_integrator; }
     /// Return the scene's integrator
@@ -497,14 +544,7 @@ public:
 
     /**
      * \brief Specifies whether any of the scene's shape parameters have
-     * tracking enabled
-     *
-     * Knowing this is important in the context of differentiable rendering:
-     * intersections (e.g. provided by OptiX or Embree) must then be
-     * re-computed differentiably within Dr.Jit to correctly track gradient
-     * information. Furthermore, differentiable geometry introduces bias
-     * through visibility-induced discontinuities, and reparameterizations
-     * (Loubet et al., SIGGRAPH 2019) are needed to avoid this bias.
+     * gradient tracking enabled
      */
     bool shapes_grad_enabled() const { return m_shapes_grad_enabled; };
 
@@ -562,6 +602,9 @@ protected:
     /// Updates the discrete distribution used to select an emitter
     void update_emitter_sampling_distribution();
 
+    /// Updates the discrete distribution used to select a shape's silhouette
+    void update_silhouette_sampling_distribution();
+
 protected:
     /// Acceleration data structure (IAS) (type depends on implementation)
     void *m_accel = nullptr;
@@ -572,16 +615,24 @@ protected:
 
     std::vector<ref<Emitter>> m_emitters;
     DynamicBuffer<EmitterPtr> m_emitters_dr;
+
     std::vector<ref<Shape>> m_shapes;
     DynamicBuffer<ShapePtr> m_shapes_dr;
     std::vector<ref<ShapeGroup>> m_shapegroups;
+
     std::vector<ref<Sensor>> m_sensors;
     DynamicBuffer<SensorPtr> m_sensors_dr;
+
     std::vector<ref<Object>> m_children;
     ref<Integrator> m_integrator;
     ref<Emitter> m_environment;
+
     ScalarFloat m_emitter_pmf;
     std::unique_ptr<DiscreteDistribution<Float>> m_emitter_distr = nullptr;
+
+    std::vector<ref<Shape>> m_silhouette_shapes;
+    DynamicBuffer<ShapePtr> m_silhouette_shapes_dr;
+    std::unique_ptr<DiscreteDistribution<Float>> m_silhouette_distr = nullptr;
 
     bool m_shapes_grad_enabled;
 };

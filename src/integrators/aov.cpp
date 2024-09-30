@@ -2,6 +2,7 @@
 #include <mitsuba/render/integrator.h>
 #include <mitsuba/render/records.h>
 #include <mitsuba/render/sensor.h>
+#include <unordered_map>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -73,7 +74,6 @@ Currently, the following AOVs types are available:
     - :monosp:`duv_dx`, :monosp:`duv_dy`: UV partials wrt. changes in screen-space.
     - :monosp:`prim_index`: Primitive index (e.g. triangle index in the mesh).
     - :monosp:`shape_index`: Shape index.
-    - :monosp:`boundary_test`: Boundary test.
 
 Note that integer-valued AOVs (e.g. :monosp:`prim_index`, :monosp:`shape_index`)
 are meaningless whenever there is only partial pixel coverage or when using a
@@ -88,7 +88,7 @@ template <typename Float, typename Spectrum>
 class AOVIntegrator final : public SamplingIntegrator<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(SamplingIntegrator)
-    MI_IMPORT_TYPES(Scene, Sensor, Sampler, Medium, BSDFPtr)
+    MI_IMPORT_TYPES(Scene, Shape, Sensor, Sampler, Medium, BSDFPtr, ShapePtr)
 
     enum class Type {
         Albedo,
@@ -97,7 +97,6 @@ public:
         UV,
         GeometricNormal,
         ShadingNormal,
-        BoundaryTest,
         dPdU,
         dPdV,
         dUVdx,
@@ -165,9 +164,6 @@ public:
                 m_aov_names.push_back(item[0] + ".X");
                 m_aov_names.push_back(item[0] + ".Y");
                 m_aov_names.push_back(item[0] + ".Z");
-            } else if (item[1] == "boundary_test") {
-                m_aov_types.push_back(Type::BoundaryTest);
-                m_aov_names.push_back(item[0]);
             } else if (item[1] == "dp_du") {
                 m_aov_types.push_back(Type::dPdU);
                 m_aov_names.push_back(item[0] + ".X");
@@ -211,8 +207,8 @@ public:
 
         std::pair<Spectrum, Mask> result { 0.f, false };
 
-        SurfaceInteraction3f si = scene->ray_intersect(
-            ray, RayFlags::All | RayFlags::BoundaryTest, true, active);
+        SurfaceInteraction3f si =
+            scene->ray_intersect(ray, (uint32_t) RayFlags::All, true, active);
         dr::masked(si, !si.is_valid()) = dr::zeros<SurfaceInteraction3f>();
 
         auto spectrum_to_color3f = [](const Spectrum& spec, const Ray3f& ray, Mask active) {
@@ -230,6 +226,13 @@ public:
                 return spectrum_to_srgb(spec_u, ray.wavelengths, active);
             }
         };
+
+        // Shape indexing data structure for scalar variants
+        std::unordered_map<const Shape*, uint32_t> shape_to_idx{};
+        std::vector<ref<Shape>> shapes = scene->shapes();
+        size_t counter = 1; // 0 reserved for background
+        for (const ref<Shape>& shape: shapes)
+            shape_to_idx[shape.get()] = counter++;
 
         // We want to pack the channels such that base_channels and inner-integrator
         // RGBA channels are contiguous
@@ -284,10 +287,6 @@ public:
                     *aovs++ = si.sh_frame.n.z();
                     break;
 
-                case Type::BoundaryTest:
-                    *aovs++ = dr::select(si.is_valid(), si.boundary_test, 1.f);
-                    break;
-
                 case Type::dPdU:
                     *aovs++ = si.dp_du.x();
                     *aovs++ = si.dp_du.y();
@@ -316,7 +315,19 @@ public:
                     break;
 
                 case Type::ShapeIndex:
-                    *aovs++ = Float(dr::reinterpret_array<UInt32>(si.shape));
+                    if constexpr (!dr::is_jit_v<Float>) {
+                        ShapePtr target = si.instance;
+                        if (!target)
+                            target = si.shape;
+
+                        auto it = shape_to_idx.find(target);
+                        if (it == shape_to_idx.end())
+                            *aovs++ = 0;
+                        else
+                            *aovs++ = it->second;
+                    } else {
+                        *aovs++ = Float(dr::reinterpret_array<UInt32>(si.shape));
+                    }
                     break;
 
                 case Type::IntegratorRGBA: {

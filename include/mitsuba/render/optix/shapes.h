@@ -119,11 +119,12 @@ void fill_hitgroup_records(std::vector<ref<Shape>> &shapes,
     // Fill records in this order: meshes, b-spline curves, linear curves, other
     struct {
         size_t idx(const ref<Shape>& shape) const {
-            if (shape->is_mesh())
+            uint32_t type = shape->shape_type();
+            if (type == +ShapeType::Mesh)
                 return 0;
-            if (shape->is_bspline_curve())
+            if (type == +ShapeType::BSplineCurve)
                 return 1;
-            if (shape->is_linear_curve())
+            if (type == +ShapeType::LinearCurve)
                 return 2;
             return 3;
         };
@@ -156,11 +157,12 @@ void build_gas(const OptixDeviceContext &context,
     std::vector<ref<Shape>> meshes, bspline_curves,
         linear_curves, custom_shapes;
     for (auto shape : shapes) {
-        if (shape->is_mesh())
+        uint32_t type = shape->shape_type();
+        if (type == +ShapeType::Mesh)
             meshes.push_back(shape);
-        else if (shape->is_bspline_curve())
+        else if (type == +ShapeType::BSplineCurve)
             bspline_curves.push_back(shape);
-        else if (shape->is_linear_curve())
+        else if (type == +ShapeType::LinearCurve)
             linear_curves.push_back(shape);
         else if (!shape->is_instance())
             custom_shapes.push_back(shape);
@@ -234,6 +236,8 @@ void build_gas(const OptixDeviceContext &context,
                    &compact_size,
                    (void*)emit_property.result,
                    sizeof(size_t));
+        jit_free(emit_property.result);
+
         if (compact_size < buffer_sizes.outputSizeInBytes) {
             void* compact_buffer = jit_malloc(AllocType::Device, compact_size);
             // Use handle as input and output

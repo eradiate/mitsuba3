@@ -14,8 +14,8 @@
 
 NAMESPACE_BEGIN(mitsuba)
 
-#if !defined(NDEBUG)
-#  define MI_OPTIX_DEBUG 1
+#if !defined(NDEBUG) || defined(MI_ENABLE_OPTIX_DEBUG_VALIDATION)
+#define MI_ENABLE_OPTIX_DEBUG_VALIDATION_ON
 #endif
 
 #ifdef _MSC_VER
@@ -30,12 +30,11 @@ struct OptixSceneState {
     OptixAccelData accel;
     OptixTraversableHandle ias_handle = 0ull;
     struct InstanceData {
-        void* buffer = nullptr;             // Device-visible storage for IAS 
-        void* inputs = nullptr;             // Device-visible storage for OptixInstance array
+        void* buffer = nullptr;  // Device-visible storage for IAS
+        void* inputs = nullptr;  // Device-visible storage for OptixInstance array
     } ias_data;
     size_t config_index;
     uint32_t sbt_jit_index;
-    bool own_sbt;
 };
 
 /**
@@ -87,12 +86,12 @@ size_t init_optix_config(bool has_meshes, bool has_others, bool has_instances,
 
         OptixModuleCompileOptions module_compile_options { };
         module_compile_options.maxRegisterCount = OPTIX_COMPILE_DEFAULT_MAX_REGISTER_COUNT;
-    #if !defined(MI_OPTIX_DEBUG)
+    #if !defined(MI_ENABLE_OPTIX_DEBUG_VALIDATION_ON)
         module_compile_options.optLevel         = OPTIX_COMPILE_OPTIMIZATION_DEFAULT;
         module_compile_options.debugLevel       = OPTIX_COMPILE_DEBUG_LEVEL_NONE;
     #else
         module_compile_options.optLevel         = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0;
-        module_compile_options.debugLevel       = OPTIX_COMPILE_DEBUG_LEVEL_MINIMAL;
+        module_compile_options.debugLevel       = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
     #endif
 
         config.pipeline_compile_options.usesMotionBlur     = false;
@@ -119,13 +118,13 @@ size_t init_optix_config(bool has_meshes, bool has_others, bool has_instances,
             traversable_flag = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_GAS;
         config.pipeline_compile_options.traversableGraphFlags = traversable_flag;
 
-    #if !defined(MI_OPTIX_DEBUG)
+    #if !defined(MI_ENABLE_OPTIX_DEBUG_VALIDATION_ON)
         config.pipeline_compile_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;
     #else
         config.pipeline_compile_options.exceptionFlags =
-                OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW
-                | OPTIX_EXCEPTION_FLAG_TRACE_DEPTH
-                | OPTIX_EXCEPTION_FLAG_DEBUG;
+                OPTIX_EXCEPTION_FLAG_DEBUG |
+                OPTIX_EXCEPTION_FLAG_TRACE_DEPTH |
+                OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW;
     #endif
 
         unsigned int prim_flags = 0;
@@ -357,9 +356,11 @@ MI_VARIANT void Scene<Float, Spectrum>::accel_init_gpu(const Properties &props) 
             jit_optix_update_sbt(s2.sbt_jit_index, &s2.sbt);
 
             memcpy(&s.sbt, &s2.sbt, sizeof(OptixShaderBindingTable));
+
             s.sbt_jit_index = s2.sbt_jit_index;
+            jit_var_inc_ref(s.sbt_jit_index);
+
             s.config_index = s2.config_index;
-            s.own_sbt = false;
         } else {
             // =====================================================
             //  Initialize OptiX configuration
@@ -372,11 +373,13 @@ MI_VARIANT void Scene<Float, Spectrum>::accel_init_gpu(const Properties &props) 
             bool has_linear_curves = false;
 
             for (auto& shape : m_shapes) {
-                has_meshes           |= shape->is_mesh();
+                uint32_t type = shape->shape_type();
+
+                has_meshes           |= (type == +ShapeType::Mesh);
+                has_instances        |= (type == +ShapeType::Instance);
+                has_bspline_curves   |= (type == +ShapeType::BSplineCurve);
+                has_linear_curves    |= (type == +ShapeType::LinearCurve);
                 has_others           |= !shape->is_mesh() && !shape->is_instance();
-                has_instances        |= shape->is_instance();
-                has_bspline_curves   |= shape->is_bspline_curve();
-                has_linear_curves    |= shape->is_linear_curve();
             }
 
             for (auto& shape : m_shapegroups) {
@@ -423,7 +426,6 @@ MI_VARIANT void Scene<Float, Spectrum>::accel_init_gpu(const Properties &props) 
                 jit_malloc_migrate(s.sbt.hitgroupRecordBase, AllocType::Device, 1);
 
             s.sbt_jit_index = jit_optix_configure_sbt(&s.sbt, config.pipeline_jit_index);
-            s.own_sbt = true;
         }
 
         // =====================================================
@@ -441,6 +443,7 @@ MI_VARIANT void Scene<Float, Spectrum>::accel_parameters_changed_gpu() {
         dr::sync_thread();
         OptixSceneState &s = *(OptixSceneState *) m_accel;
         const OptixConfig &config = optix_configs[s.config_index];
+        scoped_optix_context guard;
 
         if (!m_shapes.empty()) {
             // Build geometry acceleration structures for all the shapes
@@ -551,20 +554,19 @@ MI_VARIANT void Scene<Float, Spectrum>::accel_release_gpu() {
         // Ensure all ray tracing kernels are terminated before releasing the scene
         dr::sync_thread();
 
+        OptixSceneState *s = (OptixSceneState *) m_accel;
+
+        /* This will decrease the reference count of the shader binding table
+            JIT variable which might trigger the release of the OptiX SBT if
+            no ray tracing calls are pending. */
+        (void) UInt32::steal(s->sbt_jit_index);
+
+        m_accel = nullptr;
+
         /* Decrease the reference count of the IAS handle variable. This will
            trigger the release of the OptiX acceleration data structure if no
            ray tracing calls are pending. */
         m_accel_handle = 0;
-
-        OptixSceneState *s = (OptixSceneState *) m_accel;
-
-        if (s->own_sbt) {
-            /* This will decrease the reference count of the shader binding table
-               JIT variable which might trigger the release of the OptiX SBT if
-               no ray tracing calls are pending. */
-            (void) UInt32::steal(s->sbt_jit_index);
-        }
-        m_accel = nullptr;
     }
 }
 
@@ -578,7 +580,8 @@ MI_VARIANT void Scene<Float, Spectrum>::static_accel_shutdown_gpu() {
                 /* Decrease the reference count of the pipeline JIT variable.
                    This will trigger the release of the OptiX pipeline data
                    structure if no ray tracing calls are pending. */
-                (void) UInt32::steal(config.pipeline_jit_index);
+                if (jit_has_backend(JitBackend::CUDA))
+                    (void) UInt32::steal(config.pipeline_jit_index);
 
                 for (size_t i = 0; i < 2 * OPTIX_SHAPE_TYPE_COUNT; i++)
                     free(config.custom_shapes_program_names[i]);
