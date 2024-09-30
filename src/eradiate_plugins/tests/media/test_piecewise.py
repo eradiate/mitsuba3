@@ -56,7 +56,7 @@ def test01_sample_distances_down(variant_scalar_mono_double):
     ]
 
     samples = [0.0, 0.25, 0.5, 0.75, 0.99]
-    si = mi.SurfaceInteraction3f()
+    si = dr.zeros(mi.SurfaceInteraction3f)
 
     origins = mi.Point3f([0.0, 0.0, 100000.0])
     directions = mi.Vector3f([0.0, 0.0, -1.0])
@@ -65,7 +65,7 @@ def test01_sample_distances_down(variant_scalar_mono_double):
     dists = []
     trs = []
     pdfs = []
-    for idx, sample in enumerate(samples):
+    for sample in samples:
         mei, tr, pdf = medium.sample_interaction_real(ray, si, sample, 0, True)
         dists.append(mei.t)
         trs.append(tr)
@@ -90,7 +90,7 @@ def test02_sample_distances_up(variant_scalar_mono_double):
     ]
 
     samples = [0.0, 0.25, 0.5, 0.75, 0.99]
-    si = mi.SurfaceInteraction3f()
+    si = dr.zeros(mi.SurfaceInteraction3f)
 
     origins = mi.Point3f([0.0, 0.0, 0.0])
     directions = mi.Vector3f([0.0, 0.0, 1.0])
@@ -99,7 +99,7 @@ def test02_sample_distances_up(variant_scalar_mono_double):
     dists = []
     trs = []
     pdfs = []
-    for idx, sample in enumerate(samples):
+    for sample in samples:
         mei, tr, pdf = medium.sample_interaction_real(ray, si, sample, 0, True)
 
         dists.append(mei.t)
@@ -125,7 +125,7 @@ def test03_sample_distances_horizontal(variant_scalar_mono_double):
     ]
 
     samples = [0.0, 0.25, 0.5, 0.75, 0.99]
-    si = mi.SurfaceInteraction3f()
+    si = dr.zeros(mi.SurfaceInteraction3f)
 
     origins = mi.Point3f([0.0, 0.0, 15000.0])
     directions = mi.Vector3f([0.0, 1.0, 0.0])
@@ -134,7 +134,7 @@ def test03_sample_distances_horizontal(variant_scalar_mono_double):
     dists = []
     trs = []
     pdfs = []
-    for idx, sample in enumerate(samples):
+    for sample in samples:
         mei, tr, pdf = medium.sample_interaction_real(ray, si, sample, 0, True)
 
         dists.append(mei.t)
@@ -152,7 +152,7 @@ def test04_sample_distances_diag(variant_scalar_mono_double):
     gt_dists = [9.23464998e00, 2.65531470e03, 6.39777058e03, 2.24562174e04, dr.inf]
 
     samples = [0.001, 0.25, 0.5, 0.75, 0.99]
-    si = mi.SurfaceInteraction3f()
+    si = dr.zeros(mi.SurfaceInteraction3f)
 
     origins = mi.Point3f([0.0, 0.0, 15000.0])
     directions = mi.Vector3f([0.5, 0.5, 0.5])
@@ -193,7 +193,7 @@ def test05_sample_distances_heights(variant_scalar_mono_double):
     direction = mi.Vector3f([0.0, 0.0, 1.0])
     rays = []
 
-    si = mi.SurfaceInteraction3f()
+    si = dr.zeros(mi.SurfaceInteraction3f)
 
     for h in heights:
         origin = mi.Point3f([0.0, 0.0, h])
@@ -241,7 +241,7 @@ def test06_eval_transmittance_up(variant_scalar_mono_double):
 
     trs = []
     pdfs = []
-    for idx, ray in enumerate(rays):
+    for ray in rays:
         tr, pdf, _ = medium.eval_transmittance_pdf_real(ray, si, 0, True)
         trs.append(tr)
         pdfs.append(pdf)
@@ -250,11 +250,6 @@ def test06_eval_transmittance_up(variant_scalar_mono_double):
 
 
 def test07_eval_transmittance_down(variant_scalar_mono):
-    dr.set_thread_count(0)
-    from mitsuba import LogLevel, Thread
-
-    Thread.thread().logger().set_log_level(LogLevel.Debug)
-
     medium = create_medium_dict()
 
     gt_trs = [
@@ -279,7 +274,7 @@ def test07_eval_transmittance_down(variant_scalar_mono):
 
     trs = []
     pdfs = []
-    for idx, ray in enumerate(rays):
+    for ray in rays:
         tr, pdf, _ = medium.eval_transmittance_pdf_real(ray, si, 0, True)
         trs.append(tr)
         pdfs.append(pdf)
