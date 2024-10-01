@@ -1,3 +1,4 @@
+#include <array>
 #include <mitsuba/core/distr_1d.h>
 #include <mitsuba/core/properties.h>
 #include <mitsuba/core/warp.h>
