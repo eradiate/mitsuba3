@@ -6,6 +6,78 @@
 
 NAMESPACE_BEGIN(mitsuba)
 
+
+/**!
+
+.. _phase-tabphase_polarized:
+
+Lookup table (polarized) phase function (:monosp:`tabphase_polarized`)
+------------------------------------------------
+
+.. pluginparameters::
+
+ * - m11
+   - |string|
+   - A comma-separated list of phase matrix coefficient 1,1 of the
+     phase function, parametrized by the cosine of the scattering angle.
+   - |exposed|
+
+ * - m12
+   - |string|
+   - A comma-separated list of phase matrix coefficient 1,2 of the
+     phase function, parametrized by the cosine of the scattering angle.
+   - |exposed|
+
+ * - m22
+   - |string|
+   - A comma-separated list of phase matrix coefficient 2,2 of the
+     phase function, parametrized by the cosine of the scattering angle.
+   - |exposed|
+
+ * - m33
+   - |string|
+   - A comma-separated list of phase matrix coefficient 3,3 of the
+     phase function, parametrized by the cosine of the scattering angle.
+   - |exposed|
+
+ * - m34
+   - |string|
+   - A comma-separated list of phase matrix coefficient 3,4 of the
+     phase function, parametrized by the cosine of the scattering angle.
+   - |exposed|
+
+ * - m44
+   - |string|
+   - A comma-separated list of phase matrix coefficient 4,4 of the
+      phase function, parametrized by the cosine of the scattering angle.
+   - |exposed|
+
+ * - nodes
+   - |string|
+   - A comma-separated list of :math:`\cos \theta` specifying the grid on which
+     `values` are defined. Bounds must be [-1, 1] and values must be strictly
+     increasing. Must have the same length as `values`.
+   - |exposed|
+
+This plugin implements a generic phase function model for isotropic media
+parametrized by a lookup table giving values of the phase function as a
+function of the cosine of the scattering angle.
+
+.. admonition:: Notes
+
+   * The scattering angle cosine is here defined as the dot product of the
+     incoming and outgoing directions, where the incoming, resp. outgoing
+     direction points *toward*, resp. *outward* the interaction point.
+   * From this follows that :math:`\cos \theta = 1` corresponds to forward
+     scattering.
+   * Lookup table points are regularly spaced between -1 and 1.
+   * Phase function values are automatically normalized.
+   * For polarized phase functions, this assumes (for the time being) the
+     structure of a phase function with spherically symmetric particles,
+     i.e. there are only four unique elements of the Mueller matrix:
+     `M_{11}`, `M_{12}`, `M_{33}`, and `M_{34}`
+*/
+
 /**
  * \brief 1D array defined in terms of an *irregularly* sampled linear
  * interpolant
@@ -20,7 +92,7 @@ NAMESPACE_BEGIN(mitsuba)
  * the size of nodes.
  *
  * TODO : This class doesn't fully use vectorization to its advantage. Ideally
- * we want an array of VectorXf, the crux still being that we want to 
+ * we want an array of VectorXf, the crux still being that we want to
  * access each column of the nested array to update parameters.
  */
 template <typename Float, int Size> struct IrregularInterpolant {
@@ -40,7 +112,7 @@ public:
     IrregularInterpolant() {}
 
     // Constructor with data
-    IrregularInterpolant(const ScalarFloat *nodes, 
+    IrregularInterpolant(const ScalarFloat *nodes,
                          std::array<std::vector<ScalarFloat>, Size> data,
                          size_t nodes_size)
         : m_nodes(dr::load<FloatStorage>(nodes, nodes_size)){
@@ -144,78 +216,6 @@ private:
     ScalarVector2f m_range{ 0.f, 0.f };
 };
 
-
-/**!
-
-.. _phase-tabphase_polarized:
-
-Lookup table (polarized) phase function (:monosp:`tabphase_polarized`)
-------------------------------------------------
-
-.. pluginparameters::
-
- * - m11
-   - |string|
-   - A comma-separated list of phase matrix coefficient 1,1 of the
-     phase function, parametrized by the cosine of the scattering angle.
-   - |exposed|
-
-* - m12
-  - |string|
-  - A comma-separated list of phase matrix coefficient 1,2 of the
-     phase function, parametrized by the cosine of the scattering angle.
-  - |exposed|
-
-* - m22
-  - |string|
-  - A comma-separated list of phase matrix coefficient 2,2 of the
-     phase function, parametrized by the cosine of the scattering angle.
-  - |exposed|
-
-* - m33
-  - |string|
-  - A comma-separated list of phase matrix coefficient 3,3 of the
-     phase function, parametrized by the cosine of the scattering angle.
-  - |exposed|
-
-* - m34
-  - |string|
-  - A comma-separated list of phase matrix coefficient 3,4 of the
-     phase function, parametrized by the cosine of the scattering angle.
-  - |exposed|
-
-* - m44
-  - |string|
-  - A comma-separated list of phase matrix coefficient 4,4 of the
-     phase function, parametrized by the cosine of the scattering angle.
-  - |exposed|
-
-* - nodes
-  - |string|
-  - A comma-separated list of :math:`\cos \theta` specifying the grid on which
-     `values` are defined. Bounds must be [-1, 1] and values must be strictly
-     increasing. Must have the same length as `values`.
-  - |exposed|
-
-This plugin implements a generic phase function model for isotropic media
-parametrized by a lookup table giving values of the phase function as a
-function of the cosine of the scattering angle.
-
-.. admonition:: Notes
-
-   * The scattering angle cosine is here defined as the dot product of the
-     incoming and outgoing directions, where the incoming, resp. outgoing
-     direction points *toward*, resp. *outward* the interaction point.
-   * From this follows that :math:`\cos \theta = 1` corresponds to forward
-     scattering.
-   * Lookup table points are regularly spaced between -1 and 1.
-   * Phase function values are automatically normalized.
-   * For polarized phase functions, this assumes (for the time being) the
-     structure of a phase function with spherically symmetric particles, 
-     i.e. there are only four unique elements of the Mueller matrix: 
-     `M_{11}`, `M_{12}`, `M_{33}`, and `M_{34}`
-*/
-
 template <typename Float, typename Spectrum>
 class TabulatedPolarizedPhaseFunction final
     : public PhaseFunction<Float, Spectrum> {
@@ -227,7 +227,7 @@ public:
     using Vector5f = dr::Array<Float, 5>;
 
     TabulatedPolarizedPhaseFunction(const Properties &props) : Base(props) {
-        
+
         if (props.type("m11") == Properties::Type::String) {
 
             // Extract required properties, nodes (cos_theta) and m11.
@@ -360,9 +360,9 @@ public:
 
             Vector5f ms = m_mvec.eval_data(cos_theta, active);
             phase_val =
-                MuellerMatrix<Float>(m11,   ms[0], 0, 0, 
-                                     ms[0], ms[1], 0, 0, 
-                                     0, 0,  ms[2], ms[3], 
+                MuellerMatrix<Float>(m11,   ms[0], 0, 0,
+                                     ms[0], ms[1], 0, 0,
+                                     0, 0,  ms[2], ms[3],
                                      0, 0, -ms[3], ms[4]);
 
             phase_val *= m11_norm * dr::InvTwoPi<ScalarFloat>;
@@ -399,6 +399,8 @@ public:
 
     void traverse(TraversalCallback *callback) override {
 
+        callback->put_parameter("m11", m_m11.pdf(),
+                                +ParamFlags::NonDifferentiable);
         callback->put_parameter("m12", m_mvec.data(0),
                                 +ParamFlags::NonDifferentiable);
         callback->put_parameter("m22", m_mvec.data(1),
@@ -408,9 +410,6 @@ public:
         callback->put_parameter("m34", m_mvec.data(3),
                                 +ParamFlags::NonDifferentiable);
         callback->put_parameter("m44", m_mvec.data(4),
-                                +ParamFlags::NonDifferentiable);
-        
-        callback->put_parameter("m11", m_m11.pdf(),
                                 +ParamFlags::NonDifferentiable);
         callback->put_parameter("nodes", m_m11.nodes(),
                                 +ParamFlags::NonDifferentiable);
