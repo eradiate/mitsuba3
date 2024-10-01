@@ -6,7 +6,6 @@
 
 NAMESPACE_BEGIN(mitsuba)
 
-
 /**!
 
 .. _phase-tabphase_polarized:
@@ -49,7 +48,7 @@ Lookup table (polarized) phase function (:monosp:`tabphase_polarized`)
  * - m44
    - |string|
    - A comma-separated list of phase matrix coefficient 4,4 of the
-      phase function, parametrized by the cosine of the scattering angle.
+     phase function, parametrized by the cosine of the scattering angle.
    - |exposed|
 
  * - nodes

@@ -18,7 +18,7 @@ NAMESPACE_BEGIN(mitsuba)
 .. _integrator-piecewise_volpath:
 
 Piecewise volumetric path tracer (:monosp:`volpath`)
--------------------------------------------
+----------------------------------------------------
 
 .. pluginparameters::
 
@@ -62,19 +62,6 @@ to, say, a :ref:`dielectric <bsdf-dielectric>` or :ref:`roughdielectric
     significantly less noisy rendered image.
 
 .. warning:: This integrator does not support forward-mode differentiation.
-
-.. tabs::
-    .. code-tab::  xml
-
-        <integrator type="piecewise_volpath">
-            <integer name="max_depth" value="8"/>
-        </integrator>
-
-    .. code-tab:: python
-
-        'type': 'piecewise_volpath',
-        'max_depth': 8
-
 */
 template <typename Float, typename Spectrum>
 class PiecewiseVolumetricPathIntegrator

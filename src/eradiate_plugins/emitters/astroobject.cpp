@@ -43,24 +43,6 @@ a solid angle specified by the `angular_diameter` parameter.  By default, the
 emitter radiates in the direction of the positive Z axis, i.e. :math:`(0, 0, 1)`,
 with an angular diameter equal to the average apparent size of the Sun from Earth.
 
-.. tabs::
-    .. code-tab:: xml
-        :name: astroobject-light
-
-        <emitter type="astroobject">
-            <vector name="direction" value="1.0, 0.0, 0.0"/>
-            <rgb name="irradiance" value="1.0"/>
-        </emitter>
-
-    .. code-tab:: python
-
-        'type': 'astroobject',
-        'direction': [1.0, 0.0, 0.0],
-        'irradiance': {
-            'type': 'rgb',
-            'value': 1.0,
-        }
-
 */
 
 /* Apparent radius of the sun as seen from the earth (in degrees).
