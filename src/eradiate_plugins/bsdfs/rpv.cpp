@@ -87,7 +87,6 @@ public:
         m_k = props.texture<Texture>("k", 0.1f);
         m_rho_c = props.texture<Texture>("rho_c", m_rho_0);
         m_flags = BSDFFlags::GlossyReflection | BSDFFlags::FrontSide;
-        dr::set_attr(this, "flags", m_flags);
         m_components.push_back(m_flags);
     }
 

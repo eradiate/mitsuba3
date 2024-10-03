@@ -79,8 +79,8 @@ public:
                          const UInt32 &idx) const {
         Float m = spec[0];
         if constexpr (is_rgb_v<Spectrum>) { // Handle RGB rendering
-            dr::masked(m, dr::eq(idx, 1u)) = spec[1];
-            dr::masked(m, dr::eq(idx, 2u)) = spec[2];
+            dr::masked(m, (idx == 1u)) = spec[1];
+            dr::masked(m, (idx == 2u)) = spec[2];
         } else {
             DRJIT_MARK_USED(idx);
         }
@@ -315,11 +315,11 @@ public:
 
             if (dr::any_or<true>(active_surface)) {
                 // ---------------- Intersection with emitters ----------------
-                Mask ray_from_camera = active_surface && dr::eq(depth, 0u);
+                Mask ray_from_camera = active_surface && (depth == 0u);
                 Mask count_direct    = ray_from_camera || specular_chain;
                 EmitterPtr emitter   = si.emitter(scene);
                 Mask active_e = active_surface && (emitter != nullptr) &&
-                                !(dr::eq(depth, 0u) && m_hide_emitters);
+                                !((depth == 0u) && m_hide_emitters);
                 if (dr::any_or<true>(active_e)) {
                     Float emitter_pdf = 1.0f;
                     if (dr::any_or<true>(active_e && !count_direct)) {
@@ -422,7 +422,7 @@ public:
 
         auto [ds, emitter_val] = scene->sample_emitter_direction(
             ref_interaction, sampler->next_2d(active), false, active);
-        dr::masked(emitter_val, dr::eq(ds.pdf, 0.f)) = 0.f;
+        dr::masked(emitter_val, ds.pdf == 0.f) = 0.f;
         active &= (ds.pdf != 0.f);
 
         if (dr::none_or<false>(active)) {

@@ -73,34 +73,33 @@ public:
         m_B_0   = props.texture<Texture>("B_0");
         m_h     = props.texture<Texture>("h");
 
-        if (dr::any((m_w < 0.f) | (m_w > 1.f))) {
+        if (dr::any((m_w < 0.f) || (m_w > 1.f))) {
             throw("The single scattering albedo 'w' must be in [0; 1]");
         }
 
-        if (dr::any((m_b < 0.f) | (m_b > 1.f))) {
+        if (dr::any((m_b < 0.f) || (m_b > 1.f))) {
             throw("The anisotropy parameter 'b' must be in [0; 1]");
         }
 
-        if (dr::any((m_c < 0.f) | (m_c > 1.f))) {
+        if (dr::any((m_c < 0.f) || (m_c > 1.f))) {
             throw("The scattering coefficient 'c' must be in [0; 1]");
         }
 
-        if (dr::any((m_theta < 0.f) | (m_theta > 90.f))) {
+        if (dr::any((m_theta < 0.f) || (m_theta > 90.f))) {
             throw("The photometric roughness 'theta' must be in [0; 90]°");
         }
 
-        if (dr::any((m_B_0 < 0.f) | (m_B_0 > 1.f))) {
+        if (dr::any((m_B_0 < 0.f) || (m_B_0 > 1.f))) {
             throw("The shadow hiding opposition effect amplitude 'B_0' must be "
                   "in [0; 1]");
         }
 
-        if (dr::any((m_h < 0.f) | (m_h > 1.f))) {
+        if (dr::any((m_h < 0.f) || (m_h > 1.f))) {
             throw("The shadow hiding opposition effect width 'h' must be in "
                   "[0; 1]");
         }
 
         m_flags = BSDFFlags::GlossyReflection | BSDFFlags::FrontSide;
-        dr::set_attr(this, "flags", m_flags);
         m_components.push_back(m_flags);
     }
 
@@ -256,7 +255,7 @@ public:
     eval_P(const UnpolarizedSpectrum &b, const UnpolarizedSpectrum &c,
            const UnpolarizedSpectrum &cos_g) const {
         // Fonction de phase P
-        UnpolarizedSpectrum numerator = 1.f - sqr(b);
+        UnpolarizedSpectrum numerator = 1.f - dr::square(b);
         UnpolarizedSpectrum term1 =
             (1.f - c) * numerator /
             dr::pow(1 + 2 * b * cos_g + dr::square(b), 3.f / 2.f);

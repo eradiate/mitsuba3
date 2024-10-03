@@ -1,6 +1,3 @@
-#include <drjit/array_router.h>
-#include <drjit/array_traits.h>
-#include <drjit/fwd.h>
 #include <drjit/tensor.h>
 #include <mitsuba/core/fwd.h>
 #include <mitsuba/core/properties.h>
@@ -128,7 +125,7 @@ public:
         m_transforms    = TensorXf(buffer.data(), 3, shape);
 
         // Check film size
-        if (m_film->size() != ScalarPoint2i(m_transforms.size() / 16, 1))
+        if (dr::any(m_film->size() != ScalarPoint2i(m_transforms.size() / 16, 1)))
             Throw("Film size must be [n_radiancemeters, 1]. Expected %s, "
                   "found: %s",
                   ScalarPoint2i(m_transforms.size() / 16, 1), m_film->size());

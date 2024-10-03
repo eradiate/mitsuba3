@@ -54,7 +54,6 @@ public:
                                BSDFFlags::FrontSide | BSDFFlags::BackSide);
 
         m_flags = m_components[0] | m_components[1];
-        dr::set_attr(this, "flags", m_flags);
     }
 
     std::pair<BSDFSample3f, Spectrum>

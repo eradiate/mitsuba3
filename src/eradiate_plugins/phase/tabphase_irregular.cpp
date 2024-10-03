@@ -94,7 +94,6 @@ public:
             nodes.data(), values.data(), values.size());
 
         m_flags = +PhaseFunctionFlags::Anisotropic;
-        dr::set_attr(this, "flags", m_flags);
         m_components.push_back(m_flags);
     }
 

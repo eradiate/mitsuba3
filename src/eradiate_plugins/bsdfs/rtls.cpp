@@ -78,7 +78,6 @@ public:
         m_r     = props.get<ScalarFloat>("r", 1.f);
         m_b     = props.get<ScalarFloat>("b", 1.f);
         m_flags = BSDFFlags::GlossyReflection | BSDFFlags::FrontSide;
-        dr::set_attr(this, "flags", m_flags);
         m_components.push_back(m_flags);
     }
 
