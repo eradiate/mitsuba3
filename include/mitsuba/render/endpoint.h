@@ -4,6 +4,7 @@
 #include <mitsuba/core/profiler.h>
 #include <mitsuba/render/records.h>
 #include <mitsuba/render/shape.h>
+#include <mitsuba/render/medium.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -58,6 +59,9 @@ public:
     // =============================================================
     //! @{ \name Wavelength sampling interface
     // =============================================================
+
+    /// Destructor
+    ~Endpoint();
 
     /**
      * \brief Importance sample a set of wavelengths according to the
@@ -381,12 +385,10 @@ public:
 
     void parameters_changed(const std::vector<std::string> &keys = {}) override;
 
-    DRJIT_VCALL_REGISTER(Float, mitsuba::Endpoint)
     MI_DECLARE_CLASS()
+
 protected:
     Endpoint(const Properties &props);
-
-    virtual ~Endpoint();
 
 protected:
     field<Transform4f, ScalarTransform4f> m_to_world;

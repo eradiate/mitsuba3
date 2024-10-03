@@ -16,6 +16,7 @@ project(mitsuba
 
 # A number of Mitsuba 3 features (scripting, differentiable rendering, testing
 # infrastructure, etc.) are only available if Python bindings are built.
+
 option(MI_ENABLE_PYTHON "Build Python bindings for Mitsuba, Dr.Jit, and NanoGUI?" ON)
 
 # Mitsuba 3 ships with its own ray tracing acceleration data structure. If
@@ -105,7 +106,7 @@ endif()
 
 if (NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/mitsuba.conf)
   # Default: only scalar modes (RGB, Spectral)
-  set(MI_DEFAULT_VARIANTS "scalar_rgb;scalar_spectral;cuda_ad_rgb;llvm_ad_rgb" CACHE STRING "Default Mitsuba variants that should be included if no mitsuba.conf file exists")
+  set(MI_DEFAULT_VARIANTS "scalar_rgb;scalar_spectral;cuda_ad_rgb;llvm_ad_rgb;llvm_ad_spectral" CACHE STRING "Default Mitsuba variants that should be included if no mitsuba.conf file exists")
   mark_as_advanced(MI_DEFAULT_VARIANTS)
   foreach(TMP ${MI_DEFAULT_VARIANTS})
     string(APPEND INSERT_CONFIGURATIONS_HERE "\"${TMP}\", ")
@@ -289,6 +290,7 @@ add_subdirectory(ext)
 # Always add the include directories for tinyformat, Dr.Jit and Eigen
 include_directories(include
   ${TINYFORMAT_INCLUDE_DIRS}
+  ${NANOBIND_INCLUDE_DIRS}
   ${CMAKE_CURRENT_BINARY_DIR}/include
 )
 
@@ -453,7 +455,7 @@ if (NOT SKBUILD)
     add_custom_target(mkdoc-api
         ${SPHINX_EXECUTABLE} -b html "${SPHINX_INPUT_DIR_API}" "${SPHINX_OUTPUT_DIR_API}"
         COMMENT "Building HTML documentation with Sphinx"
-        DEPENDS copy-python-src
+        DEPENDS mitsuba-copy-python-src
         USES_TERMINAL)
   endif()
 endif()
@@ -490,14 +492,6 @@ endif()
 
 if (NOT SKBUILD)
   list(APPEND MI_DEPEND nanothread)
-
-  if (MI_ENABLE_JIT)
-    list(APPEND MI_DEPEND drjit-core)
-  endif()
-
-  if (MI_ENABLE_AUTODIFF)
-    list(APPEND MI_DEPEND drjit-autodiff)
-  endif()
 endif()
 
 # Copy shared libraries to Python folders (no rpath on Windows)
@@ -507,9 +501,7 @@ if (MSVC AND MI_ENABLE_PYTHON)
 
   foreach(target ${COPY_TARGETS})
     get_target_property(TARGET_FOLDER ${target} FOLDER)
-    if (TARGET_FOLDER STREQUAL "drjit")
-        set(COPY_TARGET_DESTINATION ${MI_BINARY_DIR}/python/drjit/$<TARGET_FILE_NAME:${target}>)
-    elseif(TARGET_FOLDER MATCHES "plugins/.*$")
+    if(TARGET_FOLDER MATCHES "plugins/.*$")
         set(COPY_TARGET_DESTINATION ${MI_BINARY_DIR}/python/mitsuba/plugins/$<TARGET_FILE_NAME:${target}>)
     else()
         set(COPY_TARGET_DESTINATION ${MI_BINARY_DIR}/python/mitsuba/$<TARGET_FILE_NAME:${target}>)

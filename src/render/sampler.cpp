@@ -1,6 +1,7 @@
 #include <mitsuba/render/sampler.h>
 #include <mitsuba/core/properties.h>
 #include <mitsuba/core/profiler.h>
+#include <drjit/array_traverse.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -67,9 +68,16 @@ MI_VARIANT void Sampler<Float, Spectrum>::schedule_state() {
     dr::schedule(m_sample_index, m_dimension_index);
 }
 
-MI_VARIANT
-void Sampler<Float, Spectrum>::loop_put(dr::Loop<Mask> &loop) {
-    loop.put(m_sample_index, m_dimension_index);
+MI_VARIANT void
+Sampler<Float, Spectrum>::traverse_1_cb_ro(void * /*payload*/,
+                                           void (* /*fn*/)(void *, uint64_t)) const {
+    NotImplementedError("traverse_1_cb_ro");
+}
+
+MI_VARIANT void
+Sampler<Float, Spectrum>::traverse_1_cb_rw(void * /*payload*/,
+                                           uint64_t (* /*fn*/)(void *, uint64_t)) {
+    NotImplementedError("traverse_1_cb_rw");
 }
 
 MI_VARIANT void
@@ -127,9 +135,9 @@ MI_VARIANT void PCG32Sampler<Float, Spectrum>::seed(uint32_t seed,
            does not produce a sufficiently statistically independent set of RNGs */
         auto [v0, v1] = sample_tea_32(tmp, idx);
 
-        m_rng.seed(1, v0, v1);
+        m_rng.seed(v0, v1);
     } else {
-        m_rng.seed(1, seed_value, PCG32_DEFAULT_STREAM);
+        m_rng.seed(seed_value, PCG32_DEFAULT_STREAM);
     }
 }
 
@@ -139,9 +147,15 @@ MI_VARIANT void PCG32Sampler<Float, Spectrum>::schedule_state() {
 }
 
 MI_VARIANT void
-PCG32Sampler<Float, Spectrum>::loop_put(dr::Loop<Mask> &loop) {
-    Base::loop_put(loop);
-    loop.put(m_rng.state);
+PCG32Sampler<Float, Spectrum>::traverse_1_cb_ro(void *payload,
+                                                void (*fn)(void *, uint64_t)) const {
+    traverse_1_fn_ro(m_rng, payload, fn);
+}
+
+MI_VARIANT void
+PCG32Sampler<Float, Spectrum>::traverse_1_cb_rw(void *payload,
+                                                uint64_t (*fn)(void *, uint64_t)) {
+    traverse_1_fn_rw(m_rng, payload, fn);
 }
 
 MI_VARIANT

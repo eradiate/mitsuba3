@@ -6,7 +6,6 @@
 #include <mitsuba/core/object.h>
 #include <mitsuba/core/vector.h>
 #include <mitsuba/core/random.h>
-#include <drjit/loop.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -64,6 +63,9 @@ template <typename Float, typename Spectrum>
 class MI_EXPORT_LIB Sampler : public Object {
 public:
     MI_IMPORT_TYPES()
+
+    /// Destructor
+    ~Sampler();
 
     /**
      * \brief Create a fork of this sampler.
@@ -128,15 +130,17 @@ public:
     /// dr::schedule() variables that represent the internal sampler state
     virtual void schedule_state();
 
-    /// Register internal state of this sampler with a symbolic loop
-    virtual void loop_put(dr::Loop<Mask> &loop);
+    /// Traversal callback mechanism for symbolic loops
+    virtual void traverse_1_cb_ro(void *payload, void (*fn)(void *, uint64_t)) const;
+    /// Traversal callback mechanism for symbolic loops
+    virtual void traverse_1_cb_rw(void *payload, uint64_t (*fn)(void *, uint64_t));
 
     MI_DECLARE_CLASS()
+
 protected:
     Sampler(const Properties &props);
     /// Copy state to a new sampler object
     Sampler(const Sampler&);
-    virtual ~Sampler();
 
     /// Generates a array of seeds where the seed values are unique per sequence
     UInt32 compute_per_sequence_seed(uint32_t seed) const;
@@ -166,10 +170,10 @@ public:
     MI_IMPORT_TYPES()
     using PCG32 = mitsuba::PCG32<UInt32>;
 
-    virtual void seed(uint32_t seed,
-                      uint32_t wavefront_size = (uint32_t) -1) override;
-    virtual void schedule_state() override;
-    virtual void loop_put(dr::Loop<Mask> &loop) override;
+    void seed(uint32_t seed, uint32_t wavefront_size = (uint32_t) -1) override;
+    void schedule_state() override;
+    void traverse_1_cb_ro(void *payload, void (*fn)(void *, uint64_t)) const override;
+    void traverse_1_cb_rw(void *payload, uint64_t (*fn)(void *, uint64_t)) override;
 
     MI_DECLARE_CLASS()
 protected:

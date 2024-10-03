@@ -25,7 +25,7 @@ class ADIntegrator(mi.CppADIntegrator):
          visible surfaces. (Default: 5)
     """
 
-    def __init__(self, props = mi.Properties()):
+    def __init__(self, props):
         super().__init__(props)
 
         max_depth = props.get('max_depth', 6)
@@ -50,7 +50,6 @@ class ADIntegrator(mi.CppADIntegrator):
                spp: int = 0,
                develop: bool = True,
                evaluate: bool = True) -> mi.TensorXf:
-
         if not develop:
             raise Exception("develop=True must be specified when "
                             "invoking AD integrators")
@@ -223,7 +222,7 @@ class ADIntegrator(mi.CppADIntegrator):
                 # retrieve the adjoint radiance
                 dr.set_grad(image, grad_in)
                 dr.enqueue(dr.ADMode.Backward, image)
-                dr.traverse(mi.Float, dr.ADMode.Backward)
+                dr.traverse(dr.ADMode.Backward)
 
             # We don't need any of the outputs here
             del ray, weight, pos, block, sampler
@@ -272,7 +271,7 @@ class ADIntegrator(mi.CppADIntegrator):
         # Compute the position on the image plane
         pos = mi.Vector2i()
         pos.y = idx // film_size[0]
-        pos.x = dr.fma(-film_size[0], pos.y, idx)
+        pos.x = dr.fma(mi.UInt32(mi.Int32(-film_size[0])), pos.y, idx)
 
         if film.sample_border():
             pos -= border_size
@@ -343,7 +342,8 @@ class ADIntegrator(mi.CppADIntegrator):
         """
 
         film = sensor.film()
-        sampler = sensor.sampler().clone()
+        original_sampler =  sensor.sampler()
+        sampler = original_sampler.clone()
 
         if spp != 0:
             sampler.set_sample_count(spp)
@@ -734,7 +734,7 @@ class RBIntegrator(ADIntegrator):
 
                 dr.set_grad(image, grad_in)
                 dr.enqueue(dr.ADMode.Backward, image)
-                dr.traverse(mi.Float, dr.ADMode.Backward)
+                dr.traverse(dr.ADMode.Backward)
 
             # Differentiate sample splatting and weight division steps to
             # retrieve the adjoint radiance (e.g. 'δL')
@@ -1083,7 +1083,7 @@ class PSIntegrator(ADIntegrator):
 
             dr.set_grad(ad_img, grad_in)
             dr.enqueue(dr.ADMode.Backward, ad_img)
-            dr.traverse(mi.Float, dr.ADMode.Backward)
+            dr.traverse(dr.ADMode.Backward)
 
         dr.eval()
 
@@ -1117,8 +1117,8 @@ class PSIntegrator(ADIntegrator):
             J = self.proj_detail.perspective_sensor_jacobian(sensor, ss)
 
             ΔL = self.proj_detail.eval_primary_silhouette_radiance_difference(
-                scene, sampler, ss, sensor_center, active=active)
-            active &= dr.any(dr.neq(ΔL, 0))
+                scene, sampler, ss, sensor, active=active)
+            active &= dr.any(ΔL != 0)
 
         # ∂z/∂ⲡ * normal
         si = dr.zeros(mi.SurfaceInteraction3f)
@@ -1226,7 +1226,7 @@ class PSIntegrator(ADIntegrator):
             # Evaluate the discontinuous derivative integrand
             value, sensor_uv = self.proj_detail.eval_indirect_integrand(
                 scene, sensor, sample, sampler, preprocess=False)
-            active = dr.any(dr.neq(value, 0))
+            active = dr.any(value != 0)
 
             # Account for the guiding sampling density and spp
             value *= rcp_pdf_guiding * dr.rcp(spp)
@@ -1320,7 +1320,7 @@ def mis_weight(pdf_a, pdf_b):
     Compute the Multiple Importance Sampling (MIS) weight given the densities
     of two sampling strategies according to the power heuristic.
     """
-    a2 = dr.sqr(pdf_a)
-    b2 = dr.sqr(pdf_b)
+    a2 = dr.square(pdf_a)
+    b2 = dr.square(pdf_b)
     w = a2 / (a2 + b2)
     return dr.detach(dr.select(dr.isfinite(w), w, 0))

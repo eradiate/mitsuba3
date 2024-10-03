@@ -64,7 +64,6 @@ public:
             Throw("Expected a non-spatially varying radiance spectra!");
 
         m_flags = +EmitterFlags::Infinite;
-        dr::set_attr(this, "flags", m_flags);
     }
 
     void traverse(TraversalCallback *callback) override {
@@ -84,7 +83,7 @@ public:
             m_bsphere.center = 0.f;
             m_bsphere.radius = math::RayEpsilon<Float>;
         }
-        m_surface_area = 4.f * dr::Pi<ScalarFloat> * dr::sqr(m_bsphere.radius);
+        m_surface_area = 4.f * dr::Pi<ScalarFloat> * dr::square(m_bsphere.radius);
 
         dr::make_opaque(m_bsphere.center, m_bsphere.radius, m_surface_area);
     }

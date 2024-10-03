@@ -1,6 +1,6 @@
 #pragma once
 
-#include <drjit/struct.h>
+#include <drjit/array.h>
 #include <mitsuba/core/vector.h>
 #include <mitsuba/core/math.h>
 #include <mitsuba/core/spectrum.h>
@@ -15,7 +15,7 @@ NAMESPACE_BEGIN(mitsuba)
  * wavelength information associated with the ray.
  */
 template <typename Point_, typename Spectrum_> struct Ray {
-    static constexpr size_t Size = dr::array_size_v<Point_>;
+    static constexpr size_t Size = dr::size_v<Point_>;
 
     using Point      = Point_;
     // TODO: need this because dr::value_t<MaskedArray<Point3f>> isn't a masked array
