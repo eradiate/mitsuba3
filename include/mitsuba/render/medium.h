@@ -73,15 +73,16 @@ public:
                            const SurfaceInteraction3f &si,
                            Mask active) const;
 
-// #RAY_CHANGE_BEGIN, NM 05/06/2024 : add function that calculates the transmittance and pdf  
-    virtual std::tuple<MediumInteraction3f, Float, Float> 
+// #RAY_CHANGE_BEGIN, NM 05/06/2024 : add function that calculates the transmittance and pdf
+    virtual std::tuple<MediumInteraction3f, Float, Float>
     sample_interaction_real(const Ray3f &ray, const SurfaceInteraction3f &si,
                             Float sample, UInt32 channel, Mask active) const;
-    
+
     virtual std::tuple<Float, Float, Mask>
-    eval_transmittance_pdf_real(const Ray3f &ray, 
-                                    const SurfaceInteraction3f &si,
-                                    UInt32 channel, Mask active) const;
+
+    eval_transmittance_pdf_real(const Ray3f &ray,
+                                const SurfaceInteraction3f &si, UInt32 channel,
+                                Mask active) const;
 // #RAY_CHANGE_END
 
     /// Return the phase function of this medium
@@ -141,8 +142,8 @@ DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::Medium)
     DRJIT_CALL_METHOD(intersect_aabb)
     DRJIT_CALL_METHOD(sample_interaction)
     DRJIT_CALL_METHOD(transmittance_eval_pdf)
-    DRJIT_VCALL_METHOD(sample_interaction_real)
-    DRJIT_VCALL_METHOD(eval_transmittance_pdf_real)
+    DRJIT_CALL_METHOD(sample_interaction_real)
+    DRJIT_CALL_METHOD(eval_transmittance_pdf_real)
     DRJIT_CALL_METHOD(get_scattering_coefficients)
 DRJIT_CALL_END(mitsuba::Medium)
 
