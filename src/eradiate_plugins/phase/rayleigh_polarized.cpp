@@ -3,6 +3,7 @@
 #include <mitsuba/core/warp.h>
 #include <mitsuba/render/mueller.h>
 #include <mitsuba/render/phase.h>
+#include <mitsuba/render/volume.h>
 
 /**!
 
@@ -35,34 +36,35 @@ class RayleighPolarizedPhaseFunction final
     : public PhaseFunction<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(PhaseFunction, m_flags)
-    MI_IMPORT_TYPES(PhaseFunctionContext)
+    MI_IMPORT_TYPES(PhaseFunctionContext, Volume)
 
     RayleighPolarizedPhaseFunction(const Properties &props) : Base(props) {
-        m_depolarization = props.get<ScalarFloat>("depolarization", 0.f);
+        m_depolarization = props.volume<Volume>("depolarization",0.f);
 
-        if (m_depolarization < 0.f || m_depolarization >= 1.f)
+        if( m_depolarization->max() >= 1.f )
             Log(Error, "Depolarization factor must be in [0, 1[");
 
         m_flags = +PhaseFunctionFlags::Anisotropic;
     }
 
     MI_INLINE
-    MuellerMatrix<Float> rayleigh_scatter(const Float cos_theta,
-                                          const Float rho) const {
+    MuellerMatrix<UnpolarizedSpectrum> rayleigh_scatter(
+                                        const UnpolarizedSpectrum cos_theta,
+                                        const UnpolarizedSpectrum rho) const {
         /* Calculates the Mueller matrix of a Rayleigh scatter event given
            the scattering angle (Hansen & Travis (1974), eq. (2.15)).
            The angle θ is defined in the physics convention. */
 
-        Float r1 = (1.f - rho) / (1.f + rho / 2.f),
-              r2 = (1.f + rho) / (1.f - rho),
-              r3 = (1.f - 2.f * rho) / (1.f - rho);
+        UnpolarizedSpectrum r1 = (1.f - rho) / (1.f + rho / 2.f),
+                            r2 = (1.f + rho) / (1.f - rho),
+                            r3 = (1.f - 2.f * rho) / (1.f - rho);
 
-        Float a = r2 + dr::sqr(cos_theta),
-              b = dr::sqr(cos_theta) + 1.f,
-              c = dr::sqr(cos_theta) - 1.f,
-              d = 2.f * cos_theta;
+        UnpolarizedSpectrum a = r2 + dr::sqr(cos_theta),
+                            b = dr::sqr(cos_theta) + 1.f,
+                            c = dr::sqr(cos_theta) - 1.f,
+                            d = 2.f * cos_theta;
 
-        return Float(3.f / 16.f) * dr::InvPi<Float> * r1 * MuellerMatrix<Float>(
+        return UnpolarizedSpectrum(3.f / 16.f) * dr::InvPi<UnpolarizedSpectrum> * r1 * MuellerMatrix<UnpolarizedSpectrum>(
             a, c, 0, 0,
             c, b, 0, 0,
             0, 0, d, 0,
@@ -80,10 +82,11 @@ public:
                                      const Vector3f &wo,
                                      Float cos_theta) const {
         Spectrum phase_val;
+        UnpolarizedSpectrum rho = m_depolarization->eval(mei); 
 
         if constexpr (is_polarized_v<Spectrum>) {
             // We first evaluate the Rayleigh phase matrix
-            phase_val = rayleigh_scatter(cos_theta, (Float) m_depolarization);
+            phase_val = rayleigh_scatter(UnpolarizedSpectrum(cos_theta), rho);
 
             /* Due to the coordinate system rotations for polarization-aware
                phase functions, we need to know the propagation direction of
@@ -110,9 +113,8 @@ public:
             dr::masked(phase_val, dr::isnan(phase_val)) = 0.f;
 
         } else {
-            Float rho = (Float) m_depolarization,
-                  r1  = (1.f - rho) / (1.f + rho / 2.f),
-                  r2  = (1.f + rho) / (1.f - rho);
+            Spectrum r1  = (1.f - rho) / (1.f + rho / 2.f),
+                     r2  = (1.f + rho) / (1.f - rho);
 
             phase_val = (3.f / 16.f) * dr::InvPi<Float> * r1 *
                         (r2 + dr::sqr(cos_theta));
@@ -175,7 +177,7 @@ public:
 
     MI_DECLARE_CLASS()
 private:
-    ScalarFloat m_depolarization;
+    ref<Volume> m_depolarization;
 };
 
 MI_IMPLEMENT_CLASS_VARIANT(RayleighPolarizedPhaseFunction, PhaseFunction)
