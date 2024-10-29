@@ -41,10 +41,15 @@ public:
     RayleighPolarizedPhaseFunction(const Properties &props) : Base(props) {
         m_depolarization = props.volume<Volume>("depolarization",0.f);
 
-        if( m_depolarization->max() >= 1.f )
+        if(m_depolarization->max() >= 1.f)
             Log(Error, "Depolarization factor must be in [0, 1[");
 
         m_flags = +PhaseFunctionFlags::Anisotropic;
+    }
+
+    void traverse(TraversalCallback *callback) override {
+        callback->put_object("depolarization", m_depolarization.get(),
+                             +ParamFlags::Differentiable);
     }
 
     MI_INLINE
