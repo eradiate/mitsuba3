@@ -95,8 +95,10 @@ def test_eval(variant_scalar_mono_polarized):
             "nodes": cos_theta_str,
             "m11": m_ref_str[0],
             "m12": m_ref_str[1],
+            "m22": m_ref_str[0],
             "m33": m_ref_str[2],
             "m34": m_ref_str[3],
+            "m44": m_ref_str[2],
         }
     )
 
@@ -216,16 +218,20 @@ def test_traverse(variant_scalar_mono_polarized):
             "type": "tabphase_polarized",
             "m11": "1, 1, 1",
             "m12": "1, 1, 1",
+            "m22": "1, 1, 1",
             "m33": "1, 1, 1",
             "m34": "1, 1, 1",
+            "m44": "1, 1, 1",
             "nodes": "-1, 0, 1",
         }
     )
     params = mi.traverse(phase)
     params["m11"] = [0.5, 1.0, 1.5]
     params["m12"] = [0.5, 1.0, 1.5]
+    params["m22"] = [0.5, 1.0, 1.5]
     params["m33"] = [0.5, 1.0, 1.5]
     params["m34"] = [0.5, 1.0, 1.5]
+    params["m44"] = [0.5, 1.0, 1.5]
     params["nodes"] = [-1.0, 0.5, 1.0]
     params.update()
 
