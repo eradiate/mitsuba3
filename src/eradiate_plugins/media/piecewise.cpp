@@ -160,7 +160,7 @@ public:
     using ScalarIndex     = uint32_t;
     using ScalarSize      = uint32_t;
     using FloatStorage    = DynamicBuffer<Float>;
-    using SpectrumStorage = DynamicBuffer<UnpolarizedSpectrum>;
+    using Index = dr::uint32_array_t<Float>;
 
     PiecewiseMedium(const Properties &props) : Base(props) {
 
@@ -187,8 +187,6 @@ public:
                             Float sample, UInt32 channel,
                             Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumSample, active);
-
-        using Index = dr::replace_scalar_t<Float, ScalarIndex>;
 
         // Initial intersection with the medium
         auto [aabb_its, mint, maxt] = intersect_aabb(ray);
@@ -240,7 +238,7 @@ public:
         Int32 end_idx =
             dr::clamp((Int32) dr::floor((ray(maxt) - min) * inv_voxel_size).z(),
                       0, res.z() - 1);
-        Mask same_cell = start_idx == end_idx;
+        Mask same_cell = dr::eq(start_idx, end_idx);
 
         // make sure the index align with the array (reverse indices if going
         // down)
@@ -264,12 +262,8 @@ public:
         Float opt_thick_offset = dr::zeros<Float>();
         opt_thick_offset       = dr::select(
             going_up,
-            extract_channel(
-                dr::gather<Float>(m_cum_opt_thickness, opt_start_idx, active),
-                channel),
-            extract_channel(dr::gather<Float>(m_reverse_cum_opt_thickness,
-                                                    opt_start_idx, active),
-                                  channel));
+            extract_channel(dr::gather<UnpolarizedSpectrum>(m_cum_opt_thickness, opt_start_idx, active), channel),
+            extract_channel(dr::gather<UnpolarizedSpectrum>(m_reverse_cum_opt_thickness, opt_start_idx, active),channel));
         opt_thick_offset -= start_height * sigma_t;
 
         Float log_sample = dr::log(1.f - sample);
@@ -286,19 +280,17 @@ public:
                 [&](Index index) DRJIT_INLINE_LAMBDA {
                     spectral_value = dr::select(
                         going_up,
-                        dr::gather<Float>(m_cum_opt_thickness, index, search),
-                        dr::gather<Float>(m_reverse_cum_opt_thickness, index,
+                        dr::gather<UnpolarizedSpectrum>(m_cum_opt_thickness, index, search),
+                        dr::gather<UnpolarizedSpectrum>(m_reverse_cum_opt_thickness, index,
                                           search));
                     Float value = extract_channel(spectral_value, channel);
 
                     Float a = -log_sample * idelta;
                     Float b = (value - opt_thick_offset);
-
                     return a > b;
                 });
         }
-
-        same_cell |= index == opt_start_idx;
+        same_cell |= dr::eq(index, opt_start_idx);
         search &= !same_cell;
 
         Int32 index_minus_one = dr::select(!active || same_cell, 0, index - 1);
@@ -307,12 +299,9 @@ public:
 
         Float cum_opt_at_index                 = dr::zeros<Float>();
         dr::masked(cum_opt_at_index, going_up) = extract_channel(
-            dr::gather<Float>(m_cum_opt_thickness, index_minus_one, search),
-            channel);
-        dr::masked(cum_opt_at_index, !going_up) =
-            extract_channel(dr::gather<Float>(m_reverse_cum_opt_thickness,
-                                              index_minus_one, search),
-                            channel);
+            dr::gather<UnpolarizedSpectrum>(m_cum_opt_thickness, index_minus_one, search),channel);
+        dr::masked(cum_opt_at_index, !going_up) = extract_channel(
+            dr::gather<UnpolarizedSpectrum>(m_reverse_cum_opt_thickness,index_minus_one, search),channel);
         dr::masked(cum_opt_thick, search) =
             (cum_opt_at_index - opt_thick_offset) * delta;
 
@@ -320,7 +309,7 @@ public:
                 (Float) dr::select(going_up, index, res.z() - 1 - index) * step;
 
         std::tie(mei.sigma_s, mei.sigma_n, mei.sigma_t) =
-            get_scattering_coefficients(mei, active && !same_cell);
+            get_scattering_coefficients(mei, active);
         dr::masked(sigma_t, !same_cell) = extract_channel(mei.sigma_t, channel);
 
         escaped |= mei.t > maxt;
@@ -328,7 +317,6 @@ public:
 
         dr::masked(sampled_t, sampled) =
             -dr::rcp(sigma_t) * (log_sample + cum_opt_thick) + mei.t;
-
         escaped |= (sampled && sampled_t > maxt);
         sampled |= escaped;
 
@@ -343,7 +331,6 @@ public:
         dr::masked(mei.p, !escaped)                   = ray(mei.t);
         dr::masked(mei.combined_extinction, !escaped) = mei.sigma_t;
         dr::masked(mei.sigma_n, !escaped) = dr::zeros<UnpolarizedSpectrum>();
-
         return { mei, tr, pdf };
     }
 
@@ -387,7 +374,7 @@ public:
         Int32 end_idx =
             dr::clamp((Int32) dr::floor((ray(maxt) - min) * inv_voxel_size).z(),
                       0, res.z() - 1);
-        Mask same_cell = start_idx == end_idx;
+        Mask same_cell = dr::eq(start_idx, end_idx);
 
         Float start_height =
             (ray(mint) - min).z() * inv_voxel_size.z() - (Float) start_idx;
@@ -421,10 +408,10 @@ public:
         Float end_cum_opt   = dr::zeros<Float>();
 
         dr::masked(start_cum_opt, use_precomputed) = extract_channel(
-            dr::gather<Float>(m_cum_opt_thickness, min_idx, use_precomputed),
+            dr::gather<UnpolarizedSpectrum>(m_cum_opt_thickness, min_idx, use_precomputed),
             channel);
         dr::masked(end_cum_opt, use_precomputed) = extract_channel(
-            dr::gather<Float>(m_cum_opt_thickness, max_idx, use_precomputed),
+            dr::gather<UnpolarizedSpectrum>(m_cum_opt_thickness, max_idx, use_precomputed),
             channel);
         dr::masked(cum_opt_thick, use_precomputed) =
             end_cum_opt - start_cum_opt;
@@ -462,6 +449,10 @@ public:
     }
 
     void precompute_optical_thickness() {
+
+        static constexpr size_t SpectralSize = dr::array_size_v<UnpolarizedSpectrum>;
+        using ScalarUnpolarized = dr::Array<dr::scalar_t<UnpolarizedSpectrum>, SpectralSize>;
+
         // Check that the first two dimensions are equal to 1 and that z is one
         // or more.
         const ScalarVector3i resolution = m_sigmat->resolution();
@@ -474,12 +465,11 @@ public:
         ScalarPoint3f min       = m_sigmat->bbox().min;
         ScalarVector3f step     = ScalarVector3f(0.f, 0.f, voxel_size.z());
 
-        UnpolarizedSpectrum cumulative = dr::zeros<UnpolarizedSpectrum>();
-        UnpolarizedSpectrum reverse_cumulative =
-            dr::zeros<UnpolarizedSpectrum>();
-        std::vector<UnpolarizedSpectrum> cum_opt_thickness(resolution.z());
-        std::vector<UnpolarizedSpectrum> reverse_cum_opt_thickness(
-            resolution.z());
+        ScalarUnpolarized cumulative = dr::zeros<ScalarUnpolarized>();
+        ScalarUnpolarized reverse_cumulative = dr::zeros<ScalarUnpolarized>();
+
+        std::vector<ScalarFloat> cum_opt_thickness(resolution.z()*SpectralSize);
+        std::vector<ScalarFloat> reverse_cum_opt_thickness(resolution.z()*SpectralSize);
 
         // loop through the layers and accumulate the "unscaled" optical
         // thickness
@@ -488,24 +478,38 @@ public:
             std::tie(mei.sigma_s, mei.sigma_n, mei.sigma_t) =
                 get_scattering_coefficients(mei, true);
 
-            cumulative += mei.sigma_t;
-            cum_opt_thickness[i] = cumulative;
+            for(size_t k = 0 ; k < SpectralSize; ++k) {
+                if constexpr (dr::is_jit_v<UnpolarizedSpectrum>)
+                    cumulative[k] += ScalarFloat(mei.sigma_t[k][0]);
+                else
+                    cumulative[k] += ScalarFloat(mei.sigma_t[k]);
+
+                cum_opt_thickness[i * SpectralSize + k] = cumulative[k];
+            }
         }
 
+        // Calculate cumulative optical thickness from top to bottom
         for (int32_t i = (int32_t) resolution.z() - 1; i >= 0; --i) {
             mei.p = min + voxel_size * 0.5 + (ScalarFloat) i * step;
             std::tie(mei.sigma_s, mei.sigma_n, mei.sigma_t) =
                 get_scattering_coefficients(mei, true);
 
-            reverse_cumulative += mei.sigma_t;
-            reverse_cum_opt_thickness[(int32_t) resolution.z() - 1 - i] =
-                reverse_cumulative;
+            for (size_t k = 0; k < SpectralSize; ++k) {
+                if constexpr (dr::is_jit_v<UnpolarizedSpectrum>)
+                    reverse_cumulative[k] += ScalarFloat(mei.sigma_t[k][0]);
+                else
+                    reverse_cumulative[k] += ScalarFloat(mei.sigma_t[k]);
+
+                // populate array from 0 to (resolution-1)*SpectralSize
+                reverse_cum_opt_thickness[((int32_t) resolution.z() - 1 - i) * SpectralSize + k] =
+                    reverse_cumulative[k];
+            }
         }
 
         m_cum_opt_thickness =
-            dr::load<SpectrumStorage>(cum_opt_thickness.data(), resolution.z());
-        m_reverse_cum_opt_thickness = dr::load<SpectrumStorage>(
-            reverse_cum_opt_thickness.data(), resolution.z());
+            dr::load<FloatStorage>(cum_opt_thickness.data(), resolution.z()*SpectralSize);
+        m_reverse_cum_opt_thickness = dr::load<FloatStorage>(
+            reverse_cum_opt_thickness.data(), resolution.z()*SpectralSize);
     }
 
     UnpolarizedSpectrum get_majorant(const MediumInteraction3f &mi,
@@ -569,8 +573,8 @@ private:
     ScalarFloat m_scale;
 
     Float m_max_density;
-    SpectrumStorage m_cum_opt_thickness;
-    SpectrumStorage m_reverse_cum_opt_thickness;
+    FloatStorage m_cum_opt_thickness;
+    FloatStorage m_reverse_cum_opt_thickness;
 };
 
 MI_IMPLEMENT_CLASS_VARIANT(PiecewiseMedium, Medium)
