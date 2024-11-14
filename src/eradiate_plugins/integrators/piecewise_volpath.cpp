@@ -204,11 +204,6 @@ public:
             active &= depth < (uint32_t) m_max_depth;
             act_medium_scatter &= active;
 
-            if (dr::any_or<true>(act_null_scatter)) {
-                dr::masked(ray.o, act_null_scatter) = mei.p;
-                dr::masked(si.t, act_null_scatter)  = si.t - mei.t;
-            }
-
             if (dr::any_or<true>(act_medium_scatter)) {
                 if (dr::any_or<true>(is_spectral))
                     dr::masked(throughput, is_spectral && act_medium_scatter) *=
@@ -329,26 +324,19 @@ public:
                 dr::masked(ray, active_surface) = bsdf_ray;
                 needs_intersection |= active_surface;
 
-                Mask non_null_bsdf =
-                    active_surface &&
-                    !has_flag(bs.sampled_type, BSDFFlags::Null);
+                Mask non_null_bsdf = active_surface && !has_flag(bs.sampled_type, BSDFFlags::Null);
                 dr::masked(depth, non_null_bsdf) += 1;
 
                 // update the last scatter PDF event if we encountered a
                 // non-null scatter event
-                dr::masked(last_scatter_event, non_null_bsdf)         = si;
+                dr::masked(last_scatter_event, non_null_bsdf) = si;
                 dr::masked(last_scatter_direction_pdf, non_null_bsdf) = bs.pdf;
 
                 valid_ray |= non_null_bsdf;
-                specular_chain |= non_null_bsdf &&
-                                  has_flag(bs.sampled_type, BSDFFlags::Delta);
-                specular_chain &=
-                    !(active_surface &&
-                      has_flag(bs.sampled_type, BSDFFlags::Smooth));
-                act_null_scatter |= active_surface &&
-                                    has_flag(bs.sampled_type, BSDFFlags::Null);
-                Mask has_medium_trans =
-                    active_surface && si.is_medium_transition();
+                specular_chain |= non_null_bsdf && has_flag(bs.sampled_type, BSDFFlags::Delta);
+                specular_chain &= !(active_surface && has_flag(bs.sampled_type, BSDFFlags::Smooth));
+                act_null_scatter |= active_surface && has_flag(bs.sampled_type, BSDFFlags::Null);
+                Mask has_medium_trans = active_surface && si.is_medium_transition();
                 dr::masked(medium, has_medium_trans) = si.target_medium(ray.d);
             }
 
@@ -426,9 +414,7 @@ public:
                     std::tie(tr, free_flight_pdf, escaped_medium) =
                         medium->eval_transmittance_pdf_real(ray, si, channel,
                                                             active_medium);
-                    Float tr_pdf = index_spectrum(free_flight_pdf, channel);
-                    dr::masked(transmittance, is_spectral) *=
-                        dr::select(tr_pdf > 0.f, tr, 0.f); // exact estimation
+                    dr::masked(transmittance, is_spectral) *= tr; // exact estimation
                 }
 
                 active_medium &= !escaped_medium;
