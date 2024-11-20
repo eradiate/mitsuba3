@@ -11,7 +11,7 @@ NAMESPACE_BEGIN(mitsuba)
 .. _phase-tabphase_polarized:
 
 Lookup table (polarized) phase function (:monosp:`tabphase_polarized`)
-------------------------------------------------
+----------------------------------------------------------------------
 
 .. pluginparameters::
 
@@ -424,7 +424,7 @@ public:
 
     std::string to_string() const override {
         std::ostringstream oss;
-        oss << "TabulatedPhaseFunction[" << std::endl
+        oss << "TabulatedPolarizedPhaseFunction[" << std::endl
             << "  distr = " << string::indent(m_m11) << std::endl
             << "]";
         return oss.str();
