@@ -206,9 +206,9 @@ public:
             meridian plane spanned by wi and n. */
             Vector3f n(0, 0, 1);
             Vector3f p_axis_in  = 
-                dr::normalize(dr::cross(-wo_hat, dr::normalize(dr::cross(n, -wo_hat))));
+                dr::normalize(dr::cross(dr::normalize(dr::cross(n,-wo_hat)),-wo_hat));
             Vector3f p_axis_out = 
-                dr::normalize(dr::cross(wi_hat, dr::normalize(dr::cross(n, wi_hat))));
+                dr::normalize(dr::cross(dr::normalize(dr::cross(n,wi_hat)),wi_hat));
 
             dr::masked(p_axis_in, dr::any(dr::isnan(p_axis_in))) =
                 Vector3f(0.f, 1.f, 0.f);
@@ -271,9 +271,9 @@ public:
             /* The Stokes reference frame vector of this matrix lies in the
                scattering plane spanned by wi and wo. */
             Vector3f p_axis_in  = 
-                dr::normalize(dr::cross(-wo_hat, dr::normalize(dr::cross(n, -wo_hat))));
+                dr::normalize(dr::cross(dr::normalize(dr::cross(n,-wo_hat)),-wo_hat));
             Vector3f p_axis_out = 
-                dr::normalize(dr::cross(wi_hat, dr::normalize(dr::cross(n, wi_hat))));
+                dr::normalize(dr::cross(dr::normalize(dr::cross(n,wi_hat)),wi_hat));
 
             dr::masked(p_axis_in, dr::any(dr::isnan(p_axis_in)))   = 
                 Vector3f(0.f, 1.f, 0.f);

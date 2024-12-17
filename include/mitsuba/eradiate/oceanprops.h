@@ -424,8 +424,8 @@ MuellerMatrix<UnpolarizedSpectrum> fresnel_sunglint_polarized(
     Float mu_i = dr::abs(wi.z());
     Float mu_o = dr::abs(wo.z());
 
-    Float phi_i = dr::atan2(wi.y(), wi.x());
-    Float phi_o = dr::atan2(wo.y(), wo.x());
+    Float phi_i = -dr::atan2(wi.y(), wi.x());
+    Float phi_o = -dr::atan2(wo.y(), wo.x());
 
     dr::masked(mu_i, mu_i > 0.9999999f) = 0.9999999f;
     dr::masked(mu_o, mu_o > 0.9999999f) = 0.9999999f;
@@ -454,11 +454,11 @@ MuellerMatrix<UnpolarizedSpectrum> fresnel_sunglint_polarized(
 
     Mask collinear = dr::all(dr::eq(wi, -z));
     const Vector3f phi_v_i = dr::select(collinear, Vector3f(0.f, 1.f, 0.f), dr::normalize(dr::cross(z, wi)));
-    const Vector3f theta_v_i = dr::cross(wi, phi_v_i);
+    const Vector3f theta_v_i = dr::cross(phi_v_i,wi);
 
     collinear = dr::all(dr::eq(wo, z));
     const Vector3f phi_v_o = dr::select(collinear, Vector3f(0.f,1.f,0.f), dr::normalize(dr::cross(z, wo)));
-    const Vector3f theta_v_o = dr::cross(wo, phi_v_o);
+    const Vector3f theta_v_o = dr::cross(phi_v_o, wo);
 
     // amplitude scattering matrix
     const Float pi_dot_wo = dr::dot(phi_v_i, wo);
