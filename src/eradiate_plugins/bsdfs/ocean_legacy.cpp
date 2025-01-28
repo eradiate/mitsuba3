@@ -26,6 +26,7 @@ NAMESPACE_BEGIN(mitsuba)
 -------------------------------------------------------------
 
 .. pluginparameters::
+ :extra-rows: 8
 
  * - wavelength
    - |float|
@@ -68,9 +69,15 @@ NAMESPACE_BEGIN(mitsuba)
      Default: 0 Component 0 is used to evaluate the total oceanic reflectance.
      Component 1 evaluates the whitecap reflectance. Component 2 evaluates the sun
      glint reflectance. Component 3 evaluates the underlight reflectance.
+     Component 4 evaluates the whitecap and underlight reflectance together.
+
+ * - coverage
+   - |float|
+   - Fraction of the surface occupied by whitecaps. Modifying this parameter has
+     no effect: it is automatically computed from the wind speed.
 
 This plugin implements the oceanic reflection model originally
-implemented in the 6S radiative transfer model. Note that this model 
+implemented in the 6S radiative transfer model. Note that this model
 is monochromatic.
 
 For the fundamental formulae defining the oceanic reflectance model, please
@@ -364,7 +371,7 @@ public:
         Spectrum value = dr::zeros<Spectrum>();
 
         if constexpr (is_polarized_v<Spectrum>){
-            
+
             dr::masked(c_i, c_i < 1e-6f) = 1e-6f;
             dr::masked(c_o, c_o < 1e-6f) = 1e-6f;
 
@@ -704,6 +711,8 @@ public:
                                 +ParamFlags::Differentiable);
         callback->put_parameter("shininess", m_shininess,
                                 +ParamFlags::NonDifferentiable);
+        callback->put_parameter("coverage", m_coverage,
+                                +ParamFlags::NonDifferentiable);
     }
 
     void parameters_changed(const std::vector<std::string> &/*keys*/) override {
@@ -764,7 +773,11 @@ public:
             dr::eval(m_upwelling_transmittance);
         }
 
+        // Update other useful values
         m_ocean_utils.update(m_wavelength, m_wind_speed, m_pigmentation);
+
+        // Pre-compute whitecap coverage
+        m_coverage = m_ocean_utils.eval_whitecap_coverage(m_wind_speed);
     }
 
     /**
@@ -844,8 +857,7 @@ public:
         if (unlikely(dr::none_or<false>(active)) || (!has_diffuse && !has_specular))
             return { bs, 0.f };
 
-        Float coverage  = m_ocean_utils.eval_whitecap_coverage(m_wind_speed);
-        Float prob_diff = coverage;
+        Float prob_diff = m_coverage;
 
         Mask sample_diffuse = active & (sample1 < prob_diff),
              sample_glint   = active && !sample_diffuse;
@@ -927,7 +939,6 @@ public:
                  wi_hat = ctx.mode == TransportMode::Radiance ? si.wi : wo;
 
         // Combine the results
-        Float coverage = m_ocean_utils.eval_whitecap_coverage(m_wind_speed);
 
         // Make reflectances available for debug purposes
         UnpolarizedSpectrum whitecap_reflectance(0.f);
@@ -952,12 +963,12 @@ public:
                 /* The Stokes reference frame vector of this matrix lies in the meridian plane
                 spanned by wi and n. */
                 Vector3f n(0.f, 0.f, 1.f);
-                Vector3f p_axis_in  = 
+                Vector3f p_axis_in  =
                     dr::normalize(dr::cross(dr::normalize(dr::cross(n,-wo_hat)),-wo_hat));
-                Vector3f p_axis_out = 
+                Vector3f p_axis_out =
                     dr::normalize(dr::cross(dr::normalize(dr::cross(n,wi_hat)),wi_hat));
 
-                dr::masked( p_axis_in, dr::any(dr::isnan(p_axis_in)) ) = 
+                dr::masked( p_axis_in, dr::any(dr::isnan(p_axis_in)) ) =
                     Vector3f(0.f, 1.f, 0.f);
                 dr::masked( p_axis_out, dr::any(dr::isnan(p_axis_out)) ) =
                     Vector3f(0.f, 1.f, 0.f);
@@ -973,7 +984,7 @@ public:
                 glint_reflectance = eval_glint(wo_hat, wi_hat);
             }
 
-            result += (1-coverage)*glint_reflectance;
+            result += (1.f - m_coverage) * glint_reflectance;
         }
 
         dr::masked(result, active) *= cos_theta_o;
@@ -985,14 +996,16 @@ public:
                 break;
             case 2:
                 result[active] =
-                    (1.f - coverage) * glint_reflectance;
+                    (1.f - m_coverage) * glint_reflectance;
                 break;
             case 3:
                 result[active] =
                     depolarizer<Spectrum>((1.f - whitecap_reflectance) * underlight_reflectance);
                 break;
             case 4:
-                result[active] = coverage;
+                result[active] = depolarizer<Spectrum>(
+                    whitecap_reflectance +
+                    (1.f - whitecap_reflectance) * underlight_reflectance);
                 break;
             default:
                 break;
@@ -1011,8 +1024,7 @@ public:
                      dr::none_or<false>(active)))
             return 0.f;
 
-        Float coverage = m_ocean_utils.eval_whitecap_coverage(m_wind_speed);
-        Float weight_diffuse = coverage, weight_specular = (1.f - coverage);
+        Float weight_diffuse = m_coverage, weight_specular = (1.f - m_coverage);
 
         // Check if the normal has only zeros. If this is the case, use a
         // default normal
@@ -1045,15 +1057,14 @@ public:
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "OceanLegacy[" << std::endl
-            << "  component = " << string::indent(m_component) << std::endl
-            << "  wavelength = " << string::indent(m_wavelength) << std::endl
-            << "  wind_speed = " << string::indent(m_wind_speed) << std::endl
-            << "  wind_direction = " << string::indent(m_wind_direction)
-            << std::endl
-            << "  chlorinity = " << string::indent(m_chlorinity) << std::endl
-            << "  pigmentation = " << string::indent(m_pigmentation)
-            << std::endl
-            << "  shininess = " << string::indent(m_shininess) << std::endl
+            << "  component = " << string::indent(m_component) << "," << std::endl
+            << "  wavelength = " << string::indent(m_wavelength) << "," << std::endl
+            << "  wind_speed = " << string::indent(m_wind_speed) << "," << std::endl
+            << "  wind_direction = " << string::indent(m_wind_direction) << "," << std::endl
+            << "  chlorinity = " << string::indent(m_chlorinity) << "," << std::endl
+            << "  pigmentation = " << string::indent(m_pigmentation) << "," << std::endl
+            << "  shininess = " << string::indent(m_shininess) << "," << std::endl
+            << "  coverage = " << string::indent(m_coverage) << std::endl
             << "]";
         return oss.str();
     }
@@ -1068,6 +1079,7 @@ private:
     ScalarFloat m_chlorinity;
     ScalarFloat m_pigmentation;
     ScalarFloat m_shininess;
+    ScalarFloat m_coverage;
     bool m_accel;
 
     // On update fields
