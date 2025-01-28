@@ -59,7 +59,8 @@ NAMESPACE_BEGIN(mitsuba)
    - |float|
    - :math:`k \in [0, \infty]`.
    - Specifies the shininess which is used as the exponent for Blinn-Phong MIS
-     (Default: :monosp:`50.`).
+     (Default: :monosp:`50.`). If set to -1, the glint component is sampled
+     using a cosine-hemisphere strategy.
 
  * - component
    - |int|
@@ -860,24 +861,34 @@ public:
         }
 
         if (dr::any_or<true>(sample_glint)) {
-            // For Blinn-Phong, we need to sample the half-vector
-            Float ksi_1 = sample2.x(), ksi_2 = sample2.y();
+            if (m_shininess >= 0.f) {
+                // For Blinn-Phong, we need to sample the half-vector
+                Float ksi_1 = sample2.x(), ksi_2 = sample2.y();
 
-            Float phi_h   = dr::TwoPi<Float> * ksi_1;
-            Float theta_h = dr::acos(dr::pow(ksi_2, 1.f / (m_shininess + 2.f)));
+                Float phi_h   = dr::TwoPi<Float> * ksi_1;
+                Float theta_h = dr::acos(dr::pow(ksi_2, 1.f / (m_shininess + 2.f)));
 
-            Vector3f half = dr::normalize(
-                Vector3f(dr::sin(theta_h) * dr::cos(phi_h),
-                         dr::sin(theta_h) * dr::sin(phi_h), dr::cos(theta_h)));
+                Vector3f half = dr::normalize(
+                    Vector3f(dr::sin(theta_h) * dr::cos(phi_h),
+                             dr::sin(theta_h) * dr::sin(phi_h),
+                             dr::cos(theta_h)));
 
-            Vector3f wo = 2.f * dr::dot(si.wi, half) * half - si.wi;
+                Vector3f wo = 2.f * dr::dot(si.wi, half) * half - si.wi;
 
-            // In the case of sampling the glint component, the outgoing
-            // direction is sampled using the Blinn-Phong distribution.
-            dr::masked(bs.wo, sample_glint)                = wo;
-            dr::masked(bs.sampled_component, sample_glint) = 1;
-            dr::masked(bs.sampled_type, sample_glint) =
-                +BSDFFlags::GlossyReflection;
+                // In the case of sampling the glint component, the outgoing
+                // direction is sampled using the Blinn-Phong distribution.
+                dr::masked(bs.wo, sample_glint)                = wo;
+                dr::masked(bs.sampled_component, sample_glint) = 1;
+                dr::masked(bs.sampled_type, sample_glint) =
+                    +BSDFFlags::GlossyReflection;
+
+            } else {
+                dr::masked(bs.wo, sample_glint) =
+                    warp::square_to_cosine_hemisphere(sample2);
+                dr::masked(bs.sampled_component, sample_glint) = 0;
+                dr::masked(bs.sampled_type, sample_glint) =
+                    +BSDFFlags::GlossyReflection;
+            }
         }
 
         bs.pdf = pdf(ctx, si, bs.wo, active);
@@ -1011,14 +1022,16 @@ public:
 
         Vector3f half    = dr::normalize(si.wi + wo);
         Float projection = dr::dot(half, normal);
-        Float D          = ((m_shininess + 2.f) /
-                   dr::TwoPi<Float>) *dr::pow(projection, m_shininess);
+        Float D          = (m_shininess + 2.f) / dr::TwoPi<Float> *
+                           dr::pow(projection, m_shininess);
 
         // We multiply the probability of the specular lobe with the pdf of
         // the Blinn-Phong distribution and the probability of the diffuse lobe
         // with the pdf of the cosine-weighted hemisphere.
-        Float pdf_diffuse  = warp::square_to_cosine_hemisphere_pdf(wo),
-              pdf_specular = (D * projection) / (4.f * dr::dot(si.wi, half));
+        Float pdf_diffuse  = warp::square_to_cosine_hemisphere_pdf(wo);
+        Float pdf_specular = (m_shininess >= 0.f) ?
+                (D * projection) / (4.f * dr::dot(si.wi, half)) :
+                warp::square_to_cosine_hemisphere_pdf(wo);
 
         Float pdf =
             weight_diffuse * pdf_diffuse + weight_specular * pdf_specular;

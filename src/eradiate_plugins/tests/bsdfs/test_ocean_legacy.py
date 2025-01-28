@@ -15,11 +15,12 @@ _bsdf_dict = {
 
 
 @pytest.mark.slow
-def test_chi2_oceanic(variants_vec_backends_once_rgb):
+@pytest.mark.parametrize("shininess", [10.0, -1.0])
+def test_chi2_oceanic(variants_vec_backends_once_rgb, shininess):
     """
     Test the consistency of the oceanic BSDF using the chi2 test.
     """
-    sample_func, pdf_func = mi.chi2.BSDFAdapter("ocean_legacy", _bsdf_dict)
+    sample_func, pdf_func = mi.chi2.BSDFAdapter("ocean_legacy", {**_bsdf_dict, "shininess": shininess})
 
     chi2 = mi.chi2.ChiSquareTest(
         domain=mi.chi2.SphericalDomain(),
