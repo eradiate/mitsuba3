@@ -35,7 +35,7 @@ NAMESPACE_BEGIN(mitsuba)
  * - wind_speed
    - |float|
    - :math:`k \in [0, 37.54]` m/s.
-   - Specifies the wind speed at which to evaluate the oceanic reflectance 
+   - Specifies the wind speed at which to evaluate the oceanic reflectance
      (Default: :monosp:`0.1 m/s`).
 
  * - wind_direction
@@ -153,7 +153,7 @@ public:
     std::pair<ScalarFloat, ScalarFloat>
     eval_index_refraction(const ScalarFloat &wavelength,
                           const ScalarFloat &chlorinity) const {
-        auto [n_real, n_imag] = 
+        auto [n_real, n_imag] =
             water_ior<Float, Spectrum, ScalarFloat>(m_ocean_props,wavelength,chlorinity);
         return { n_real, n_imag };
     }
@@ -204,9 +204,9 @@ public:
      * @brief Evaluate the sun glint reflectance.
      *
      * Evaluates the sun glint reflectance at the given wavelength, incident and
-     * outgoing directions, and wind direction. The effects of wind speed and 
-     * chlorinity are precomputed in update(). The reflectance is computed using 
-     * the Cox-Munk distribution, the Fresnel equations, and relative tilt of 
+     * outgoing directions, and wind direction. The effects of wind speed and
+     * chlorinity are precomputed in update(). The reflectance is computed using
+     * the Cox-Munk distribution, the Fresnel equations, and relative tilt of
      * the oceanic surface.
      *
      * @param n_real The real part of the index of refraction of water.
@@ -238,18 +238,18 @@ public:
         Spectrum value = dr::zeros<Spectrum>();
 
         if constexpr (is_polarized_v<Spectrum>){
-            value = eval_sun_glint_polarized( n_real, n_imag, 
+            value = eval_sun_glint_polarized( n_real, n_imag,
                                               wi, wo,
-                                              s_theta_i, c_theta_i, 
-                                              s_theta_o, c_theta_o, 
-                                              s_phi, c_phi, 
+                                              s_theta_i, c_theta_i,
+                                              s_theta_o, c_theta_o,
+                                              s_phi, c_phi,
                                               s_phi_w, c_phi_w);
 
         } else {
-            value = eval_sun_glint( n_real, n_imag, 
-                                    s_theta_i, c_theta_i, 
-                                    s_theta_o, c_theta_o, 
-                                    s_phi, c_phi, 
+            value = eval_sun_glint( n_real, n_imag,
+                                    s_theta_i, c_theta_i,
+                                    s_theta_o, c_theta_o,
+                                    s_phi, c_phi,
                                     s_phi_w, c_phi_w );
         }
 
@@ -259,11 +259,11 @@ public:
     /**
      * @brief Evaluate the sun glint reflectance as implemented in 6SV.
      *
-     * Evaluates the sun glint reflectance at the given index of refraction, 
-     * incident and outgoing angles, relative azimuthal angle for 
-     * ingoing and outgoing directions, and relative azimuthal angle for 
+     * Evaluates the sun glint reflectance at the given index of refraction,
+     * incident and outgoing angles, relative azimuthal angle for
+     * ingoing and outgoing directions, and relative azimuthal angle for
      * wind direction. The reflectance is computed using the Cox-Munk
-     * distribution, the Fresnel equations, and relative tilt of the 
+     * distribution, the Fresnel equations, and relative tilt of the
      * oceanic surface.
      *
      * @param n_real The real part of the index of refraction of water.
@@ -332,9 +332,9 @@ public:
     /**
      * @brief Evaluate the polarized sun glint reflectance.
      *
-     * Evaluates the polarized sun glint reflectance at the given index of 
-     * refraction, incident and outgoing angles, relative azimuthal angle for 
-     * ingoing and outgoing directions, and relative azimuthal angle for 
+     * Evaluates the polarized sun glint reflectance at the given index of
+     * refraction, incident and outgoing angles, relative azimuthal angle for
+     * ingoing and outgoing directions, and relative azimuthal angle for
      * wind direction. The reflectance is computed using the Cox-Munk
      * distribution, the polarized Fresnel equations as implemented by Mishchenko,
      * and relative tilt of the oceanic surface.
@@ -353,13 +353,13 @@ public:
      * @param c_phi_w The cosine of the relative azimuthal angle of the wind.
      * @return Float The sun glint reflectance.
      */
-    Spectrum eval_sun_glint_polarized( ScalarFloat n_real, ScalarFloat n_imag, 
+    Spectrum eval_sun_glint_polarized( ScalarFloat n_real, ScalarFloat n_imag,
                                        Vector3f wi, Vector3f wo,
-                                       const Float &s_i, Float c_i, 
-                                       const Float &s_o, Float c_o, 
+                                       const Float &s_i, Float c_i,
+                                       const Float &s_o, Float c_o,
                                        const Float &s_phi, const Float &c_phi,
                                        const Float &s_phi_w, const Float &c_phi_w) const {
-        
+
         Spectrum value = dr::zeros<Spectrum>();
 
         if constexpr (is_polarized_v<Spectrum>){
@@ -397,11 +397,11 @@ public:
      *
      * Evaluates the underwater light reflectance at the given wavelength,
      * index of refraction, and upwelling and downwelling transmittances.
-     * The effects of incident and outgoing direction, wind directions, 
-     * wind speed, chlorinity, and pigmentation are all precomputed in 
-     * update or modelled by the transmittances. The reflectance is 
-     * computed taking the product of the upwelling and downwelling 
-     * transmittance,attenuted by the ratio of upwell to downwelling 
+     * The effects of incident and outgoing direction, wind directions,
+     * wind speed, chlorinity, and pigmentation are all precomputed in
+     * update or modelled by the transmittances. The reflectance is
+     * computed taking the product of the upwelling and downwelling
+     * transmittance,attenuted by the ratio of upwell to downwelling
      * irradiance.
      *
      * @param wavelength The wavelength at which to evaluate the reflectance.
@@ -552,8 +552,8 @@ private:
 
 /**
  * @brief Evaluate the transmittance of the radiance over all
- * provided angles. For each angle, computes the quadrature of 
- * the tranmittance. 
+ * provided angles. For each angle, computes the quadrature of
+ * the tranmittance.
  * @param utils Instance of ocean utilities templated on FloatP
  * with FloatP vectorized over the size of a packet.
  * @param theta Incident zenith angle.
@@ -561,8 +561,8 @@ private:
  * @param n_real Real part of the index of refraction.
  * @param n_imag Imaginary part of the index of refraction.
  * @param wind_direction Azimuthal angle of the wind direction.
- * @param upwelling Flag for computing upwelling transmittance. 
- * Will compute theta according to snells law and invert the 
+ * @param upwelling Flag for computing upwelling transmittance.
+ * Will compute theta according to snells law and invert the
  * index of refraction.
  */
 template <typename Float, typename OceanUtilitiesP>
@@ -712,19 +712,19 @@ public:
 
     /**
      * @brief Update the variables that can be preprocessed.
-     * This includes the complex index of refraction, upwelling 
-     * and downwelling transmittance textures and the ocean utils 
+     * This includes the complex index of refraction, upwelling
+     * and downwelling transmittance textures and the ocean utils
      * variables (cox-munk, underlight).
      */
     void update() {
 
         // compute the index of refraction
-        std::tie(m_n_real, m_n_imag) = 
+        std::tie(m_n_real, m_n_imag) =
             m_ocean_utils.eval_index_refraction(m_wavelength, m_chlorinity);
 
         {
-            // Pre-compute textures for the upwelling and downwelling 
-            // transmittances of radiance in the water body. 
+            // Pre-compute textures for the upwelling and downwelling
+            // transmittances of radiance in the water body.
             using FloatX = DynamicBuffer<ScalarFloat>;
             using FloatP = dr::Packet<dr::scalar_t<Float>>;
 
@@ -914,7 +914,7 @@ public:
         //     - `Importance`, trace from the light sources to the sensor
         Vector3f wo_hat = ctx.mode == TransportMode::Radiance ? wo : si.wi,
                  wi_hat = ctx.mode == TransportMode::Radiance ? si.wi : wo;
-        
+
         // Combine the results
         Float coverage = m_ocean_utils.eval_whitecap_coverage(m_wind_speed);
 
@@ -938,17 +938,17 @@ public:
                 // If sun glint is enabled, compute the glint reflectance
                 glint_reflectance = eval_glint(wo_hat, wi_hat);
 
-                /* The Stokes reference frame vector of this matrix lies in the meridian plane 
+                /* The Stokes reference frame vector of this matrix lies in the meridian plane
                 spanned by wi and n. */
                 Vector3f n(0.f, 0.f, 1.f);
                 Vector3f p_axis_in  = 
                     dr::normalize(dr::cross(dr::normalize(dr::cross(n,-wo_hat)),-wo_hat));
                 Vector3f p_axis_out = 
                     dr::normalize(dr::cross(dr::normalize(dr::cross(n,wi_hat)),wi_hat));
-                    
+
                 dr::masked( p_axis_in, dr::any(dr::isnan(p_axis_in)) ) = 
                     Vector3f(0.f, 1.f, 0.f);
-                dr::masked( p_axis_out, dr::any(dr::isnan(p_axis_out)) ) = 
+                dr::masked( p_axis_out, dr::any(dr::isnan(p_axis_out)) ) =
                     Vector3f(0.f, 1.f, 0.f);
 
                 // Rotate in/out reference vector of `value` s.t. it aligns with the implicit
@@ -983,7 +983,7 @@ public:
             case 4:
                 result[active] = coverage;
                 break;
-            default: 
+            default:
                 break;
         }
 
