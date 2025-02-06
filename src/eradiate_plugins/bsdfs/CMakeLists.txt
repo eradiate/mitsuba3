@@ -6,6 +6,7 @@ add_plugin(rpv rpv.cpp)
 add_plugin(rtls rtls.cpp)
 add_plugin(hapke hapke.cpp)
 add_plugin(selectbsdf selectbsdf.cpp)
+add_plugin(ocean_grasp ocean_grasp.cpp)
 add_plugin(ocean_legacy ocean_legacy.cpp)
 add_plugin(ocean_mishchenko ocean_mishchenko.cpp)
 

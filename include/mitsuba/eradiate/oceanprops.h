@@ -317,6 +317,53 @@ private:
 
 
 /**
+ * @brief Evaluate the fractional coverage of whitecaps.
+ *
+ * Evaluates the fractional coverage of whitecaps at the given wind speed,
+ * using the Monahan et al. (1986) model. The coverage is clamped to the
+ * range [0, 1] (i.e. wind speed can be within the range [0, 37.54]).
+ *
+ * @param wind_speed The wind speed at which to evaluate the coverage.
+ * @return ScalarFloat The fractional coverage of whitecaps.
+ */
+template<typename Float>
+Float whitecap_coverage_monahan(const Float &wind_speed) {
+    //@TODO Move to preprocessor constants?
+    const Float m_monahan_alpha  = 2.95e-06f;
+    const Float m_monahan_lambda = 3.52f;
+    return dr::clamp(m_monahan_alpha *
+                        dr::pow(wind_speed, m_monahan_lambda),
+                        0.0f, 1.0f);
+}
+
+/**
+ * @brief Evaluate the reflectance of whitecaps.
+ *
+ * Evaluates the reflectance of whitecaps at the given wavelength and wind
+ * speed. The reflectance is computed as the product of the effective
+ * reflectance of whitecaps and the fractional coverage of whitecaps.
+ *
+ * @param wavelength The wavelength at which to evaluate the reflectance in nm.
+ * @param wind_speed The wind speed at which to evaluate the reflectance.
+ * @return ScalarFloat The reflectance of whitecaps.
+ */
+template <typename Float>
+Float whitecap_reflectance_frouin(const Float &wavelength,
+                                  const Float &wind_speed) {
+    // Compute the fractional coverage of whitecaps
+    Float coverage = whitecap_coverage_monahan(wind_speed);
+
+    Float eff_reflectance = dr::select(
+        wavelength*0.001f >= 0.6f,
+        0.22f * dr::exp(-1.75f * dr::pow(wavelength*0.001f - 0.6f, 0.99f)), 0.22f);
+
+    // Compute the whitecap reflectance
+    Float whitecap_reflectance = coverage * eff_reflectance;
+
+    return whitecap_reflectance;
+}
+
+/**
  * @brief Compute the correction to the IOR of water.
  *
  * Computes the correction to the index of refraction of water according to
@@ -518,12 +565,16 @@ MuellerMatrix<UnpolarizedSpectrum> fresnel_sunglint_polarized(
  * mean square slope squared.
  */
 template<typename Float>
-std::tuple<Float, Float, Float> mean_square_slope_cox_munk(const Float& wind_speed) {
-    Float sigma_cross_2 = 0.003f + 0.00192f * wind_speed;
+std::tuple<Float, Float> cox_munk_crosswind_upwind(const Float& wind_speed) {
+    Float sigma_cross_2 = dr::fmadd(wind_speed, 0.00192f, 0.003f);
     Float sigma_along_2 = 0.00316f * wind_speed;
-    Float sigma_iso_2 = 0.003f + 0.00512f * wind_speed;
 
-    return { sigma_cross_2, sigma_along_2, sigma_iso_2 };
+    return { sigma_cross_2, sigma_along_2 };
+}
+
+template<typename Float>
+Float cox_munk_MMS(const Float& wind_speed) {
+    return dr::fmadd(wind_speed, 0.00512f, 0.003f);
 }
 
 #endif // OCEAN_PROPS
