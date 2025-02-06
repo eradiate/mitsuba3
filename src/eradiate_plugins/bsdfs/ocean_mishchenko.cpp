@@ -144,9 +144,7 @@ public:
     void update() {
 
         // compute the index of refraction
-        std::tie(std::ignore, std::ignore, m_sigma2) =
-            mean_square_slope_cox_munk(m_wind_speed);
-        m_sigma2 *= 0.5;
+        m_sigma2 = 0.5f*cox_munk_MMS(m_wind_speed);
     }
 
     std::pair<BSDFSample3f, Spectrum> sample(const BSDFContext &ctx,

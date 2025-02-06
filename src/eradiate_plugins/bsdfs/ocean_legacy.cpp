@@ -139,9 +139,10 @@ public:
      * to be called on construct and parameter update.
      **/
     void update(const ScalarFloat &wavelength, const ScalarFloat &wind_speed,
-                const ScalarFloat &pigmentation) {
+                const ScalarFloat &pigmentation, const bool &shadowing) {
         // Update Cox-Munk variables
-        std::tie(m_sigma_c, m_sigma_u, std::ignore) = mean_square_slope_cox_munk(wind_speed);
+        // std::tie(m_sigma_c, m_sigma_u, std::ignore) = mean_square_slope_cox_munk(wind_speed);
+        std::tie(m_sigma_c, m_sigma_u) = cox_munk_crosswind_upwind(wind_speed);
         m_sigma_c = dr::sqrt(m_sigma_c);
         m_sigma_u = dr::sqrt(m_sigma_u);
 
@@ -149,6 +150,8 @@ public:
         m_c_03    = 0.04f - 0.033f * wind_speed;
 
         m_r_omega = r_omega(wavelength, pigmentation);
+
+        m_shadowing = shadowing;
     }
 
     /**
@@ -219,8 +222,8 @@ public:
      *
      * @param n_real The real part of the index of refraction of water.
      * @param n_imag The imaginary part of the index of refraction of water.
-     * @param wi The incident direction of the light.
-     * @param wo The outgoing direction of the light.
+     * @param wi The incident direction of the light in graphics convention.
+     * @param wo The outgoing direction of the light in graphics convention.
      * @param wind_direction The direction of the wind relative to the incident
      * light.
      * @return Float The sun glint reflectance.
@@ -229,10 +232,10 @@ public:
                      const Vector3f &wi, const Vector3f &wo,
                      const ScalarFloat &wind_direction) const {
         // Transform directions into azimuthal and zenithal angles
-        Float s_theta_i = dr::sqrt(1 - wi.z() * wi.z());
+        Float s_theta_i = dr::sqrt(1.f - wi.z() * wi.z());
         Float c_theta_i = wi.z();
 
-        Float s_theta_o = dr::sqrt(1 - wo.z() * wo.z());
+        Float s_theta_o = dr::sqrt(1.f - wo.z() * wo.z());
         Float c_theta_o = wo.z();
 
         Float phi_i         = dr::atan2(wi.y(), wi.x());
@@ -308,7 +311,7 @@ public:
         Float specular_prob = eval_cox_munk(s_phi_w, c_phi_w, z_x, z_y);
         auto mask           = Mask(specular_prob < 0.f);
         specular_prob       = dr::select(mask, 0.f, specular_prob);
-
+        
         Float cos_2_chi = c_o * c_i + s_o * s_i * c_phi;
 
         cos_2_chi = dr::select(cos_2_chi > 1.f, 0.999999999f, cos_2_chi);
@@ -332,9 +335,26 @@ public:
         Float num   = dr::Pi<Float> * fresnel_coeff * specular_prob;
         Float denom = 4.f * c_i * c_o * dr::pow(dr::cos(tilt), 4.f);
 
-        // Float fresnel_coeff = eval_fresnel(n_real, n_imag, coschi, sinchi);
-        // Sun glint reflectance
-        return num/denom;
+        Float result = num/denom;
+
+        return result;
+    }
+
+    /**
+     * @brief Shadowing function
+     *
+     * @param mu absolute value of the cosine of theta.
+     * @param sigma2 Mean square slope squared.
+     */
+    Float gamma_shadowing(const Float mu, const Float sigma2) const {
+        Float cot = mu / dr::sqrt(1.f - mu * mu);
+        Float result = 
+            0.5f *
+            (dr::sqrt(2.f * (1.f - mu * mu) / dr::Pi<Float>) 
+             * dr::sqrt(sigma2) / mu 
+             * dr::exp(-cot * cot / (2.f * sigma2)) 
+             - (1.f - dr::erf(cot / dr::sqrt(2.f * sigma2))));
+        return result;
     }
 
     /**
@@ -349,8 +369,8 @@ public:
      *
      * @param n_real The real part of the index of refraction of water.
      * @param n_imag The imaginary part of the index of refraction of water.
-     * @param wi The incident light direction.
-     * @param wo The outgoing light direction.
+     * @param wi The incident light direction in graphics convention.
+     * @param wo The outgoing light direction in graphics convention.
      * @param s_i The sine of the incident zenith angle.
      * @param c_i The cosine of the incident zenith angle.
      * @param s_o The sine of the outgoing zenith angle.
@@ -390,10 +410,10 @@ public:
 
             Complex2u n_ext(1.f,0.f);
             Complex2u n_water(n_real,n_imag);
-            Spectrum fresnel_coeff = fresnel_sunglint_polarized(n_ext, n_water, wi, wo);
+            Spectrum fresnel_coeff = fresnel_sunglint_polarized(n_ext, n_water, -wi, wo);
 
-            Spectrum num   = dr::Pi<Float> * fresnel_coeff * specular_prob;
-            Float denom = 4.f * c_i * c_o * dr::pow(dr::cos(tilt), 4.f);
+            Spectrum num = dr::Pi<Float> * fresnel_coeff * specular_prob;
+            Float denom  = 4.f * c_i * c_o * dr::pow(dr::cos(tilt), 4.f);
             value = num/denom;
         }
 
@@ -550,9 +570,12 @@ private:
     // Cox-Munk distribution variables
     ScalarFloat m_sigma_c = 1.f;
     ScalarFloat m_sigma_u = 1.f;
+    ScalarFloat m_sigma_iso_sqr = 1.f;
     ScalarFloat m_c_21    = 0.f;
     ScalarFloat m_c_03    = 0.f;
     ScalarFloat m_r_omega = 0.f;
+
+    bool m_shadowing;
 
     // Underlight parameters
     const ScalarFloat m_underlight_alpha = 0.485f;
@@ -672,6 +695,7 @@ public:
         m_pigmentation   = props.get<ScalarFloat>("pigmentation", 0.3f);
         m_shininess      = props.get<ScalarFloat>("shininess", 50.f);
         m_component      = props.get<ScalarInt32>("component", 0);
+        m_shadowing      = props.get<bool>("shadowing", true);
         m_accel          = props.get<bool>("accel", true);
 
         // convert from North Left to East Right.
@@ -679,7 +703,7 @@ public:
         // m_wind_direction % 360.
         m_wind_direction = m_wind_direction - (360.f * floor(m_wind_direction / 360.f));
         // Degree to radians.
-        m_wind_direction = m_wind_direction * dr::Pi<ScalarFloat> / 360.f;
+        m_wind_direction = m_wind_direction * dr::Pi<ScalarFloat> / 180.f;
 
         update();
 
@@ -750,7 +774,7 @@ public:
             // packet-sized float vectors i.e. FloatP. Not the best approach,
             // but the simplest that avoids a complete refactor of the plugin.
             OceanUtilities<FloatP, Spectrum> ocean_utils;
-            ocean_utils.update(m_wavelength, m_wind_speed, m_pigmentation);
+            ocean_utils.update(m_wavelength, m_wind_speed, m_pigmentation, m_shadowing);
 
             FloatX downwelling = eval_ocean_transmittance(
                 ocean_utils, zeniths_x, azimuths_y, m_n_real, m_n_imag,
@@ -774,7 +798,7 @@ public:
         }
 
         // Update other useful values
-        m_ocean_utils.update(m_wavelength, m_wind_speed, m_pigmentation);
+        m_ocean_utils.update(m_wavelength, m_wind_speed, m_pigmentation, m_shadowing);
 
         // Pre-compute whitecap coverage
         m_coverage = m_ocean_utils.eval_whitecap_coverage(m_wind_speed);
@@ -798,8 +822,8 @@ public:
      * Evaluates the sun glint reflectance at the provided wavelength, incident
      * and outgoing directions, wind direction, wind speed, and chlorinity.
      *
-     * @param wi The incident direction of the light.
-     * @param wo The outgoing direction of the light.
+     * @param wi The incident direction of the light in graphics convention.
+     * @param wo The outgoing direction of the light in graphics convention.
      * @return Float The sun glint reflectance.
      */
     Spectrum eval_glint(const Vector3f &wi, const Vector3f &wo) const {
@@ -987,7 +1011,7 @@ public:
             result += (1.f - m_coverage) * glint_reflectance;
         }
 
-        dr::masked(result, active) *= cos_theta_o;
+        dr::masked(result, active) *= cos_theta_o * dr::InvPi<Float>;
 
         // For debugging purposes, channel indicates which BRDF term to evaluate
         switch (m_component) {
@@ -1080,6 +1104,7 @@ private:
     ScalarFloat m_pigmentation;
     ScalarFloat m_shininess;
     ScalarFloat m_coverage;
+    bool m_shadowing;
     bool m_accel;
 
     // On update fields
