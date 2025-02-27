@@ -78,7 +78,6 @@ public:
         m_r     = props.get<ScalarFloat>("r", 1.f);
         m_b     = props.get<ScalarFloat>("b", 1.f);
         m_flags = BSDFFlags::GlossyReflection | BSDFFlags::FrontSide;
-        dr::set_attr(this, "flags", m_flags);
         m_components.push_back(m_flags);
     }
 
@@ -133,7 +132,7 @@ public:
     inline const UnpolarizedSpectrum eval_D(const Float &tan_theta_i,
                                             const Float &tan_theta_o,
                                             const Float &cos_d_phi) const {
-        return dr::sqrt(dr::sqr(tan_theta_i) + dr::sqr(tan_theta_o) -
+        return dr::sqrt(dr::square(tan_theta_i) + dr::square(tan_theta_o) -
                         2.f * tan_theta_i * tan_theta_o * cos_d_phi);
     }
 
@@ -149,7 +148,7 @@ public:
 
         const Float tan_sin_prod = tan_theta_i * tan_theta_o * sin_d_phi;
         UnpolarizedSpectrum cos_t =
-            (m_h / m_b) * dr::sqrt(dr::sqr(D) + dr::sqr(tan_sin_prod)) /
+            (m_h / m_b) * dr::sqrt(dr::square(D) + dr::square(tan_sin_prod)) /
             sec_theta_sum;
 
         // Clip cos(t) values outside of [-1; 1]
@@ -205,7 +204,7 @@ public:
         const Float cos_psi =
             cos_theta_i * cos_theta_o + sin_theta_i * sin_theta_o * cos_d_phi;
 
-        const Float sin_psi = dr::sqrt(1 - dr::sqr(cos_psi));
+        const Float sin_psi = dr::sqrt(1 - dr::square(cos_psi));
         const Float psi     = dr::acos(cos_psi);
 
         const UnpolarizedSpectrum K_iso = eval_K_iso();

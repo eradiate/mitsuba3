@@ -73,34 +73,34 @@ public:
         m_B_0   = props.texture<Texture>("B_0");
         m_h     = props.texture<Texture>("h");
 
-        if (dr::any((m_w < 0.f) || (m_w > 1.f))) {
-            throw("The single scattering albedo 'w' must be in [0; 1]");
-        }
+        // TODO: Checks have to be done otherwise, comparison operator no longer supported
+        // if (dr::any((m_w < 0.f) || (m_w > 1.f))) {
+        //     throw("The single scattering albedo 'w' must be in [0; 1]");
+        // }
 
-        if (dr::any((m_b < 0.f) || (m_b > 1.f))) {
-            throw("The anisotropy parameter 'b' must be in [0; 1]");
-        }
+        // if (dr::any((m_b < 0.f) || (m_b > 1.f))) {
+        //     throw("The anisotropy parameter 'b' must be in [0; 1]");
+        // }
 
-        if (dr::any((m_c < 0.f) || (m_c > 1.f))) {
-            throw("The scattering coefficient 'c' must be in [0; 1]");
-        }
+        // if (dr::any((m_c < 0.f) || (m_c > 1.f))) {
+        //     throw("The scattering coefficient 'c' must be in [0; 1]");
+        // }
 
-        if (dr::any((m_theta < 0.f) || (m_theta > 90.f))) {
-            throw("The photometric roughness 'theta' must be in [0; 90]°");
-        }
+        // if (dr::any((m_theta < 0.f) || (m_theta > 90.f))) {
+        //     throw("The photometric roughness 'theta' must be in [0; 90]°");
+        // }
 
-        if (dr::any((m_B_0 < 0.f) || (m_B_0 > 1.f))) {
-            throw("The shadow hiding opposition effect amplitude 'B_0' must be "
-                  "in [0; 1]");
-        }
+        // if (dr::any((m_B_0 < 0.f) || (m_B_0 > 1.f))) {
+        //     throw("The shadow hiding opposition effect amplitude 'B_0' must be "
+        //           "in [0; 1]");
+        // }
 
-        if (dr::any((m_h < 0.f) || (m_h > 1.f))) {
-            throw("The shadow hiding opposition effect width 'h' must be in "
-                  "[0; 1]");
-        }
+        // if (dr::any((m_h < 0.f) || (m_h > 1.f))) {
+        //     throw("The shadow hiding opposition effect width 'h' must be in "
+        //           "[0; 1]");
+        // }
 
         m_flags = BSDFFlags::GlossyReflection | BSDFFlags::FrontSide;
-        dr::set_attr(this, "flags", m_flags);
         m_components.push_back(m_flags);
     }
 
@@ -152,12 +152,12 @@ public:
 
     MI_INLINE UnpolarizedSpectrum
     eval_chi(const UnpolarizedSpectrum &tan_theta) const {
-        return 1 / dr::sqrt(1.f + dr::Pi<ScalarFloat> * dr::sqr(tan_theta));
+        return 1 / dr::sqrt(1.f + dr::Pi<ScalarFloat> * dr::square(tan_theta));
     }
 
     MI_INLINE Float eval_f(const Float &phi) const {
         const Float clamped_phi_div2 =
-            dr::clamp(phi / 2.f, 0.f, dr::Pi<Float> / 2.f - dr::Epsilon<Float>);
+            dr::clip(phi / 2.f, 0.f, dr::Pi<Float> / 2.f - dr::Epsilon<Float>);
         return dr::exp(-2.f * dr::tan(clamped_phi_div2));
     }
 
@@ -168,8 +168,8 @@ public:
 
     MI_INLINE UnpolarizedSpectrum eval_E2(const UnpolarizedSpectrum &tan_theta,
                                           const Float &x) const {
-        return dr::exp(-dr::InvPi<Float> / dr::sqr(tan_theta) /
-                       dr::sqr(dr::tan(x)));
+        return dr::exp(-dr::InvPi<Float> / dr::square(tan_theta) /
+                       dr::square(dr::tan(x)));
     }
 
     MI_INLINE UnpolarizedSpectrum eval_eta_0e(
@@ -205,7 +205,7 @@ public:
 
         return chi * (cos_x + sin_x * tan_theta *
                                   (opt_cos_phi * E2_e +
-                                   sign * dr::sqr(sin_phi_div2) * E2_i) /
+                                   sign * dr::square(sin_phi_div2) * E2_i) /
                                   (2.f - E1_e - phi_div_pi * E1_i));
     }
 
@@ -256,12 +256,12 @@ public:
     eval_P(const UnpolarizedSpectrum &b, const UnpolarizedSpectrum &c,
            const UnpolarizedSpectrum &cos_g) const {
         // Fonction de phase P
-        UnpolarizedSpectrum numerator = 1.f - sqr(b);
+        UnpolarizedSpectrum numerator = 1.f - dr::square(b);
         UnpolarizedSpectrum term1 =
             (1.f - c) * numerator /
-            dr::pow(1 + 2 * b * cos_g + dr::sqr(b), 3.f / 2.f);
+            dr::pow(1 + 2 * b * cos_g + dr::square(b), 3.f / 2.f);
         UnpolarizedSpectrum term2 =
-            c * numerator / dr::pow(1 - 2 * b * cos_g + dr::sqr(b), 3.f / 2.f);
+            c * numerator / dr::pow(1 - 2 * b * cos_g + dr::square(b), 3.f / 2.f);
         return term1 + term2;
     }
 

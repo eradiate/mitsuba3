@@ -66,7 +66,8 @@ public:
         // Initialize vectorized call dispatch table
         m_nested_bsdf_dr = dr::load<DynamicBuffer<BSDFPtr>>(
             m_nested_bsdf.data(), m_nested_bsdf.size());
-        dr::eval(m_nested_bsdf_dr);
+        // TODO: Check if the following can be removed for good
+        // dr::eval(m_nested_bsdf_dr);
 
         // Set flags
         m_components.clear();
@@ -77,7 +78,6 @@ public:
         m_flags = 0;
         for (size_t i = 0; i < bsdf_index; ++i)
             m_flags |= m_nested_bsdf[i]->flags();
-        dr::set_attr(this, "flags", m_flags);
     }
 
     void traverse(TraversalCallback *callback) override {

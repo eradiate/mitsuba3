@@ -175,10 +175,6 @@ public:
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
 
         precompute_optical_thickness();
-
-        dr::set_attr(this, "is_homogeneous", m_is_homogeneous);
-        dr::set_attr(this, "has_spectral_extinction",
-                     m_has_spectral_extinction);
     }
 
     std::tuple<typename Medium<Float, Spectrum>::MediumInteraction3f, Float,
@@ -227,18 +223,18 @@ public:
         // to the distance
         const Float n_dot_d =
             dr::abs(dr::dot(layer_norm, dr::normalize(ray.d)));
-        const Float delta = dr::select(dr::eq(n_dot_d, 0.), dr::Infinity<Float>,
+        const Float delta = dr::select(n_dot_d == 0.f, dr::Infinity<Float>,
                                        voxel_size.z() / n_dot_d);
         const Float idelta  = dr::rcp(delta);
         const Mask going_up = ray.d.z() >= 0.f;
 
         Int32 start_idx =
-            dr::clamp((Int32) dr::floor((ray(mint) - min) * inv_voxel_size).z(),
-                      0, res.z() - 1);
+            dr::clip((Int32) dr::floor((ray(mint) - min) * inv_voxel_size).z(),
+                     0, res.z() - 1);
         Int32 end_idx =
-            dr::clamp((Int32) dr::floor((ray(maxt) - min) * inv_voxel_size).z(),
-                      0, res.z() - 1);
-        Mask same_cell = dr::eq(start_idx, end_idx);
+            dr::clip((Int32) dr::floor((ray(maxt) - min) * inv_voxel_size).z(),
+                     0, res.z() - 1);
+        Mask same_cell = (start_idx == end_idx);
 
         // make sure the index align with the array (reverse indices if going
         // down)
@@ -290,7 +286,7 @@ public:
                     return a > b;
                 });
         }
-        same_cell |= dr::eq(index, opt_start_idx);
+        same_cell |= (index == opt_start_idx);
         search &= !same_cell;
 
         Int32 index_minus_one = dr::select(!active || same_cell, 0, index - 1);
@@ -325,7 +321,7 @@ public:
         dr::masked(tr, sampled) =
             dr::exp(-(sampled_t - mei.t) * sigma_t - cum_opt_thick);
         dr::masked(pdf, sampled) =
-            dr::select(dr::eq(sampled_t, maxt), tr, tr * sigma_t);
+            dr::select(sampled_t == maxt, tr, tr * sigma_t);
 
         mei.t = dr::select(!escaped, sampled_t, dr::Infinity<Float>);
         dr::masked(mei.p, !escaped)                   = ray(mei.t);
@@ -364,17 +360,17 @@ public:
         const ScalarVector3f layer_norm(0.f, 0.f, 1.f);
         const Float n_dot_d =
             dr::abs(dr::dot(layer_norm, dr::normalize(ray.d)));
-        const Float delta = dr::select(dr::eq(n_dot_d, 0.), dr::Infinity<Float>,
+        const Float delta = dr::select(n_dot_d == 0.f, dr::Infinity<Float>,
                                        voxel_size.z() / n_dot_d);
         const Mask going_up = ray.d.z() >= 0.f;
 
         Int32 start_idx =
-            dr::clamp((Int32) dr::floor((ray(mint) - min) * inv_voxel_size).z(),
-                      0, res.z() - 1);
+            dr::clip((Int32) dr::floor((ray(mint) - min) * inv_voxel_size).z(),
+                     0, res.z() - 1);
         Int32 end_idx =
-            dr::clamp((Int32) dr::floor((ray(maxt) - min) * inv_voxel_size).z(),
-                      0, res.z() - 1);
-        Mask same_cell = dr::eq(start_idx, end_idx);
+            dr::clip((Int32) dr::floor((ray(maxt) - min) * inv_voxel_size).z(),
+                     0, res.z() - 1);
+        Mask same_cell = (start_idx == end_idx);
 
         Float start_height =
             (ray(mint) - min).z() * inv_voxel_size.z() - (Float) start_idx;
@@ -557,8 +553,8 @@ public:
     static Float extract_channel(UnpolarizedSpectrum value, UInt32 channel) {
         Float result = value[0];
         if constexpr (is_rgb_v<Spectrum>) { // Handle RGB rendering
-            dr::masked(result, dr::eq(channel, 1u)) = value[1];
-            dr::masked(result, dr::eq(channel, 2u)) = value[2];
+            dr::masked(result, channel == 1u) = value[1];
+            dr::masked(result, channel == 2u) = value[2];
         } else {
             DRJIT_MARK_USED(channel);
         }

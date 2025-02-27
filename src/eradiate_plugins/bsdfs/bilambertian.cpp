@@ -54,7 +54,6 @@ public:
                                BSDFFlags::FrontSide | BSDFFlags::BackSide);
 
         m_flags = m_components[0] | m_components[1];
-        dr::set_attr(this, "flags", m_flags);
     }
 
     std::pair<BSDFSample3f, Spectrum>
@@ -141,7 +140,7 @@ public:
             // If reflection is activated, compute reflection for relevant
             // directions
             auto is_reflect =
-                Mask(dr::eq(dr::sign(cos_theta_i), dr::sign(cos_theta_o))) && active;
+                Mask(dr::sign(cos_theta_i) == dr::sign(cos_theta_o)) && active;
             result[is_reflect] = m_reflectance->eval(si, is_reflect);
         }
 
@@ -149,7 +148,7 @@ public:
             // If transmission is activated, compute transmission for relevant
             // directions
             auto is_transmit =
-                Mask(dr::neq(dr::sign(cos_theta_i), dr::sign(cos_theta_o))) && active;
+                Mask(dr::sign(cos_theta_i) == dr::sign(cos_theta_o)) && active;
             result[is_transmit] = m_transmittance->eval(si, is_transmit);
         }
 
@@ -192,13 +191,13 @@ public:
 
         if (has_reflect) {
             auto is_reflect =
-                Mask(dr::eq(dr::sign(cos_theta_i), dr::sign(cos_theta_o))) && active;
+                Mask(dr::sign(cos_theta_i) == dr::sign(cos_theta_o)) && active;
             dr::masked(result, is_reflect) *= reflection_sampling_weight;
         }
 
         if (has_transmit) {
             auto is_transmit =
-                Mask(dr::neq(dr::sign(cos_theta_i), dr::sign(cos_theta_o))) && active;
+                Mask(dr::sign(cos_theta_i) == dr::sign(cos_theta_o)) && active;
             dr::masked(result, is_transmit) *= transmission_sampling_weight;
         }
 

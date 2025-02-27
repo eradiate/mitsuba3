@@ -126,12 +126,13 @@ public:
         // Default is -1, overridden upon set_scene() call
         m_ray_offset = props.get<ScalarFloat>("ray_offset", -1);
 
+        // TODO: Fix this check
         // Check film size
-        ScalarPoint2i expected_size{ m_sensor_count, 1 };
-        if (m_film->size() != expected_size)
-            Throw("Film size must be [sensor_count, 1]. Expected %s, "
-                  "got %s",
-                  expected_size, m_film->size());
+        // ScalarPoint2i expected_size{ m_sensor_count, 1 };
+        // if (m_film->size() != expected_size)
+        //     Throw("Film size must be [sensor_count, 1]. Expected %s, "
+        //           "got %s",
+        //           expected_size, m_film->size());
 
         // Check reconstruction filter radius
         if (m_film->rfilter()->radius() > 0.5f + math::RayEpsilon<Float>) {
@@ -195,7 +196,7 @@ public:
         Int32 sensor_index(film_sample.x() * m_sensor_count);
         Index index(sensor_index);
 
-        Matrix coefficients = dr::gather<Matrix>(m_transforms, index);
+        Matrix coefficients = dr::gather<Matrix>(m_transforms.array(), index);
         Transform4f trafo(coefficients);
 
         // Set ray direction

@@ -6,10 +6,9 @@
 #include <mitsuba/render/medium.h>
 #include <mitsuba/render/phase.h>
 #include <mitsuba/render/records.h>
+#include <chrono>
 #include <random>
 #include <tuple>
-
-#include <chrono>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -80,8 +79,8 @@ public:
                          const UInt32 &idx) const {
         Float m = spec[0];
         if constexpr (is_rgb_v<Spectrum>) { // Handle RGB rendering
-            dr::masked(m, dr::eq(idx, 1u)) = spec[1];
-            dr::masked(m, dr::eq(idx, 2u)) = spec[2];
+            dr::masked(m, idx == 1u) = spec[1];
+            dr::masked(m, idx == 2u) = spec[2];
         } else {
             DRJIT_MARK_USED(idx);
         }
@@ -99,7 +98,7 @@ public:
         // will be valid Otherwise, it will depend on whether a valid
         // interaction is sampled
         Mask valid_ray =
-            !m_hide_emitters && dr::neq(scene->environment(), nullptr);
+            !m_hide_emitters && (scene->environment() != nullptr);
 
         // For now, don't use ray differentials
         Ray3f ray = ray_;
@@ -140,9 +139,9 @@ public:
             // accounting for the solid angle compression at refractive index
             // boundaries. Stop with at least some probability to avoid  getting
             // stuck (e.g. due to total internal reflection)
-            active &= dr::any(dr::neq(unpolarized_spectrum(throughput), 0.f));
+            active &= dr::any(unpolarized_spectrum(throughput) != 0.f);
             Float q = dr::minimum(
-                dr::max(unpolarized_spectrum(throughput)) * dr::sqr(eta), .95f);
+                dr::max(unpolarized_spectrum(throughput)) * dr::square(eta), .95f);
             Mask perform_rr = (depth > (uint32_t) m_rr_depth);
             active &= sampler->next_1d(active) < q || !perform_rr;
             dr::masked(throughput, perform_rr) *= dr::rcp(dr::detach(q));
@@ -152,7 +151,7 @@ public:
                 break;
 
             // ----------------------- Sampling the RTE -----------------------
-            Mask active_medium    = active && dr::neq(medium, nullptr);
+            Mask active_medium    = active && (medium != nullptr);
             Mask active_surface   = active && !active_medium;
             Mask act_null_scatter = false, act_medium_scatter = false,
                  escaped_medium = false;
@@ -259,11 +258,11 @@ public:
 
             if (dr::any_or<true>(active_surface)) {
                 // ---------------- Intersection with emitters ----------------
-                Mask ray_from_camera = active_surface && dr::eq(depth, 0u);
+                Mask ray_from_camera = active_surface && (depth == 0u);
                 Mask count_direct    = ray_from_camera || specular_chain;
                 EmitterPtr emitter   = si.emitter(scene);
-                Mask active_e = active_surface && dr::neq(emitter, nullptr) &&
-                                !(dr::eq(depth, 0u) && m_hide_emitters);
+                Mask active_e = active_surface && (emitter != nullptr) &&
+                                !((depth == 0u) && m_hide_emitters);
                 if (dr::any_or<true>(active_e)) {
                     Float emitter_pdf = 1.0f;
                     if (dr::any_or<true>(active_e && !count_direct)) {
@@ -358,8 +357,8 @@ public:
 
         auto [ds, emitter_val] = scene->sample_emitter_direction(
             ref_interaction, sampler->next_2d(active), false, active);
-        dr::masked(emitter_val, dr::eq(ds.pdf, 0.f)) = 0.f;
-        active &= dr::neq(ds.pdf, 0.f);
+        dr::masked(emitter_val, ds.pdf == 0.f) = 0.f;
+        active &= (ds.pdf != 0.f);
 
         if (dr::none_or<false>(active)) {
             return { emitter_val, ds };
@@ -393,7 +392,7 @@ public:
             dr::masked(si, active) = scene->ray_intersect(ray, active);
 
             Mask escaped_medium = false;
-            Mask active_medium  = active && dr::neq(medium, nullptr);
+            Mask active_medium  = active && (medium != nullptr);
             Mask active_surface = active && si.is_valid();
 
             // handle surface interaction that exceeds the sampled position
@@ -435,7 +434,7 @@ public:
             // Continue tracing through scene if non-zero weights exist
             active &=
                 (active_medium || active_surface) &&
-                dr::any(dr::neq(unpolarized_spectrum(transmittance), 0.f));
+                dr::any(unpolarized_spectrum(transmittance) != 0.f);
 
             // If a medium transition is taking place: Update the medium pointer
             Mask has_medium_trans = active_surface && si.is_medium_transition();

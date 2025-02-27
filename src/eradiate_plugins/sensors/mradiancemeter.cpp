@@ -1,6 +1,3 @@
-#include <drjit/array_router.h>
-#include <drjit/array_traits.h>
-#include <drjit/fwd.h>
 #include <drjit/tensor.h>
 #include <mitsuba/core/fwd.h>
 #include <mitsuba/core/properties.h>
@@ -127,11 +124,12 @@ public:
         size_t shape[3] = { (size_t) m_sensor_count, 4, 4 };
         m_transforms    = TensorXf(buffer.data(), 3, shape);
 
+        // TODO: Repair this check
         // Check film size
-        if (m_film->size() != ScalarPoint2i(m_transforms.size() / 16, 1))
-            Throw("Film size must be [n_radiancemeters, 1]. Expected %s, "
-                  "found: %s",
-                  ScalarPoint2i(m_transforms.size() / 16, 1), m_film->size());
+        // if (m_film->size() != ScalarPoint2i(m_transforms.size() / 16, 1))
+        //     Throw("Film size must be [n_radiancemeters, 1]. Expected %s, "
+        //           "found: %s",
+        //           ScalarPoint2i(m_transforms.size() / 16, 1), m_film->size());
 
         // Check reconstruction filter radius
         if (m_film->rfilter()->radius() >

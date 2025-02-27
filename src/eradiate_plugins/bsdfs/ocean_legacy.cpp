@@ -177,9 +177,9 @@ public:
      * @return ScalarFloat The fractional coverage of whitecaps.
      */
     ScalarFloat eval_whitecap_coverage(const ScalarFloat &wind_speed) const {
-        return dr::clamp(m_monahan_alpha *
-                         dr::pow(wind_speed, m_monahan_lambda),
-                         0.0f, 1.0f);
+        return dr::clip(m_monahan_alpha *
+                        dr::pow(wind_speed, m_monahan_lambda),
+                        0.0f, 1.0f);
     }
 
     /**
@@ -428,7 +428,7 @@ public:
         auto outside_range = Mask(wavelength < 400.f || wavelength > 700.f);
 
         // Compute the underlight term
-        Float underlight = (1.f / (dr::sqr(n_real) + dr::sqr(n_imag))) *
+        Float underlight = (1.f / (dr::square(n_real) + dr::square(n_imag))) *
                            (m_r_omega * t_u * t_d) /
                            (1.f - m_underlight_alpha * m_r_omega);
 
@@ -695,7 +695,6 @@ public:
         // Set all the flags
         for (auto c : m_components)
             m_flags |= c;
-        dr::set_attr(this, "flags", m_flags);
     }
 
     void traverse(TraversalCallback *callback) override {
@@ -769,8 +768,9 @@ public:
                 Texture2f(TensorXf(upwelling.data(), 3, shape), m_accel,
                         m_accel, dr::FilterMode::Linear, dr::WrapMode::Clamp);
 
-            dr::eval(m_downwelling_transmittance);
-            dr::eval(m_upwelling_transmittance);
+            // TODO: Check if the following can be removed for good
+            // dr::eval(m_downwelling_transmittance);
+            // dr::eval(m_upwelling_transmittance);
         }
 
         // Update other useful values
@@ -827,14 +827,14 @@ public:
         uv.y() = uv.y() -
                  (1.f * dr::floor(uv.y() / 1.f)); // equivalent to uv.y % 1.f
 
-        m_downwelling_transmittance.eval(uv, &t_d);
+        m_downwelling_transmittance.template eval<Float>(uv, &t_d);
 
         uv.x() = (dr::acos(wo.z()) * (dr::InvPi<Float> * 2.));
         uv.y() = dr::atan2(wi.y(), wi.x()) * dr::InvTwoPi<Float>;
         uv.y() = uv.y() -
                  (1.f * dr::floor(uv.y() / 1.f)); // equivalent to uv.y % 1.f
 
-        m_upwelling_transmittance.eval(uv, &t_u);
+        m_upwelling_transmittance.template eval<Float>(uv, &t_u);
 
         return m_ocean_utils.eval_underlight(m_wavelength, m_n_real, m_n_imag,
                                              t_d, t_u);

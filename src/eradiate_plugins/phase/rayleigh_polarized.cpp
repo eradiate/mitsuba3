@@ -64,9 +64,9 @@ public:
                             r2 = (1.f + rho) / (1.f - rho),
                             r3 = (1.f - 2.f * rho) / (1.f - rho);
 
-        UnpolarizedSpectrum a = r2 + dr::sqr(cos_theta),
-                            b = dr::sqr(cos_theta) + 1.f,
-                            c = dr::sqr(cos_theta) - 1.f,
+        UnpolarizedSpectrum a = r2 + dr::square(cos_theta),
+                            b = dr::square(cos_theta) + 1.f,
+                            c = dr::square(cos_theta) - 1.f,
                             d = 2.f * cos_theta;
 
         return UnpolarizedSpectrum(3.f / 16.f) * dr::InvPi<UnpolarizedSpectrum> * r1 * MuellerMatrix<UnpolarizedSpectrum>(
@@ -79,7 +79,7 @@ public:
 
     MI_INLINE Float eval_rayleigh_pdf(Float cos_theta) const {
         // TODO: Check vs Frisvad (2011)
-        return (3.f / 16.f) * dr::InvPi<Float> * (1.f + dr::sqr(cos_theta));
+        return (3.f / 16.f) * dr::InvPi<Float> * (1.f + dr::square(cos_theta));
     }
 
     MI_INLINE Spectrum eval_rayleigh(const PhaseFunctionContext &ctx,
@@ -87,7 +87,7 @@ public:
                                      const Vector3f &wo,
                                      Float cos_theta) const {
         Spectrum phase_val;
-        UnpolarizedSpectrum rho = m_depolarization->eval(mei); 
+        UnpolarizedSpectrum rho = m_depolarization->eval(mei);
 
         if constexpr (is_polarized_v<Spectrum>) {
             // We first evaluate the Rayleigh phase matrix
@@ -122,7 +122,7 @@ public:
                      r2  = (1.f + rho) / (1.f - rho);
 
             phase_val = (3.f / 16.f) * dr::InvPi<Float> * r1 *
-                        (r2 + dr::sqr(cos_theta));
+                        (r2 + dr::square(cos_theta));
         }
 
         return phase_val;
@@ -135,11 +135,11 @@ public:
         MI_MASKED_FUNCTION(ProfilerPhase::PhaseFunctionSample, active);
 
         Float z                 = 2.f * (2.f * sample.x() - 1.f);
-        Float tmp               = dr::sqrt(dr::sqr(z) + 1.f);
+        Float tmp               = dr::sqrt(dr::square(z) + 1.f);
         Float A                 = dr::cbrt(z + tmp);
         Float B                 = dr::cbrt(z - tmp);
         Float cos_theta         = A + B; /* cos_theta in physics convention */
-        Float sin_theta         = dr::safe_sqrt(1.0f - dr::sqr(cos_theta));
+        Float sin_theta         = dr::safe_sqrt(1.0f - dr::square(cos_theta));
         auto [sin_phi, cos_phi] = dr::sincos(dr::TwoPi<Float> * sample.y());
 
         /* If θ is the scattering angle in physics convention, and θ'

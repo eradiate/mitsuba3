@@ -39,7 +39,7 @@ Oceanic reflection model (:monosp:`ocean-mishchenko`)
  * - ext_ior
    - |spectrum| or |texture|
    - Exterior index of refraction specified numerically or using a known
-     material name. Note that the complex component is assumed to be 0 
+     material name. Note that the complex component is assumed to be 0
      (Default: 1.000277).
 
  * - shininess
@@ -56,7 +56,7 @@ Oceanic reflection model (:monosp:`ocean-mishchenko`)
 This plugin implements the polarized oceanic reflection model originally
 implemented by :cite:`Mishchenko1997AerosolRetrievalPolarization`. This model
 focuses on the sunglint reflectance, which follows the Cox and Munk surface
-slope probability distribution. 
+slope probability distribution.
 
 Note that this material is one-sided---that is, observed from the
 back side, it will be completely black. If this is undesirable,
@@ -122,7 +122,6 @@ public:
         // Set all the flags
         for (auto c : m_components)
             m_flags |= c;
-        dr::set_attr(this, "flags", m_flags);
     }
 
     void traverse(TraversalCallback *callback) override {
@@ -187,7 +186,7 @@ public:
 
         Mask shadowing  = m_shadowing & active;
         Complex2u n_air(m_ext_eta->eval(si, active), 0.);
-        Complex2u n_water(m_eta->eval(si, active), 
+        Complex2u n_water(m_eta->eval(si, active),
                           m_k->eval(si, active));
 
         // `TransportMode` has two states:
@@ -205,9 +204,9 @@ public:
             /* The Stokes reference frame vector of this matrix lies in the
             meridian plane spanned by wi and n. */
             Vector3f n(0, 0, 1);
-            Vector3f p_axis_in  = 
+            Vector3f p_axis_in  =
                 dr::normalize(dr::cross(dr::normalize(dr::cross(n,-wo_hat)),-wo_hat));
-            Vector3f p_axis_out = 
+            Vector3f p_axis_out =
                 dr::normalize(dr::cross(dr::normalize(dr::cross(n,wi_hat)),wi_hat));
 
             dr::masked(p_axis_in, dr::any(dr::isnan(p_axis_in))) =
@@ -250,7 +249,7 @@ public:
 
         Mask shadowing  = m_shadowing & active;
         Complex2u n_air(m_ext_eta->eval(si, active), 0.);
-        Complex2u n_water(m_eta->eval(si, active), 
+        Complex2u n_water(m_eta->eval(si, active),
                           m_k->eval(si, active));
 
         // `TransportMode` has two states:
@@ -270,14 +269,14 @@ public:
 
             /* The Stokes reference frame vector of this matrix lies in the
                scattering plane spanned by wi and wo. */
-            Vector3f p_axis_in  = 
+            Vector3f p_axis_in  =
                 dr::normalize(dr::cross(dr::normalize(dr::cross(n,-wo_hat)),-wo_hat));
-            Vector3f p_axis_out = 
+            Vector3f p_axis_out =
                 dr::normalize(dr::cross(dr::normalize(dr::cross(n,wi_hat)),wi_hat));
 
-            dr::masked(p_axis_in, dr::any(dr::isnan(p_axis_in)))   = 
+            dr::masked(p_axis_in, dr::any(dr::isnan(p_axis_in)))   =
                 Vector3f(0.f, 1.f, 0.f);
-            dr::masked(p_axis_out, dr::any(dr::isnan(p_axis_out))) = 
+            dr::masked(p_axis_out, dr::any(dr::isnan(p_axis_out))) =
                 Vector3f(0.f, 1.f, 0.f);
 
             // Rotate in/out reference vector of `value` s.t. it aligns with the
@@ -305,7 +304,7 @@ public:
         // Check if the normal has only zeros. If this is the case, use a
         // default normal
         Vector3f normal   = si.n;
-        Mask degen_normal = dr::all(dr::eq(normal, Vector3f(0.f)));
+        Mask degen_normal = dr::all(normal == Vector3f(0.f));
         dr::masked(normal, degen_normal) = Vector3f(0.f, 0.f, 1.f);
 
         Vector3f half    = dr::normalize(si.wi + wo);
@@ -343,7 +342,7 @@ public:
      * @return Ocean BPDF as a mueller matrix.
      */
     MuellerMatrix<UnpolarizedSpectrum> eval_mishchenko(
-        const Complex2u &n_ext, const Complex2u &n_water, 
+        const Complex2u &n_ext, const Complex2u &n_water,
         Vector3f wi, Vector3f wo,
         const Float sigma2, Mask shadowing
     ) const {
@@ -368,7 +367,7 @@ public:
         // Slope probability distribution (Cox and Munk, 1955)
         Float coeff =
             1.f / (dr::pow(k_d.z(), 4.f) * 4.f * mu_i * mu_o * 2.f * sigma2);
-        const Float exp = dr::exp(-(k_d.x() * k_d.x() + k_d.y() * k_d.y()) 
+        const Float exp = dr::exp(-(k_d.x() * k_d.x() + k_d.y() * k_d.y())
                                   / (k_d.z() * k_d.z() * 2.f * sigma2));
         coeff *= exp * (k_d_norm2 * k_d_norm2);
 
@@ -392,11 +391,11 @@ public:
      */
     Float gamma_shadowing(const Float mu, const Float sigma2) const {
         Float cot = mu / dr::sqrt(1.f - mu * mu);
-        Float result = 
+        Float result =
             0.5f *
-            (dr::sqrt(2.f * (1.f - mu * mu) / dr::Pi<Float>) 
-             * dr::sqrt(sigma2) / mu 
-             * dr::exp(-cot * cot / (2.f * sigma2)) 
+            (dr::sqrt(2.f * (1.f - mu * mu) / dr::Pi<Float>)
+             * dr::sqrt(sigma2) / mu
+             * dr::exp(-cot * cot / (2.f * sigma2))
              - (1.f - dr::erf(cot / dr::sqrt(2.f * sigma2))));
         return result;
     }

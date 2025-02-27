@@ -63,7 +63,7 @@ public:
         Spectrum r1 = (1.f - rho) / (1.f + rho / 2.f),
                  r2 = (1.f + rho) / (1.f - rho);
 
-        return (3.f / 16.f) * dr::InvPi<Float> * r1 * (r2 + dr::sqr(cos_theta));
+        return (3.f / 16.f) * dr::InvPi<Float> * r1 * (r2 + dr::square(cos_theta));
     }
 
     MI_INLINE Float eval_rayleigh_pdf(Float cos_theta) const {
@@ -71,9 +71,9 @@ public:
     }
 
     std::tuple<Vector3f, Spectrum, Float> sample(const PhaseFunctionContext & /* ctx */,
-                                                 const MediumInteraction3f &mi, 
+                                                 const MediumInteraction3f &mi,
                                                  Float /* sample1 */,
-                                                 const Point2f &sample, 
+                                                 const Point2f &sample,
                                                  Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::PhaseFunctionSample, active);
         UnpolarizedSpectrum rho = m_depolarization->eval(mi);

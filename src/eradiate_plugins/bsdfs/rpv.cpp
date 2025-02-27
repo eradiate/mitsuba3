@@ -87,7 +87,6 @@ public:
         m_k = props.texture<Texture>("k", 0.1f);
         m_rho_c = props.texture<Texture>("rho_c", m_rho_0);
         m_flags = BSDFFlags::GlossyReflection | BSDFFlags::FrontSide;
-        dr::set_attr(this, "flags", m_flags);
         m_components.push_back(m_flags);
     }
 
@@ -151,11 +150,11 @@ public:
         Float cos_Theta = cos_theta_i * cos_theta_o +
                           sin_theta_i * sin_theta_o * cos_phi_i_minus_phi_o;
         // The following uses cos(pi-x) = -cos(x)
-        UnpolarizedSpectrum F = (1.f - dr::sqr(g)) /
-                     dr::pow((1.f + dr::sqr(g) + 2.f * g * cos_Theta), 1.5f);
+        UnpolarizedSpectrum F = (1.f - dr::square(g)) /
+                     dr::pow((1.f + dr::square(g) + 2.f * g * cos_Theta), 1.5f);
 
         // Hot spot component
-        Float G = dr::safe_sqrt(dr::sqr(tan_theta_i) + dr::sqr(tan_theta_o) -
+        Float G = dr::safe_sqrt(dr::square(tan_theta_i) + dr::square(tan_theta_o) -
                                 2.f * tan_theta_i * tan_theta_o *
                                     cos_phi_i_minus_phi_o);
         UnpolarizedSpectrum H = 1.f + (1.f - rho_c) / (1.f + G);

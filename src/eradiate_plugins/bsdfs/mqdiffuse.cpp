@@ -88,7 +88,6 @@ public:
                       m_accel, dr::FilterMode::Linear, dr::WrapMode::Clamp);
 
         m_flags = BSDFFlags::DiffuseReflection | BSDFFlags::FrontSide;
-        dr::set_attr(this, "flags", m_flags);
         m_components.push_back(m_flags);
     }
 
@@ -103,9 +102,9 @@ public:
         p += 0.5 * pixel_size;
 
         if (m_accel)
-            m_texture.eval(p, &value, active);
+            m_texture.template eval<Float>(p, &value, active);
         else
-            m_texture.eval_nonaccel(p, &value, active);
+            m_texture.template eval_nonaccel<Float>(p, &value, active);
     }
 
     std::pair<BSDFSample3f, Spectrum> sample(const BSDFContext &ctx,
