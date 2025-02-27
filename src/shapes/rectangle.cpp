@@ -79,7 +79,7 @@ The following XML snippet showcases a simple example of a textured rectangle:
             'type': 'diffuse',
             'reflectance': {
                 'type': 'checkerboard',
-                'to_uv': mi.ScalarTransform4f.scale([5, 5, 1])
+                'to_uv': mi.ScalarTransform4f().scale([5, 5, 1])
             }
         }
 
@@ -103,10 +103,8 @@ public:
                 ScalarTransform4f::scale(ScalarVector3f(1.f, 1.f, -1.f));
 
         m_discontinuity_types = (uint32_t) DiscontinuityFlags::PerimeterType;
-        dr::set_attr(this, "silhouette_discontinuity_types", m_discontinuity_types);
 
         m_shape_type = ShapeType::Rectangle;
-        dr::set_attr(this, "shape_type", m_shape_type);
 
         update();
         initialize();
@@ -290,19 +288,19 @@ public:
         Bool done = false;
 
         // Clockwise rotation starting at bottom left corner
-        range = dr::eq(ss.uv.x(), 0.f);
+        range = (ss.uv.x() == 0.f);
         dr::masked(sample_x, range && !done) = ss.uv.y() * 0.25f + 0.00f;
         done |= range;
 
-        range = dr::eq(ss.uv.y(), 1.f);
+        range = (ss.uv.y() == 1.f);
         dr::masked(sample_x, range && !done) = ss.uv.x() * 0.25f + 0.25f;
         done |= range;
 
-        range = dr::eq(ss.uv.x(), 1.f);
+        range = (ss.uv.x() == 1.f);
         dr::masked(sample_x, range && !done) = (1.f - ss.uv.y()) * 0.25f + 0.50f;
         done |= range;
 
-        range = dr::eq(ss.uv.y(), 0.f);
+        range = (ss.uv.y() == 0.f);
         dr::masked(sample_x, range && !done) = (1.f - ss.uv.x()) * 0.25f + 0.75f;
 
         Point2f sample_yz = warp::uniform_sphere_to_square(ss.d);
@@ -393,7 +391,7 @@ public:
 
     std::tuple<DynamicBuffer<UInt32>, DynamicBuffer<Float>>
     precompute_silhouette(const ScalarPoint3f & /*viewpoint*/) const override {
-        DynamicBuffer<UInt32> indices(DiscontinuityFlags::PerimeterType);
+        DynamicBuffer<UInt32> indices((uint32_t)DiscontinuityFlags::PerimeterType);
         DynamicBuffer<Float> weights(1.f);
 
         return {indices, weights};

@@ -112,7 +112,6 @@ public:
 
     MeasuredPolarized(const Properties &props) : Base(props) {
         m_flags = BSDFFlags::GlossyReflection | BSDFFlags::FrontSide;
-        dr::set_attr(this, "flags", m_flags);
         m_components.push_back(m_flags);
 
         m_alpha_sample = props.get<ScalarFloat>("alpha_sample", 0.1f);
@@ -259,7 +258,7 @@ public:
                 for (int i = 0; i < 4; ++i) {
                     for (int j = 0; j < 4; ++j) {
                         UnpolarizedSpectrum tmp(0.f);
-                        for (size_t k = 0; k < dr::array_size_v<UnpolarizedSpectrum>; ++k) {
+                        for (size_t k = 0; k < dr::size_v<UnpolarizedSpectrum>; ++k) {
                             Float params[4] = {
                                 phi_d, theta_d, theta_h,
                                 si.wavelengths[k]
@@ -299,7 +298,7 @@ public:
                                                    wi_hat, xi_hat, mueller::stokes_basis(wi_hat));
         } else {
             if (m_wavelength == -1.f) {
-                for (size_t k = 0; k < dr::array_size_v<UnpolarizedSpectrum>; ++k) {
+                for (size_t k = 0; k < dr::size_v<UnpolarizedSpectrum>; ++k) {
                     Float params[4] = {
                         phi_d, theta_d, theta_h,
                         si.wavelengths[k]
@@ -385,8 +384,8 @@ private:
               th = dr::safe_acos(dr::dot(n, h));
 
         Vector3 i_prj = dr::normalize(i - dr::dot(i, h)*h);
-        Value cos_phi_d = dr::clamp(dr::dot(t, i_prj), -1.f, 1.f),
-              sin_phi_d = dr::clamp(dr::dot(b, i_prj), -1.f, 1.f);
+        Value cos_phi_d = dr::clip(dr::dot(t, i_prj), -1.f, 1.f),
+              sin_phi_d = dr::clip(dr::dot(b, i_prj), -1.f, 1.f);
 
         Value pd = dr::atan2(sin_phi_d, cos_phi_d);
 

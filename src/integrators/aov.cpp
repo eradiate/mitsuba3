@@ -222,7 +222,7 @@ public:
                 static_assert(is_spectral_v<Spectrum>);
                 /// Note: this assumes that sensor used sample_rgb_spectrum() to generate 'ray.wavelengths'
                 auto pdf = pdf_rgb_spectrum(ray.wavelengths);
-                spec_u *= dr::select(dr::neq(pdf, 0.f), dr::rcp(pdf), 0.f);
+                spec_u *= dr::select(pdf != 0.f, dr::rcp(pdf), 0.f);
                 return spectrum_to_srgb(spec_u, ray.wavelengths, active);
             }
         };
@@ -232,7 +232,7 @@ public:
         std::vector<ref<Shape>> shapes = scene->shapes();
         size_t counter = 1; // 0 reserved for background
         for (const ref<Shape>& shape: shapes)
-            shape_to_idx[shape.get()] = counter++;
+            shape_to_idx[shape.get()] = (uint32_t) counter++;
 
         // We want to pack the channels such that base_channels and inner-integrator
         // RGBA channels are contiguous
@@ -324,7 +324,7 @@ public:
                         if (it == shape_to_idx.end())
                             *aovs++ = 0;
                         else
-                            *aovs++ = it->second;
+                            *aovs++ = Float(it->second);
                     } else {
                         *aovs++ = Float(dr::reinterpret_array<UInt32>(si.shape));
                     }
@@ -401,9 +401,12 @@ public:
 
             // Perform an AD traversal of all registered AD variables that
             // influence 'aovs_image' in a differentiable manner
-            dr::forward_to(aovs_image.array());
-
-            aovs_grad = TensorXf(dr::grad(aovs_image.array()), 3, aovs_image.shape().data());
+            if (dr::grad_enabled(aovs_image.array())) {
+                dr::forward_to(aovs_image.array(), (uint32_t) dr::ADFlag::ClearInterior);
+                aovs_grad = TensorXf(dr::grad(aovs_image.array()), 3, aovs_image.shape().data());
+            } else {
+                aovs_grad = TensorXf(dr::zeros<Float>(aovs_image.array().size()), 3, aovs_image.shape().data());
+            }
         }
 
         // Let inner integrators handle forward differentiation for radiance
@@ -432,7 +435,7 @@ public:
             size_t num_aovs = m_aov_names.size() - m_integrator_aovs_count;
             aovs_image = get_channels_slice(aovs_image, aovs_image.shape(2) - num_aovs, num_aovs);
 
-            dr::backward_from((aovs_image * aovs_grad).array());
+            dr::backward_from((aovs_image * aovs_grad).array(), (uint32_t) dr::ADFlag::ClearInterior);
         }
 
         // Let inner integrators handle backwards differentiation for radiance
@@ -474,27 +477,27 @@ protected:
         using Array = typename TensorXf::Array;
 
         size_t slice_shape[] = { src.shape(0), src.shape(1), num_channels };
-        uint32_t slice_flat = slice_shape[0] * slice_shape[1] * slice_shape[2];
+        uint32_t slice_flat = (uint32_t) (slice_shape[0] * slice_shape[1] * slice_shape[2]);
 
         DynamicBuffer<UInt32> idx = dr::arange<DynamicBuffer<UInt32>>(slice_flat);
         DynamicBuffer<UInt32> pixel_idx = idx / num_channels;
         DynamicBuffer<UInt32> channel_idx = dr::fmadd(pixel_idx, uint32_t(-(int)num_channels), idx)
             + channel_offset;
 
-        auto values_idx = dr::fmadd(pixel_idx, src.shape(2), channel_idx);
+        DynamicBuffer<UInt32> values_idx = dr::fmadd(pixel_idx, src.shape(2), channel_idx);
         return TensorXf(dr::gather<Array>(src.array(), values_idx), 3, slice_shape);
     }
 
     void set_channels_slice(const TensorXf& src, TensorXf& dst, size_t dst_channel_offset) const {
         auto* src_shape = src.shape().data();
-        uint32_t src_flat = src_shape[0] * src_shape[1] * src_shape[2];
+        uint32_t src_flat = (uint32_t) (src_shape[0] * src_shape[1] * src_shape[2]);
 
         DynamicBuffer<UInt32> idx = dr::arange<DynamicBuffer<UInt32>>(src_flat);
         DynamicBuffer<UInt32> pixel_idx = idx / src_shape[2];
         DynamicBuffer<UInt32> dst_channel_idx = dr::fmadd(pixel_idx, uint32_t(-(int)src_shape[2]), idx)
             + dst_channel_offset;
 
-        uint32_t num_dst_channels = dst.shape(2);
+        uint32_t num_dst_channels = (uint32_t) dst.shape(2);
         DynamicBuffer<UInt32> dst_values_idx = dr::fmadd(pixel_idx, num_dst_channels, dst_channel_idx);
 
         dr::scatter(
@@ -524,7 +527,7 @@ protected:
         uint32_t channel_offset = 0;
         for (const auto& image : inner_images) {
             set_channels_slice(image, combined_image, channel_offset);
-            channel_offset += image.shape(2);
+            channel_offset += (uint32_t)image.shape(2);
         }
 
         // Load aovs image into combined
