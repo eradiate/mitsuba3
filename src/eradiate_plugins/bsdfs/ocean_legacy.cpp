@@ -491,10 +491,10 @@ private:
         // Backscattering coefficient
         ScalarFloat molecular_scatter_coeff =
             m_ocean_props.molecular_scatter_coeff_6s(wavelength);
-        ScalarFloat scattering_coeff = 0.30f * dr::pow(pigmentation, 0.62);
+        ScalarFloat scattering_coeff = .3f * dr::pow(pigmentation, .62f);
         ScalarFloat backscatter_ratio =
-            0.002f +
-            0.02f * (0.5f - 0.25f * pigment_log) * (550.f / wavelength);
+            .002f +
+            .02f * (0.5f - 0.25f * pigment_log) * (550.f / wavelength);
         ScalarFloat backscatter_coeff = 0.5f * molecular_scatter_coeff +
                                         scattering_coeff * backscatter_ratio;
 
@@ -667,7 +667,7 @@ public:
         // Retrieve parameters
         m_wavelength     = props.get<ScalarFloat>("wavelength");
         m_wind_speed     = props.get<ScalarFloat>("wind_speed", 0.1f);
-        m_wind_direction = props.get<ScalarFloat>("wind_direction", 0.);
+        m_wind_direction = props.get<ScalarFloat>("wind_direction", 0.f);
         m_chlorinity     = props.get<ScalarFloat>("chlorinity", 19.f);
         m_pigmentation   = props.get<ScalarFloat>("pigmentation", 0.3f);
         m_shininess      = props.get<ScalarFloat>("shininess", 50.f);
@@ -829,7 +829,7 @@ public:
 
         m_downwelling_transmittance.template eval<Float>(uv, &t_d);
 
-        uv.x() = (dr::acos(wo.z()) * (dr::InvPi<Float> * 2.));
+        uv.x() = (dr::acos(wo.z()) * (dr::InvPi<Float> * 2.f));
         uv.y() = dr::atan2(wi.y(), wi.x()) * dr::InvTwoPi<Float>;
         uv.y() = uv.y() -
                  (1.f * dr::floor(uv.y() / 1.f)); // equivalent to uv.y % 1.f
@@ -1029,7 +1029,7 @@ public:
         // Check if the normal has only zeros. If this is the case, use a
         // default normal
         Vector3f normal   = si.n;
-        Mask degen_normal = dr::all(dr::eq(normal, Vector3f(0.f)));
+        Mask degen_normal = dr::all(normal == Vector3f(0.f));
         dr::masked(normal, degen_normal) = Vector3f(0.f, 0.f, 1.f);
 
         Vector3f half    = dr::normalize(si.wi + wo);
