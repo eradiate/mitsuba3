@@ -4,6 +4,8 @@
 #include <mitsuba/render/bsdf.h>
 #include <mitsuba/render/texture.h>
 
+#include <drjit/tensor.h>
+
 NAMESPACE_BEGIN(mitsuba)
 
 /**!
@@ -66,8 +68,7 @@ public:
         // Initialize vectorized call dispatch table
         m_nested_bsdf_dr = dr::load<DynamicBuffer<BSDFPtr>>(
             m_nested_bsdf.data(), m_nested_bsdf.size());
-        // TODO: Check if the following can be removed for good
-        // dr::eval(m_nested_bsdf_dr);
+        dr::eval(m_nested_bsdf_dr);
 
         // Set flags
         m_components.clear();

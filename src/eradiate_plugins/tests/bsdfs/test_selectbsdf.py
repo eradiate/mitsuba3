@@ -45,12 +45,12 @@ def test02_eval_scalar(variant_scalar_rgb):
         values.append(b.eval(ctx, si, wo, True))
 
     expected = [
-        np.array(colors[name]) / np.pi for name in ["red", "green", "blue", "white"]
+        mi.Color3f(colors[name]) / dr.pi for name in ["red", "green", "blue", "white"]
     ]
     assert dr.allclose(values, expected)
 
 
-def test03_eval_scalar(variants_vec_backends_once_rgb):
+def test03_eval_vec(variants_vec_backends_once_rgb):
     b = mi.load_dict(bsdf)
     si = dr.zeros(mi.SurfaceInteraction3f)
     si.t = [0.0] * 4
@@ -62,7 +62,13 @@ def test03_eval_scalar(variants_vec_backends_once_rgb):
 
     values = b.eval(ctx, si, wo, True)
 
-    expected = np.array(
-        [np.array(colors[name]) / np.pi for name in ["red", "green", "blue", "white"]]
+    expected = (
+        mi.Color3f(
+            *[
+                [colors[name][i] for name in ["red", "green", "blue", "white"]]
+                for i in range(3)
+            ]
+        )
+        / dr.pi
     )
     assert dr.allclose(values, expected)
