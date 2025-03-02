@@ -1,6 +1,3 @@
-#include <array>
-#include <drjit/dynamic.h>
-#include <drjit/texture.h>
 #include <mitsuba/core/distr_1d.h>
 #include <mitsuba/core/properties.h>
 #include <mitsuba/core/quad.h>
@@ -10,7 +7,10 @@
 #include <mitsuba/render/bsdf.h>
 #include <mitsuba/render/texture.h>
 #include <mitsuba/eradiate/oceanprops.h>
-#include <tuple>
+
+#include <drjit/dynamic.h>
+#include <drjit/tensor.h>
+#include <drjit/texture.h>
 
 // Transmittance angular resolution
 // i.e. texture resolution
@@ -768,9 +768,8 @@ public:
                 Texture2f(TensorXf(upwelling.data(), 3, shape), m_accel,
                         m_accel, dr::FilterMode::Linear, dr::WrapMode::Clamp);
 
-            // TODO: Check if the following can be removed for good
-            // dr::eval(m_downwelling_transmittance);
-            // dr::eval(m_upwelling_transmittance);
+            dr::eval(m_downwelling_transmittance);
+            dr::eval(m_upwelling_transmittance);
         }
 
         // Update other useful values
