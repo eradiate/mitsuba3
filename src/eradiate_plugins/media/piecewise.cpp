@@ -165,10 +165,10 @@ public:
     PiecewiseMedium(const Properties &props) : Base(props) {
 
         m_is_homogeneous = false;
-        m_albedo         = props.volume<Volume>("albedo", 0.75f);
+        m_albedo         = props.volume<Volume>("albedo", .75f);
         m_sigmat         = props.volume<Volume>("sigma_t", 1.f);
 
-        m_scale = props.get<ScalarFloat>("scale", 1.0f);
+        m_scale = props.get<ScalarFloat>("scale", 1.f);
         m_has_spectral_extinction =
             props.get<bool>("has_spectral_extinction", true);
 
@@ -446,7 +446,7 @@ public:
 
     void precompute_optical_thickness() {
 
-        static constexpr size_t SpectralSize = dr::array_size_v<UnpolarizedSpectrum>;
+        static constexpr size_t SpectralSize = dr::size_v<UnpolarizedSpectrum>;
         using ScalarUnpolarized = dr::Array<dr::scalar_t<UnpolarizedSpectrum>, SpectralSize>;
 
         // Check that the first two dimensions are equal to 1 and that z is one

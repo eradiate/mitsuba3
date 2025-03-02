@@ -114,7 +114,7 @@ public:
 
         UInt32 channel = 0;
         if (is_rgb_v<Spectrum>) {
-            uint32_t n_channels = (uint32_t) dr::array_size_v<Spectrum>;
+            uint32_t n_channels = (uint32_t) dr::size_v<Spectrum>;
             channel             = (UInt32) dr::minimum(
                 sampler->next_1d(active) * n_channels, n_channels - 1);
         }
