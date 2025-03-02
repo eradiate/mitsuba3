@@ -65,10 +65,7 @@ def test_eval_pdf_vector(variant_llvm_ad_rgb, r, t, wi):
     wo = sph_to_dir(theta_o, phi_o)
 
     # Evaluate BSDF
-    is_reflect = dr.eq(
-        dr.sign(dr.dot(wo, si.n)),
-        dr.sign(dr.dot(si.wi, si.n)),
-    )
+    is_reflect = dr.sign(dr.dot(wo, si.n)) == dr.sign(dr.dot(si.wi, si.n))
     v_eval = bsdf.eval(ctx, si, wo=wo)
     eval_expected = dr.select(
         is_reflect,

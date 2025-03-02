@@ -148,7 +148,7 @@ public:
             // If transmission is activated, compute transmission for relevant
             // directions
             auto is_transmit =
-                Mask(dr::sign(cos_theta_i) == dr::sign(cos_theta_o)) && active;
+                Mask(dr::sign(cos_theta_i) != dr::sign(cos_theta_o)) && active;
             result[is_transmit] = m_transmittance->eval(si, is_transmit);
         }
 
@@ -197,7 +197,7 @@ public:
 
         if (has_transmit) {
             auto is_transmit =
-                Mask(dr::sign(cos_theta_i) == dr::sign(cos_theta_o)) && active;
+                Mask(dr::sign(cos_theta_i) != dr::sign(cos_theta_o)) && active;
             dr::masked(result, is_transmit) *= transmission_sampling_weight;
         }
 
