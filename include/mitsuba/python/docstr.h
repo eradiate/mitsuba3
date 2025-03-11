@@ -4861,6 +4861,8 @@ Normals" by Eric Heitz)doc";
 
 static const char *__doc_mitsuba_MicrofacetDistribution_G = R"doc(Smith's separable shadowing-masking approximation)doc";
 
+static const char *__doc_mitsuba_MicrofacetDistribution_G_height_correlated = R"doc(Smith's height-correlated shadowing-masking approximation)doc";
+
 static const char *__doc_mitsuba_MicrofacetDistribution_MicrofacetDistribution =
 R"doc(Create an isotropic microfacet distribution of the specified type
 
@@ -4945,6 +4947,15 @@ static const char *__doc_mitsuba_MicrofacetDistribution_scale_alpha = R"doc(Scal
 
 static const char *__doc_mitsuba_MicrofacetDistribution_smith_g1 =
 R"doc(Smith's shadowing-masking function for a single direction
+
+Parameter ``v``:
+    An arbitrary direction
+
+Parameter ``m``:
+    The microfacet normal)doc";
+
+static const char *__doc_mitsuba_MicrofacetDistribution_smith_lambda =
+R"doc(Smith's shadowing-masking lambda function for a single direction
 
 Parameter ``v``:
     An arbitrary direction
