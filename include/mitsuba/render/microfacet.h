@@ -327,7 +327,19 @@ public:
 
     /// Smith's separable shadowing-masking approximation
     Float G(const Vector3f &wi, const Vector3f &wo, const Vector3f &m) const {
-        return smith_g1(wi, m) * smith_g1(wo, m);
+        return smith_g1(wi, m) * smith_g1(wo, m);;
+    }
+
+    /// Smith's height-correlated shadowing-masking approximation
+    Float G_height_correlated(const Vector3f &wi, const Vector3f &wo, const Vector3f &m) const {
+        Float result =  dr::rcp(1.f+smith_lambda(wi,m)+smith_lambda(wo,m));
+
+        /* Ensure consistent orientation (can't see the back
+           of the microfacet from the front and vice versa) */
+        dr::masked(result, dr::dot(wi, m) * Frame3f::cos_theta(wi) <= 0.f) = 0.f;
+        dr::masked(result, dr::dot(wo, m) * Frame3f::cos_theta(wo) <= 0.f) = 0.f;
+
+        return result;
     }
 
     /**
@@ -360,6 +372,37 @@ public:
         /* Ensure consistent orientation (can't see the back
            of the microfacet from the front and vice versa) */
         dr::masked(result, dr::dot(v, m) * Frame3f::cos_theta(v) <= 0.f) = 0.f;
+
+        return result;
+    }
+
+
+    /**
+     * \brief Smith's shadowing-masking lambda function for a single direction
+     *
+     * \param v
+     *     An arbitrary direction
+     * \param m
+     *     The microfacet normal
+     */
+    Float smith_lambda(const Vector3f &v, const Vector3f &m) const {
+        Float xy_alpha_2 = dr::sqr(m_alpha_u * v.x()) + dr::sqr(m_alpha_v * v.y()),
+              tan_theta_alpha_2 = xy_alpha_2 / dr::sqr(v.z()),
+              result;
+
+        if (m_type == MicrofacetType::Beckmann) {
+            Float a = dr::rsqrt(tan_theta_alpha_2), a_sqr = dr::sqr(a);
+            /* Use a fast and accurate (<0.35% rel. error) rational
+               approximation to the shadowing-masking function */
+            result = dr::select(a >= 1.6f, 0.f,
+                                (1.f - 1.259f * a + 0.396f * a_sqr) /
+                                    (3.535f * a + 2.181f * a_sqr));
+        } else {
+            result = 0.5f * (1.f + dr::sqrt(1.f + tan_theta_alpha_2));
+        }
+
+        // Perpendicular incidence -- no shadowing/masking
+        dr::masked(result, dr::eq(xy_alpha_2, 0.f)) = 0.f;
 
         return result;
     }

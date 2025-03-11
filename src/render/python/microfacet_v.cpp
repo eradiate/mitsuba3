@@ -32,10 +32,14 @@ MI_PY_EXPORT(MicrofacetDistribution) {
             D(MicrofacetDistribution, pdf))
         .def("smith_g1", &MicrofacetDistribution::smith_g1, "v"_a, "m"_a,
             D(MicrofacetDistribution, smith_g1))
+        .def("smith_lambda", &MicrofacetDistribution::smith_lambda, "v"_a, "m"_a,
+            D(MicrofacetDistribution, smith_lambda))
         .def("sample", &MicrofacetDistribution::sample, "wi"_a, "sample"_a,
             D(MicrofacetDistribution, sample))
         .def("G", &MicrofacetDistribution::G, "wi"_a, "wo"_a, "m"_a,
             D(MicrofacetDistribution, G))
+        .def("G_height_correlated", &MicrofacetDistribution::G_height_correlated, "wi"_a, "wo"_a, "m"_a,
+            D(MicrofacetDistribution, G_height_correlated))
         .def("sample_visible_11", &MicrofacetDistribution::sample_visible_11,
             "cos_theta_i"_a, "sample"_a, D(MicrofacetDistribution, sample_visible_11))
         .def_repr(MicrofacetDistribution);
