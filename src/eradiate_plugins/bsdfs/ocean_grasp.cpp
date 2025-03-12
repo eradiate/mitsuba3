@@ -169,7 +169,7 @@ public:
      * @return Float Root Mean Square Slope.
      */
     Float eval_sigma(Float wind_speed) const {
-        return dr::sqrt(0.5f * cox_munk_MMS(wind_speed));
+        return dr::sqrt(0.5f * cox_munk_msslope_squared(wind_speed));
     }
 
     /**

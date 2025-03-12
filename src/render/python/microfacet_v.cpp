@@ -10,9 +10,9 @@ MI_PY_EXPORT(MicrofacetDistribution) {
         .def(py::init([](MicrofacetType t, ScalarFloat alpha, bool sv) {
             return MicrofacetDistribution(t, alpha, sv);
         }), "type"_a, "alpha"_a, "sample_visible"_a = true)
-        .def(py::init([](MicrofacetType t, ScalarFloat alpha_u, ScalarFloat alpha_v, bool sv) {
-            return MicrofacetDistribution(t, alpha_u, alpha_v, sv);
-        }), "type"_a, "alpha_u"_a, "alpha_v"_a, "sample_visible"_a = true)
+        .def(py::init([](MicrofacetType t, ScalarFloat alpha_u, ScalarFloat alpha_v, bool sv, ScalarFloat angle) {
+            return MicrofacetDistribution(t, alpha_u, alpha_v, sv, angle);
+        }), "type"_a, "alpha_u"_a, "alpha_v"_a, "sample_visible"_a = true, "angle"_a = 0.f)
         .def(py::init<MicrofacetType, const Float &, bool>(), "type"_a, "alpha"_a,
             "sample_visible"_a = true)
         .def(py::init<MicrofacetType, const Float &, const Float &, bool>(), "type"_a, "alpha_u"_a,
@@ -22,6 +22,7 @@ MI_PY_EXPORT(MicrofacetDistribution) {
         .def_method(MicrofacetDistribution, alpha)
         .def_method(MicrofacetDistribution, alpha_u)
         .def_method(MicrofacetDistribution, alpha_v)
+        .def_method(MicrofacetDistribution, angle)
         .def_method(MicrofacetDistribution, sample_visible)
         .def_method(MicrofacetDistribution, is_anisotropic)
         .def_method(MicrofacetDistribution, is_isotropic)
@@ -32,7 +33,7 @@ MI_PY_EXPORT(MicrofacetDistribution) {
             D(MicrofacetDistribution, pdf))
         .def("smith_g1", &MicrofacetDistribution::smith_g1, "v"_a, "m"_a,
             D(MicrofacetDistribution, smith_g1))
-        .def("smith_lambda", &MicrofacetDistribution::smith_lambda, "v"_a, "m"_a,
+        .def("smith_lambda", &MicrofacetDistribution::smith_lambda, "v"_a,
             D(MicrofacetDistribution, smith_lambda))
         .def("sample", &MicrofacetDistribution::sample, "wi"_a, "sample"_a,
             D(MicrofacetDistribution, sample))
