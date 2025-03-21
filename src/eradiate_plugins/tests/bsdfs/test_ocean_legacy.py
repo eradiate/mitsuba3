@@ -10,17 +10,16 @@ _bsdf_dict = {
     "wind_direction": 90.,
     "chlorinity": 19,
     "pigmentation": 0.3,
-    "shininess": 10.0,
+    "shadowing": False,
 }
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("shininess", [10.0, -1.0])
-def test_chi2_oceanic(variants_vec_backends_once_rgb, shininess):
+def test_chi2_oceanic(variants_vec_backends_once_rgb):
     """
     Test the consistency of the oceanic BSDF using the chi2 test.
     """
-    sample_func, pdf_func = mi.chi2.BSDFAdapter("ocean_legacy", {**_bsdf_dict, "shininess": shininess})
+    sample_func, pdf_func = mi.chi2.BSDFAdapter("ocean_legacy", {**_bsdf_dict, "shadowing": True})
 
     chi2 = mi.chi2.ChiSquareTest(
         domain=mi.chi2.SphericalDomain(),
@@ -89,7 +88,7 @@ def test_traverse_oceanic(variants_vec_backends_once_rgb):
 
     brdf_dr = brdf.eval(ctx, si, wo)
     brdf_np = brdf_dr.numpy()[:, 0]
-    assert dr.allclose(brdf_np, ref_1500_1, 0.001, 0.0001)
+    assert dr.allclose(brdf_np*dr.pi, ref_1500_1, 0.001, 0.0001)
 
     params = mi.traverse(brdf)
 
@@ -99,5 +98,4 @@ def test_traverse_oceanic(variants_vec_backends_once_rgb):
 
     brdf_dr = brdf.eval(ctx, si, wo)
     brdf_np = brdf_dr.numpy()[:, 0]
-
-    assert dr.allclose(brdf_np, ref2_550_30, 0.001, 0.0001)
+    assert dr.allclose(brdf_np*dr.pi, ref2_550_30, 0.001, 0.0001)

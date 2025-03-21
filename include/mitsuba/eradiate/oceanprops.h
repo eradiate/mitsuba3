@@ -328,9 +328,8 @@ private:
  */
 template<typename Float>
 Float whitecap_coverage_monahan(const Float &wind_speed) {
-    //@TODO Move to preprocessor constants?
-    const dr::scalar_t<Float> m_monahan_alpha  = 2.95e-06f;
-    const dr::scalar_t<Float> m_monahan_lambda = 3.52f;
+    static constexpr dr::scalar_t<Float> m_monahan_alpha  = 2.95e-06f;
+    static constexpr dr::scalar_t<Float> m_monahan_lambda = 3.52f;
     return dr::clamp(m_monahan_alpha *
                         dr::pow(wind_speed, m_monahan_lambda),
                         0.0f, 1.0f);
@@ -558,11 +557,10 @@ MuellerMatrix<UnpolarizedSpectrum> fresnel_sunglint_polarized(
 
 /**
  * @brief Mean square slope *squared* as described by Cox and Munk (1954).
- * 
- * @param wind_speed speed of wind at sea surface (mast height).
- * @return tuple (Float, Float, Float) 
- * Respectively the cross wind, along wind, and isotropic wind 
- * mean square slope squared.
+ *
+ * @param wind_speed speed of wind at sea surface (mast height, 10 m) [m/s].
+ * @return tuple (Float, Float)
+ * Respectively the cross wind and along wind mean square slope squared.
  */
 template<typename Float>
 std::tuple<Float, Float> cox_munk_crosswind_upwind(const Float& wind_speed) {
@@ -572,9 +570,173 @@ std::tuple<Float, Float> cox_munk_crosswind_upwind(const Float& wind_speed) {
     return { sigma_cross_2, sigma_along_2 };
 }
 
+/**
+ * @brief Isotropic Mean Squared Slope *squared* as described by Cox and Munk
+ * (1954)
+ *
+ * @param wind_speed speed of wind at sea surface (mast height, 10 m) [m/s].
+ * @return Float
+ * The isotropic wind mean square slope squared
+ */
 template<typename Float>
-Float cox_munk_MMS(const Float& wind_speed) {
+Float cox_munk_msslope_squared(const Float& wind_speed) {
     return dr::fmadd(wind_speed, 0.00512f, 0.003f);
+}
+
+/**
+ * @brief Evaluates the anisotropic distribution of Cox and Munk (1954), with
+ * the Gram Charlier series expansion.
+ *
+ * @param wind_direction direction in radians, east right convention.
+ * @param wind_speed wind_speed speed of wind at sea surface (mast height, 10 m)
+ * [m/s].
+ * @param sigma_u Upwind root mean slope distribution.
+ * @param sigma_c Crosswind root mean slope distribution.
+ * @param m Half vector.
+ *
+ */
+template <typename Float>
+Float cox_munk_anisotropic_distrib(const Float &wind_direction,
+                             const Float &wind_speed, const Float &sigma_u,
+                             const Float &sigma_c, const Vector<Float, 3> &m) {
+
+    using Vector3f    = Vector<Float, 3>;
+    using ScalarFloat = dr::scalar_t<Float>;
+
+    // Distribution constants
+    static constexpr ScalarFloat c_40 = 0.40f;
+    static constexpr ScalarFloat c_22 = 0.12f;
+    static constexpr ScalarFloat c_04 = 0.23f;
+
+    // Distribution variables
+    Float c_21 = 0.01f - 0.0086f * wind_speed;
+    Float c_03 = 0.04f - 0.033f * wind_speed;
+
+    auto [s_phi, c_phi] = dr::sincos(wind_direction);
+
+    Vector3f m_p = Vector3f(c_phi * m.x() + s_phi * m.y(),
+                            -s_phi * m.x() + c_phi * m.y(), m.z());
+    m_p          = dr::normalize(m_p);
+
+    const Float xn  = m_p.x() * dr::rcp(sigma_u * m_p.z());
+    const Float xe  = m_p.y() * dr::rcp(sigma_c * m_p.z());
+    const Float xe2 = xe * xe;
+    const Float xn2 = xn * xn;
+
+    Float coef =
+        1.f - (c_21 / 2.f) * (xe2 - 1.f) * xn - (c_03 / 6.f) * (xn2 - 3.f) * xn;
+    coef = coef + (c_40 / 24.f) * (xe2 * xe2 - 6.f * xe2 + 3.f);
+    coef = coef + (c_04 / 24.f) * (xn2 * xn2 - 6.f * xn2 + 3.f);
+    coef = coef + (c_22 / 4.f) * (xe2 - 1.f) * (xn2 - 1.f);
+
+    Float prob = coef * dr::InvTwoPi<Float> * dr::rcp(sigma_u * sigma_c) *
+                 dr::exp(-(xe2 + xn2) * 0.5f);
+    return prob;
+}
+
+/**
+ * Evaluates the gram charlier coefficient for the Cox and Munk (1954) only.
+ */
+template <typename Float>
+Float cox_munk_gram_charlier_coef(const Float &wind_direction,
+                            const Float &wind_speed, const Float &sigma_u,
+                            const Float &sigma_c, const Vector<Float, 3> &m) {
+
+    using Vector3f    = Vector<Float, 3>;
+    using ScalarFloat = dr::scalar_t<Float>;
+
+    // Distribution constants
+    static ScalarFloat c_40 = 0.40f;
+    static ScalarFloat c_22 = 0.12f;
+    static ScalarFloat c_04 = 0.23f;
+
+    // Distribution variables
+    Float c_21 = 0.01f - 0.0086f * wind_speed;
+    Float c_03 = 0.04f - 0.033f * wind_speed;
+
+    auto [s_phi, c_phi] = dr::sincos(wind_direction);
+
+    Vector3f m_p = Vector3f(c_phi * m.x() + s_phi * m.y(),
+                            -s_phi * m.x() + c_phi * m.y(), m.z());
+    m_p          = dr::normalize(m_p);
+
+    const Float xn = m_p.x() / (sigma_u * m_p.z());
+    const Float xe = m_p.y() / (sigma_c * m_p.z());
+
+    const Float xe2 = xe * xe;
+    const Float xn2 = xn * xn;
+
+    Float coef =
+        1.f - (c_21 / 2.f) * (xe2 - 1.f) * xn - (c_03 / 6.f) * (xn2 - 3.f) * xn;
+    coef = coef + (c_40 / 24.f) * (xe2 * xe2 - 6.f * xe2 + 3.f);
+    coef = coef + (c_04 / 24.f) * (xn2 * xn2 - 6.f * xn2 + 3.f);
+    coef = coef + (c_22 / 4.f) * (xe2 - 1.f) * (xn2 - 1.f);
+
+    return coef;
+}
+
+/**
+ * @brief Compute the ratio of upwelling to downwelling irradiance.
+ *
+ * Computes the ratio of upwelling to downwelling irradiance at the given
+ * wavelength and pigmentation. The ratio is computed by performing an
+ * iterative computation.
+ *
+ * @param wavelength The wavelength at which to evaluate the ratio.
+ * @param pigmentation The pigmentation of the water.
+ * @return ScalarFloat The ratio of upwelling to downwelling irradiance.
+ * @note This function is only defined for wavelengths in the range [400,
+ * 700] nm.
+ */
+template <typename Float, typename Spectrum, typename ScalarFloat>
+ScalarFloat r_omega(const OceanProperties<Float, Spectrum> ocean_props,
+                    const ScalarFloat &wavelength,
+                    const ScalarFloat &pigmentation) {
+
+    ScalarFloat pigment_log = dr::log(pigmentation) / dr::log(10.f);
+
+    // Backscattering coefficient
+    ScalarFloat molecular_scatter_coeff =
+        ocean_props.molecular_scatter_coeff_6s(wavelength);
+    ScalarFloat scattering_coeff = 0.30f * dr::pow(pigmentation, 0.62);
+    ScalarFloat backscatter_ratio =
+        0.002f + 0.02f * (0.5f - 0.25f * pigment_log) * (550.f / wavelength);
+    ScalarFloat backscatter_coeff =
+        0.5f * molecular_scatter_coeff + scattering_coeff * backscatter_ratio;
+
+    // (Diffuse) attenuation coefficient
+    ScalarFloat k          = ocean_props.attn_k(wavelength);
+    ScalarFloat chi        = ocean_props.attn_chi(wavelength);
+    ScalarFloat e          = ocean_props.attn_e(wavelength);
+    ScalarFloat attn_coeff = k + chi * dr::pow(pigmentation, e);
+
+    // If any of the coefficients is zero, we return zero
+    if (backscatter_coeff == 0.f || attn_coeff == 0.f)
+        return 0.f;
+
+    // Iterative computation of the reflectance
+    ScalarFloat u       = 0.75f;
+    ScalarFloat r_omega = 0.33f * backscatter_coeff / u / attn_coeff;
+
+    bool converged = false;
+    while (!converged) {
+        // Update u
+        u = (0.9f * (1.f - r_omega)) / (1.f + 2.25f * r_omega);
+
+        // Update reflectance
+        ScalarFloat r_omega_new = 0.33f * backscatter_coeff / (u * attn_coeff);
+
+        // Create a mask that marks the converged values
+        if (dr::abs((r_omega_new - r_omega) / r_omega_new) < 0.0001f) {
+            converged = true;
+            break;
+        }
+
+        // Update reflectance ONLY for non-converged values
+        r_omega = r_omega_new;
+    }
+
+    return r_omega;
 }
 
 #endif // OCEAN_PROPS
