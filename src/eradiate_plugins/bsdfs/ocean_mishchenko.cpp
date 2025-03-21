@@ -144,7 +144,7 @@ public:
     void update() {
 
         // compute the index of refraction
-        m_sigma2 = 0.5f*cox_munk_MMS(m_wind_speed);
+        m_sigma2 = 0.5f * cox_munk_MMS(m_wind_speed);
     }
 
     std::pair<BSDFSample3f, Spectrum> sample(const BSDFContext &ctx,

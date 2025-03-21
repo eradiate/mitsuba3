@@ -311,7 +311,7 @@ public:
         Float specular_prob = eval_cox_munk(s_phi_w, c_phi_w, z_x, z_y);
         auto mask           = Mask(specular_prob < 0.f);
         specular_prob       = dr::select(mask, 0.f, specular_prob);
-        
+
         Float cos_2_chi = c_o * c_i + s_o * s_i * c_phi;
 
         cos_2_chi = dr::select(cos_2_chi > 1.f, 0.999999999f, cos_2_chi);
@@ -703,7 +703,7 @@ public:
         // m_wind_direction % 360.
         m_wind_direction = m_wind_direction - (360.f * floor(m_wind_direction / 360.f));
         // Degree to radians.
-        m_wind_direction = m_wind_direction * dr::Pi<ScalarFloat> / 180.f;
+        m_wind_direction = dr::deg_to_rad(m_wind_direction);
 
         update();
 

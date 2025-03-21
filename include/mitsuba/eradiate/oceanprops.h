@@ -329,8 +329,8 @@ private:
 template<typename Float>
 Float whitecap_coverage_monahan(const Float &wind_speed) {
     //@TODO Move to preprocessor constants?
-    const Float m_monahan_alpha  = 2.95e-06f;
-    const Float m_monahan_lambda = 3.52f;
+    const dr::scalar_t<Float> m_monahan_alpha  = 2.95e-06f;
+    const dr::scalar_t<Float> m_monahan_lambda = 3.52f;
     return dr::clamp(m_monahan_alpha *
                         dr::pow(wind_speed, m_monahan_lambda),
                         0.0f, 1.0f);
