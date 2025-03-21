@@ -116,7 +116,7 @@ public:
         m_wavelength = props.get<ScalarFloat>("wavelength");
         m_eta        = props.texture<Texture>("eta", 1.33f);
         m_k          = props.texture<Texture>("k", 0.f);
-        m_ext_eta    = props.texture<Texture>("ext_ior", 1.000277f);
+        m_ext_ior    = props.texture<Texture>("ext_ior", 1.000277f);
         m_wind_speed = props.texture<Texture>("wind_speed", 0.1f);
         m_component  = props.get<ScalarInt32>("component", 0);
         m_water_body_reflectance =
@@ -146,7 +146,7 @@ public:
                                 +ParamFlags::Differentiable);
         callback->put_object("eta", m_eta.get(), +ParamFlags::Differentiable);
         callback->put_object("k", m_k.get(), +ParamFlags::Differentiable);
-        callback->put_object("ext_ior", m_ext_eta.get(),
+        callback->put_object("ext_ior", m_ext_ior.get(),
                                 +ParamFlags::Differentiable);
         callback->put_object("water_body_reflectance",
                                 m_water_body_reflectance.get(),
@@ -169,7 +169,7 @@ public:
      * @return Float Root Mean Square Slope.
      */
     Float eval_sigma(Float wind_speed) const {
-        return dr::sqrt(0.5 * cox_munk_MMS(wind_speed));
+        return dr::sqrt(0.5f * cox_munk_MMS(wind_speed));
     }
 
     /**
@@ -209,7 +209,7 @@ public:
         Float sigma      = eval_sigma(wind_speed);
 
         // Evaluate the water and air index of refractions
-        Complex2u n_air(m_ext_eta->eval(si, active), 0.f);
+        Complex2u n_air(m_ext_ior->eval(si, active), 0.f);
         Complex2u n_water(m_eta->eval(si, active), m_k->eval(si, active));
 
         MicrofacetDistribution distr(MicrofacetType::Beckmann,
@@ -228,7 +228,7 @@ public:
         dr::masked(G, dr::dot(wi, H) * cos_theta_i <= 0.f) = 0.f;
         dr::masked(G, dr::dot(wo, H) * cos_theta_o <= 0.f) = 0.f;
 
-        Spectrum value = dr::Pi<Float> * F * D * G / (4 * cos_theta_i * cos_theta_o);
+        Spectrum value = dr::Pi<Float> * F * D * G / (4.f * cos_theta_i * cos_theta_o);
 
         return value;
     }
@@ -511,7 +511,7 @@ public:
             << std::endl
             << "  eta = " << string::indent(m_eta) << "," << std::endl
             << "  k = " << string::indent(m_k) << "," << std::endl
-            << "  ext_eta = " << string::indent(m_ext_eta) << "," << std::endl
+            << "  ext_eta = " << string::indent(m_ext_ior) << "," << std::endl
             << "]";
         return oss.str();
     }
@@ -525,11 +525,8 @@ private:
     ref<Texture> m_wind_speed;
     ref<Texture> m_eta;
     ref<Texture> m_k;
-    ref<Texture> m_ext_eta;
+    ref<Texture> m_ext_ior;
     ref<Texture> m_water_body_reflectance;
-    DynamicBuffer<Float> m_external_transmittance;
-    Float m_internal_reflectance;
-    bool m_accel;
 };
 
 MI_IMPLEMENT_CLASS_VARIANT(GRASPOceanBSDF, BSDF)
