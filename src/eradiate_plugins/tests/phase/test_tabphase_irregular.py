@@ -41,7 +41,7 @@ def test_eval_pdf(variant_scalar_rgb):
         cos_theta = np.array([np.dot(a, b) for a, b in zip(wi, wo)])
         return 0.5 / np.pi * np.interp(-cos_theta, ref_x, ref_y) / ref_integral
 
-    wi = np.array([[0, 0, -1]])
+    wi = np.array([[0, 0, -1.]])
     thetas = np.linspace(0, np.pi / 2, 16)
     phis = np.linspace(0, np.pi, 16)
     wos = np.array(
@@ -66,7 +66,7 @@ def test_eval_pdf(variant_scalar_rgb):
     )
     ctx = mi.PhaseFunctionContext(None)
     mei = mi.MediumInteraction3f()
-    mei.wi = wi
+    mei.wi = mi.Vector3f(wi.squeeze())
     tab_eval_pdf = np.zeros_like(ref_eval)
     for i, wo in enumerate(wos):
         # Not perfect: we check only the first color channel

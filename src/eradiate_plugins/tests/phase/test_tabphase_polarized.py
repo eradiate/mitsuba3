@@ -119,15 +119,13 @@ def test_eval(variant_scalar_mono_polarized):
     data_reference = np.zeros((test_res, 2 * test_res, 4, 4))
     data_tabphase = np.zeros((test_res, 2 * test_res, 4, 4))
 
-    print(f"mei.wi : {mei.wi}")
-
     for i, theta_o in enumerate(theta_os):
         for j, phi_o in enumerate(phi_os):
             wo = sph_to_dir(theta_o, phi_o)
 
             data_tabphase[i, j, :, :] = tabphase_polarized.eval_pdf(
                 mi.PhaseFunctionContext(None), mei, wo
-            )[0]
+            )[0].numpy().squeeze()
 
             phase_ref = rayleigh_scatter(np.dot(wo, -mei.wi))
 
