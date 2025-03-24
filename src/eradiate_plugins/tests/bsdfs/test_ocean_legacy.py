@@ -88,7 +88,7 @@ def test_traverse_oceanic(variants_vec_backends_once_rgb):
     brdf = mi.load_dict(_bsdf_dict)
 
     brdf_dr = brdf.eval(ctx, si, wo)
-    brdf_np = brdf_dr.numpy()[:, 0]
+    brdf_np = brdf_dr.numpy()[0, :]
     assert dr.allclose(brdf_np, ref_1500_1, 0.001, 0.0001)
 
     params = mi.traverse(brdf)
@@ -98,6 +98,6 @@ def test_traverse_oceanic(variants_vec_backends_once_rgb):
     params.update()
 
     brdf_dr = brdf.eval(ctx, si, wo)
-    brdf_np = brdf_dr.numpy()[:, 0]
+    brdf_np = brdf_dr.numpy()[0, :]
 
     assert dr.allclose(brdf_np, ref2_550_30, 0.001, 0.0001)

@@ -85,7 +85,7 @@ def test_traverse_oceanic(variant_scalar_mono_polarized):
     brdf = mi.load_dict(_bsdf_dict)
 
     brdf_dr = brdf.eval(ctx, si, wo)
-    brdf_np = brdf_dr.numpy()[0]
+    brdf_np = brdf_dr.numpy().transpose()[0]
 
     assert dr.allclose(brdf_np, ref_550_2, 0.0001, 0.00001)
 
@@ -104,6 +104,6 @@ def test_traverse_oceanic(variant_scalar_mono_polarized):
     si.wi = sph_to_eucl(dr.deg2rad(vza), dr.deg2rad(vaa))
 
     brdf_dr = brdf.eval(ctx, si, wo)
-    brdf_np = brdf_dr.numpy()[0]
+    brdf_np = brdf_dr.numpy().transpose()[0]
 
     assert dr.allclose(brdf_np, ref2_900_10, 0.001, 0.0001)
