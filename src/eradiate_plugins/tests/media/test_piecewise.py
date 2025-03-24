@@ -22,7 +22,7 @@ def create_medium_dict():
     exp_volume_grid = mi.VolumeGrid(ext_coefs)
     sigma_scale = 1.0
 
-    medium_transform = mi.ScalarTransform4f.translate(
+    medium_transform = mi.ScalarTransform4f().translate(
         [-100000 / 2, -100000 / 2, 0.0]
     ).scale([100000.0, 100000.0, 100000.0])
 

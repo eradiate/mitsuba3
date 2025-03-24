@@ -124,16 +124,70 @@ public:
         Interaction3f last_scatter_event = dr::zeros<Interaction3f>();
         Float last_scatter_direction_pdf = 1.f;
 
+
         /* Set up a Dr.Jit loop (optimizes away to a normal loop in scalar mode,
            generates wavefront or megakernel renderer based on configuration).
            Register everything that changes as part of the loop here */
-        dr::Loop<Mask> loop("Volpath integrator",
-                            /* loop state: */ active, depth, ray, throughput,
-                            result, si, mei, medium, eta, last_scatter_event,
-                            last_scatter_direction_pdf, needs_intersection,
-                            specular_chain, valid_ray, sampler);
+           struct LoopState {
+            Mask active;
+            UInt32 depth;
+            Ray3f ray;
+            Spectrum throughput;
+            Spectrum result;
+            SurfaceInteraction3f si;
+            MediumInteraction3f mei;
+            MediumPtr medium;
+            Float eta;
+            Interaction3f last_scatter_event;
+            Float last_scatter_direction_pdf;
+            Mask needs_intersection;
+            Mask specular_chain;
+            Mask valid_ray;
+            Sampler* sampler;
 
-        while (loop(active)) {
+            DRJIT_STRUCT(LoopState, active, depth, ray, throughput, result, \
+                si, mei, medium, eta, last_scatter_event, \
+                last_scatter_direction_pdf, needs_intersection, \
+                specular_chain, valid_ray, sampler)
+        } ls = {
+            active,
+            depth,
+            ray,
+            throughput,
+            result,
+            si,
+            mei,
+            medium,
+            eta,
+            last_scatter_event,
+            last_scatter_direction_pdf,
+            needs_intersection,
+            specular_chain,
+            valid_ray,
+            sampler
+        };
+
+
+        dr::tie(ls) = dr::while_loop(dr::make_tuple(ls),
+            [](const LoopState& ls) { return ls.active; },
+            [this, scene, channel](LoopState& ls) {
+
+            Mask& active = ls.active;
+            UInt32& depth = ls.depth;
+            Ray3f& ray = ls.ray;
+            Spectrum& throughput = ls.throughput;
+            Spectrum& result = ls.result;
+            SurfaceInteraction3f& si = ls.si;
+            MediumInteraction3f& mei = ls.mei;
+            MediumPtr& medium = ls.medium;
+            Float& eta = ls.eta;
+            Interaction3f& last_scatter_event = ls.last_scatter_event;
+            Float& last_scatter_direction_pdf = ls.last_scatter_direction_pdf;
+            Mask& needs_intersection = ls.needs_intersection;
+            Mask& specular_chain = ls.specular_chain;
+            Mask& valid_ray = ls.valid_ray;
+            Sampler* sampler = ls.sampler;
+
             // ----------------- Handle termination of paths ------------------
             // Russian roulette: try to keep path weights equal to one, while
             // accounting for the solid angle compression at refractive index
@@ -338,11 +392,11 @@ public:
                 Mask has_medium_trans = active_surface && si.is_medium_transition();
                 dr::masked(medium, has_medium_trans) = si.target_medium(ray.d);
             }
-
             active &= (active_surface | active_medium);
-        }
+        },
+        "Picewise volpath integrator");
 
-        return { result, valid_ray };
+        return { ls.result, ls.valid_ray };
     }
 
     /// Samples an emitter in the scene and evaluates its attenuated
@@ -376,13 +430,48 @@ public:
         Float total_dist        = 0.f;
         SurfaceInteraction3f si = dr::zeros<SurfaceInteraction3f>();
         Mask needs_intersection = true;
+        DirectionSample3f dir_sample = ds;
 
-        dr::Loop<Mask> loop("Volpath integrator emitter sampling");
-        loop.put(active, ray, total_dist, needs_intersection, medium, si,
-                 transmittance);
-        sampler->loop_put(loop);
-        loop.init();
-        while (loop(dr::detach(active))) {
+        struct LoopState {
+            Mask active;
+            Ray3f ray;
+            Float total_dist;
+            Mask needs_intersection;
+            MediumPtr medium;
+            SurfaceInteraction3f si;
+            Spectrum transmittance;
+            DirectionSample3f dir_sample;
+            Sampler* sampler;
+
+            DRJIT_STRUCT(LoopState, active, ray, total_dist, \
+                needs_intersection, medium, si, transmittance, \
+                dir_sample, sampler)
+        } ls = {
+            active,
+            ray,
+            total_dist,
+            needs_intersection,
+            medium,
+            si,
+            transmittance,
+            dir_sample,
+            sampler
+        };
+
+        dr::tie(ls) = dr::while_loop(dr::make_tuple(ls),
+            [](const LoopState& ls) { return dr::detach(ls.active); },
+            [this, scene, channel, max_dist](LoopState& ls) {
+
+            Mask& active = ls.active;
+            Ray3f& ray = ls.ray;
+            Float& total_dist = ls.total_dist;
+            Mask& needs_intersection = ls.needs_intersection;
+            MediumPtr& medium = ls.medium;
+            SurfaceInteraction3f& si = ls.si;
+            Spectrum& transmittance = ls.transmittance;
+            DirectionSample3f& dir_sample = ls.dir_sample;
+            Sampler* sampler = ls.sampler;
+
             Float remaining_dist = max_dist - total_dist;
             ray.maxt             = remaining_dist;
             active &= remaining_dist > 0.f;
@@ -441,9 +530,10 @@ public:
             if (dr::any_or<true>(has_medium_trans)) {
                 dr::masked(medium, has_medium_trans) = si.target_medium(ray.d);
             }
-        }
+        },
+        "Piecewise volpath integrator emitter sampling");
 
-        return { transmittance * emitter_val, ds };
+        return { ls.transmittance * emitter_val, dir_sample };
     }
 
     //! @}
