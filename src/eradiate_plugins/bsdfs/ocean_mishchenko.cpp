@@ -39,7 +39,7 @@ Oceanic reflection model (:monosp:`ocean-mishchenko`)
  * - ext_ior
    - |spectrum| or |texture|
    - Exterior index of refraction specified numerically or using a known
-     material name. Note that the complex component is assumed to be 0 
+     material name. Note that the complex component is assumed to be 0
      (Default: 1.000277).
 
  * - shadowing
@@ -50,7 +50,7 @@ Oceanic reflection model (:monosp:`ocean-mishchenko`)
 This plugin implements the polarized oceanic reflection model originally
 implemented by :cite:`Mishchenko1997AerosolRetrievalPolarization`. This model
 focuses on the sunglint reflectance, which follows the Cox and Munk surface
-slope probability distribution. 
+slope probability distribution.
 
 Note that this material is one-sided---that is, observed from the
 back side, it will be completely black. If this is undesirable,
@@ -151,7 +151,7 @@ public:
 
         if (unlikely(dr::none_or<false>(active)) || !ctx.is_enabled(BSDFFlags::GlossyReflection))
             return { bs, 0.f };
-        
+
 
         /* Construct a microfacet distribution matching the
            roughness values at the current surface position. */
@@ -162,13 +162,13 @@ public:
         // Sample M, the microfacet normal
         Normal3f m;
         std::tie(m, bs.pdf) = distr.sample(si.wi, sample2);
-        
+
         /// Perfect specular reflection based on the microfacet normal
         bs.wo = reflect(si.wi, m);
         bs.eta = 1.f;
         bs.sampled_component = 0;
         bs.sampled_type = +BSDFFlags::GlossyReflection;
-        
+
         // Ensure that this is a valid sample
         active &= dr::neq(bs.pdf, 0.f) && Frame3f::cos_theta(bs.wo) > 0.f;
 
@@ -179,7 +179,7 @@ public:
         weight = distr.G_height_correlated(si.wi, bs.wo, m) / distr.smith_g1(si.wi, m);
 
         Complex2u n_air(m_ext_eta->eval(si, active), 0.);
-        Complex2u n_water(m_eta->eval(si, active), 
+        Complex2u n_water(m_eta->eval(si, active),
                           m_k->eval(si, active));
 
         // `TransportMode` has two states:
@@ -195,9 +195,9 @@ public:
             /* The Stokes reference frame vector of this matrix lies in the
             meridian plane spanned by wi and n. */
             Vector3f n(0, 0, 1);
-            Vector3f p_axis_in  = 
+            Vector3f p_axis_in  =
                 dr::normalize(dr::cross(dr::normalize(dr::cross(n,-wo_hat)),-wo_hat));
-            Vector3f p_axis_out = 
+            Vector3f p_axis_out =
                 dr::normalize(dr::cross(dr::normalize(dr::cross(n,wi_hat)),wi_hat));
 
             dr::masked(p_axis_in, dr::any(dr::isnan(p_axis_in))) =
@@ -212,7 +212,7 @@ public:
                 wi_hat, p_axis_out, mueller::stokes_basis(wi_hat));
 
         } else {
-            F = 
+            F =
                 UnpolarizedSpectrum(fresnel_sunglint_polarized(n_air, n_water, -wo_hat, wi_hat)[0][0]);
         }
 
@@ -233,13 +233,13 @@ public:
 
         if (unlikely(dr::none_or<false>(active) || !has_glint))
             return 0.f;
-            
+
         MicrofacetDistribution distr(
-            MicrofacetType::Beckmann, 
+            MicrofacetType::Beckmann,
             m_sigma,
             true
         );
-            
+
         const Vector3f m = dr::normalize(si.wi + wo);
         Float D = distr.eval(m);
         Float G = distr.G_height_correlated(si.wi, wo, m);
@@ -248,7 +248,7 @@ public:
         active &= dr::neq(D, 0.f);
 
         Complex2u n_air(m_ext_eta->eval(si, active), 0.);
-        Complex2u n_water(m_eta->eval(si, active), 
+        Complex2u n_water(m_eta->eval(si, active),
                           m_k->eval(si, active));
 
         // `TransportMode` has two states:
@@ -266,24 +266,24 @@ public:
 
             /* The Stokes reference frame vector of this matrix lies in the
                scattering plane spanned by wi and wo. */
-            Vector3f p_axis_in  = 
+            Vector3f p_axis_in  =
                 dr::normalize(dr::cross(dr::normalize(dr::cross(n,-wo_hat)),-wo_hat));
-            Vector3f p_axis_out = 
+            Vector3f p_axis_out =
                 dr::normalize(dr::cross(dr::normalize(dr::cross(n,wi_hat)),wi_hat));
 
-            dr::masked(p_axis_in, dr::any(dr::isnan(p_axis_in)))   = 
+            dr::masked(p_axis_in, dr::any(dr::isnan(p_axis_in)))   =
                 Vector3f(0.f, 1.f, 0.f);
-            dr::masked(p_axis_out, dr::any(dr::isnan(p_axis_out))) = 
+            dr::masked(p_axis_out, dr::any(dr::isnan(p_axis_out))) =
                 Vector3f(0.f, 1.f, 0.f);
 
             // Rotate in/out reference vector of `F` s.t. it aligns with the
             // implicit Stokes bases of -wo_hat & wi_hat. */
             F = mueller::rotate_mueller_basis(
-                F, 
+                F,
                 -wo_hat, p_axis_in, mueller::stokes_basis(-wo_hat),
                 wi_hat, p_axis_out, mueller::stokes_basis(wi_hat));
         } else {
-            F = 
+            F =
                 UnpolarizedSpectrum(fresnel_sunglint_polarized(n_air, n_water, -wo_hat, wi_hat)[0][0]);
         }
 
@@ -308,11 +308,11 @@ public:
 
         MicrofacetDistribution distr(
             MicrofacetType::Beckmann,
-            m_sigma, 
+            m_sigma,
             true
         );
 
-        Float pdf = 
+        Float pdf =
             distr.eval(m) * distr.smith_g1(si.wi, m) / (4.f * cos_theta_i);
 
         return dr::select(active, pdf, 0.f);

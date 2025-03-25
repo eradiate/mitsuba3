@@ -267,7 +267,7 @@ public:
         // convert from North Left to East Right.
         m_wind_direction = -m_wind_direction + 90.f;
         // m_wind_direction % 360.
-        m_wind_direction = m_wind_direction - (360.f * floor(m_wind_direction / 360.f));
+        m_wind_direction = m_wind_direction - (360.f * dr::floor(m_wind_direction / 360.f));
         // Degree to radians.
         m_wind_direction = dr::deg_to_rad(m_wind_direction);
 
@@ -573,7 +573,7 @@ public:
         // Ensure incoming and outgoing directions are in the upper hemisphere
         active &= cos_theta_i > 0.f && cos_theta_o > 0.f;
 
-        if (unlikely(dr::none_or<false>(active) || !has_glint && !has_diffuse))
+        if (unlikely(dr::none_or<false>(active) || (!has_glint && !has_diffuse)))
             return 0.f;
 
 

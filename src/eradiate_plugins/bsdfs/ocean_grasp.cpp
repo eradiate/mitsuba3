@@ -34,7 +34,7 @@ NAMESPACE_BEGIN(mitsuba)
    - :math:`k \in [0, 37.54]` m/s.
    - Specifies the wind speed at which to evaluate the oceanic reflectance
      (Default: :monosp:`0.1 m/s`).
- 
+
  * - eta, k
    - |spectrum| or |texture|
    - Real and imaginary components of the water's index of refraction.
@@ -43,7 +43,7 @@ NAMESPACE_BEGIN(mitsuba)
  * - ext_ior
    - |spectrum| or |texture|
    - Exterior index of refraction specified numerically or using a known
-     material name. Note that the complex component is assumed to be 0 
+     material name. Note that the complex component is assumed to be 0
      (Default: 1.000277).
 
  * - water_body_reflectance
@@ -59,7 +59,7 @@ NAMESPACE_BEGIN(mitsuba)
      glint reflectance. Component 3 evaluates the underlight reflectance.
      Component 4 evaluates the whitecap and underlight reflectance together.
 
-This plugin implements the oceanic reflection model originally detailed in 
+This plugin implements the oceanic reflection model originally detailed in
 cite:`Litvinov2024AerosolSurfaceCharacterization`. Note that this model
 is monochromatic.
 
@@ -255,7 +255,7 @@ public:
      */
     Float eval_underlight(const SurfaceInteraction3f &si, Mask active) const {
         return m_water_body_reflectance->eval(si, active)[0];
-        
+
     }
 
     std::pair<BSDFSample3f, Spectrum>
@@ -352,7 +352,7 @@ public:
         active &= cos_theta_i > 0.f && cos_theta_o > 0.f;
 
         if (unlikely(dr::none_or<false>(active) ||
-                     !has_specular && !has_diffuse))
+                     (!has_specular && !has_diffuse)))
             return 0.f;
 
         // Compute the whitecap reflectance
@@ -465,7 +465,7 @@ public:
         Float coverage   = whitecap_coverage_monahan(wind_speed);
         Float sigma      = eval_sigma(wind_speed);
 
-        Float prob_whitecap = coverage, 
+        Float prob_whitecap = coverage,
               prob_water    = (1.f - coverage);
 
         Float prob_water_diffuse  = (1.f - m_specular_sampling_weight),

@@ -29,9 +29,9 @@ public:
         * Effective reflectance of whitecaps (Whitlock et al. 1982)
         * Wavelength specified in um.
         * Wavelengths are stored in a regular grid, using range instead.
-        constexpr ScalarFloat wc_wavelengths[] = {  
+        constexpr ScalarFloat wc_wavelengths[] = {
             0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1,
-            1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.1, 
+            1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.1,
             2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3.0, 3.1,
             3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.0 };
         */
@@ -82,14 +82,14 @@ public:
         * Water scattering and attenuation coefficient data (Morel 1988)
         * Wavelength specified in nm.
         * Wavelengths are stored in a regular grid, using range instead.
-        constexpr ScalarFloat attn_wavelengths[] = { 
-            400, 405, 410, 415, 420, 425, 430, 435, 440, 445, 
-            450, 455, 460, 465, 470, 475, 480, 485, 490, 495, 
-            500, 505, 510, 515, 520, 525, 530, 535, 540, 545, 
-            550, 555, 560, 565, 570, 575, 580, 585, 590, 595, 
-            600, 605, 610, 615, 620, 625, 630, 635, 640, 645, 
-            650, 655, 660, 665, 670, 675, 680, 685, 690, 695, 
-            700 
+        constexpr ScalarFloat attn_wavelengths[] = {
+            400, 405, 410, 415, 420, 425, 430, 435, 440, 445,
+            450, 455, 460, 465, 470, 475, 480, 485, 490, 495,
+            500, 505, 510, 515, 520, 525, 530, 535, 540, 545,
+            550, 555, 560, 565, 570, 575, 580, 585, 590, 595,
+            600, 605, 610, 615, 620, 625, 630, 635, 640, 645,
+            650, 655, 660, 665, 670, 675, 680, 685, 690, 695,
+            700
         };
         */
         constexpr ScalarFloat attn_k[] = {
@@ -385,7 +385,7 @@ Float friedman_sverdrup(const Float &chlorinity) {
  * @return The complex index of refraction of water.
  */
 template<typename Float, typename Spectrum, typename ScalarFloat>
-std::pair<ScalarFloat, ScalarFloat> 
+std::pair<ScalarFloat, ScalarFloat>
 water_ior( const OceanProperties<Float, Spectrum> &ocean_props,
            const ScalarFloat &wavelength,
            const ScalarFloat &chlorinity) {
@@ -412,12 +412,12 @@ water_ior( const OceanProperties<Float, Spectrum> &ocean_props,
  * @return Float The Fresnel coefficient.
  */
 template<typename Float>
-Float fresnel_sunglint_legacy( 
-    const Float &n_real, 
-    const Float &n_imag, 
-    const Float &coschi, 
+Float fresnel_sunglint_legacy(
+    const Float &n_real,
+    const Float &n_imag,
+    const Float &coschi,
     const Float &sinchi) {
-    
+
     const Float n_real2 = n_real * n_real;
     const Float n_imag2 = n_imag * n_imag;
 
@@ -436,14 +436,14 @@ Float fresnel_sunglint_legacy(
         (dr::sqr(coschi - u) + v * v) / (dr::sqr(coschi + u) + v * v);
     const Float left_squared = (dr::sqr(b_1 - u) + dr::sqr(b_2 + v)) /
                                 (dr::sqr(b_1 + u) + dr::sqr(b_2 - v));
-    
+
     return (right_squared + left_squared) * 0.5f;
 };
 
 /**
  * @brief Evaluate the polarized Fresnel coefficient as implemented by Mischenko (1997).
  *
- * Evaluates the polarized Fresnel coefficient at given complex indices of 
+ * Evaluates the polarized Fresnel coefficient at given complex indices of
  * refraction and geometry defined by the incoming and outgoing directions.
  * The mueller matrix is computed using the formulation from Mishchenko (1997).
  *
@@ -455,9 +455,9 @@ Float fresnel_sunglint_legacy(
  */
 template<typename Float, typename UnpolarizedSpectrum>
 MuellerMatrix<UnpolarizedSpectrum> fresnel_sunglint_polarized(
-    const dr::Complex<UnpolarizedSpectrum> &n_ext, 
+    const dr::Complex<UnpolarizedSpectrum> &n_ext,
     const dr::Complex<UnpolarizedSpectrum> &n_water,
-    Vector<Float, 3> wi, 
+    Vector<Float, 3> wi,
     Vector<Float, 3> wo){
 
     using Mask = dr::mask_t<Float>;
@@ -480,13 +480,13 @@ MuellerMatrix<UnpolarizedSpectrum> fresnel_sunglint_polarized(
     Float sitheta_i = dr::sqrt(1.f - mu_i * mu_i);
     Float sitheta_o = dr::sqrt(1.f - mu_o * mu_o);
 
-    wi = Vector3f(sitheta_i * cos (phi_i), sitheta_i * sin (phi_i), -mu_i);
-    wo = Vector3f(sitheta_o * cos (phi_o), sitheta_o * sin (phi_o), mu_o);
+    wi = Vector3f(sitheta_i * dr::cos(phi_i), sitheta_i * dr::sin (phi_i), -mu_i);
+    wo = Vector3f(sitheta_o * dr::cos(phi_o), sitheta_o * dr::sin (phi_o), mu_o);
 
     // local surface normal k_d
     const Vector3f k_d = wi - wo;
     const Float k_d_norm2 = dr::dot(k_d, k_d);
-    
+
     // Fresnel reflection coefficition (should that be taken out?)
     // the incident angel wrt local surface normal
     const Float mu_i_l = dr::dot(k_d, wi) / dr::sqrt(k_d_norm2);
@@ -520,8 +520,8 @@ MuellerMatrix<UnpolarizedSpectrum> fresnel_sunglint_polarized(
     // stokes transmission matrix
     const Vector3f wi_cross_wo = dr::cross(wi, wo);
     collinear = dr::all(dr::eq(wo, -wi));
-    const Float norm2 = dr::select(collinear, 
-                                    0.000001f, 
+    const Float norm2 = dr::select(collinear,
+                                    0.000001f,
                                     dr::pow(dr::dot(wi_cross_wo, wi_cross_wo),2));
     Float coeff = 1.f / norm2;
 
@@ -546,7 +546,7 @@ MuellerMatrix<UnpolarizedSpectrum> fresnel_sunglint_polarized(
     const UnpolarizedSpectrum M31 =  coeff * dr::imag(f_tt*dr::conj(f_pt) - f_tp*dr::conj(f_pp));
     const UnpolarizedSpectrum M32 = -coeff * dr::imag(f_tt*dr::conj(f_pp) + f_tp*dr::conj(f_pt));
     const UnpolarizedSpectrum M33 =  coeff * dr::real(f_tt*dr::conj(f_pp) - f_tp*dr::conj(f_pt));
-    
+
     return MuellerMatrix<UnpolarizedSpectrum>(
         M00, M01, M02, M03,
         M10, M11, M12, M13,
