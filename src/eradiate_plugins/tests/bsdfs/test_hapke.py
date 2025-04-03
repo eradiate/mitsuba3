@@ -1,20 +1,16 @@
-import drjit as dr
-import mitsuba as mi
-import numpy as np
-import xarray as xr
-import pytest
-
 from os.path import join
 
+import drjit as dr
 import matplotlib.pyplot as plt
-
-from ..tools import sample_eval_pdf_bsdf
-from mitsuba.scalar_rgb.test.util import find_resource
+import mitsuba as mi
+import pytest
+import xarray as xr
+from mitsuba.test.util import find_resource
 
 
 def angles_to_directions(theta, phi):
     return mi.Vector3f(
-        np.sin(theta) * np.cos(phi), np.sin(theta) * np.sin(phi), np.cos(theta)
+        dr.sin(theta) * dr.cos(phi), dr.sin(theta) * dr.sin(phi), dr.cos(theta)
     )
 
 
@@ -28,18 +24,14 @@ def eval_bsdf(bsdf, wi, wo):
 @pytest.fixture
 def static_pplane():
     references = find_resource("resources/tests/eradiate_plugins/bsdfs")
-
     hapke_reference_filename = join(references, "hapke_principal_plane_example.nc")
-
     return xr.load_dataset(hapke_reference_filename)
 
 
 @pytest.fixture
 def static_hemisphere():
     references = find_resource("resources/tests/eradiate_plugins/bsdfs")
-
     hapke_reference_filename = join(references, "hapke_hemisphere_example.nc")
-
     return xr.load_dataset(hapke_reference_filename)
 
 
@@ -110,16 +102,16 @@ def test_eval_hotspot(variant_scalar_rgb):
         }
     )
 
-    theta_i = np.deg2rad(30.0)
-    theta_o = np.deg2rad(30.0)
-    phi_i = np.deg2rad(0.0)
-    phi_o = np.deg2rad(0.0)
+    theta_i = dr.deg2rad(30.0)
+    theta_o = dr.deg2rad(30.0)
+    phi_i = dr.deg2rad(0.0)
+    phi_o = dr.deg2rad(0.0)
 
     wi = angles_to_directions(theta_i, phi_i)
     wo = angles_to_directions(theta_o, phi_o)
 
-    values = np.asarray(eval_bsdf(hapke, wi, wo)) / np.abs(np.cos(theta_o))
-    assert np.allclose(values, 0.24746648)
+    values = eval_bsdf(hapke, wi, wo) / dr.abs(dr.cos(theta_o))
+    assert dr.allclose(values, 0.24746648)
 
 
 def test_hapke_grazing_outgoing_direction(variant_scalar_rgb):
@@ -138,16 +130,16 @@ def test_hapke_grazing_outgoing_direction(variant_scalar_rgb):
         }
     )
 
-    theta_i = np.deg2rad(30.0)
-    theta_o = np.deg2rad(-89.0)
-    phi_i = np.deg2rad(0.0)
-    phi_o = np.deg2rad(0.0)
+    theta_i = dr.deg2rad(30.0)
+    theta_o = dr.deg2rad(-89.0)
+    phi_i = dr.deg2rad(0.0)
+    phi_o = dr.deg2rad(0.0)
 
     wi = angles_to_directions(theta_i, phi_i)
     wo = angles_to_directions(theta_o, phi_o)
 
-    values = np.asarray(eval_bsdf(hapke, wi, wo)) / np.abs(np.cos(theta_o))
-    assert np.allclose(values, 0.15426355)
+    values = eval_bsdf(hapke, wi, wo) / dr.abs(dr.cos(theta_o))
+    assert dr.allclose(values, 0.15426355)
 
 
 def test_eval_backward(variant_scalar_rgb):
@@ -166,16 +158,16 @@ def test_eval_backward(variant_scalar_rgb):
         }
     )
 
-    theta_i = np.deg2rad(30.0)
-    theta_o = np.deg2rad(80.0)
-    phi_i = np.deg2rad(0.0)
-    phi_o = np.deg2rad(0.0)
+    theta_i = dr.deg2rad(30.0)
+    theta_o = dr.deg2rad(80.0)
+    phi_i = dr.deg2rad(0.0)
+    phi_o = dr.deg2rad(0.0)
 
     wi = angles_to_directions(theta_i, phi_i)
     wo = angles_to_directions(theta_o, phi_o)
 
-    values = np.asarray(eval_bsdf(hapke, wi, wo)) / np.abs(np.cos(theta_o))
-    assert np.allclose(values, 0.19555340)
+    values = eval_bsdf(hapke, wi, wo) / dr.abs(dr.cos(theta_o))
+    assert dr.allclose(values, 0.19555340)
 
 
 def test_hapke_hemisphere(variant_llvm_ad_rgb, static_hemisphere, plot_figures):
@@ -191,34 +183,26 @@ def test_hapke_hemisphere(variant_llvm_ad_rgb, static_hemisphere, plot_figures):
         }
     )
 
-    azimuths_s = 361
-    zeniths_s = 90
+    azimuths = dr.deg2rad(mi.Float(static_hemisphere["phi"].values))
+    zeniths = dr.deg2rad(mi.Float(static_hemisphere["vza"].values))
 
-    azimuths = np.radians(np.linspace(0, 360, azimuths_s))
-    zeniths = np.linspace(0, 89, zeniths_s)
+    theta_o, phi_o = dr.meshgrid(zeniths, azimuths)
+    theta_i = dr.deg2rad(30.0)
+    phi_i = 0.0
 
-    r, theta = np.meshgrid(np.sin(np.deg2rad(zeniths)), azimuths)
-    values = np.random.random((azimuths.size, zeniths.size))
+    wi = angles_to_directions(theta_i, phi_i)
+    wo = angles_to_directions(theta_o, phi_o)
+    values = eval_bsdf(hapke, wi, wo) / dr.abs(dr.cos(theta_o))
 
-    theta_i = np.deg2rad(30.0 * np.ones((zeniths_s,))).reshape(-1, 1) @ np.ones(
-        (1, azimuths_s)
-    )
-    theta_o = np.deg2rad(zeniths).reshape(-1, 1) @ np.ones((1, azimuths_s))
-    phi_i = np.zeros((zeniths_s, azimuths_s))
-    phi_o = np.ones((zeniths_s, 1)) @ azimuths.reshape(1, -1)
+    npref = static_hemisphere["reflectance"].values
+    ref = mi.Float(npref.ravel())
 
-    wi = angles_to_directions(theta_i.reshape(1, -1), phi_i.reshape(1, -1))
-    wo = angles_to_directions(theta_o.reshape(1, -1), phi_o.reshape(1, -1))
-
-    npvalues = np.asarray(eval_bsdf(hapke, wi, wo)) / np.abs(np.cos(theta_o)).reshape(
-        1, -1
-    )
-    npvalues = npvalues.reshape((zeniths_s, azimuths_s)).T
-
-    ref = np.asarray(static_hemisphere.reflectance.values)
-
-    if plot_figures:
+    if False:
+        import numpy as np
         from matplotlib import colors
+
+        r, theta = np.meshgrid(dr.sin(zeniths).numpy(), azimuths.numpy())
+        npvalues = np.reshape(values, npref.shape)
 
         nrows = 1
         ncols = 3
@@ -236,7 +220,7 @@ def test_hapke_hemisphere(variant_llvm_ad_rgb, static_hemisphere, plot_figures):
         ax.set_title("plugin")
 
         ax = axs[1]
-        contour = ax.contourf(theta, r, ref, levels=25, cmap="turbo")
+        contour = ax.contourf(theta, r, npref, levels=25, cmap="turbo")
         plt.colorbar(contour)
         ax.set_title("reference")
 
@@ -244,7 +228,7 @@ def test_hapke_hemisphere(variant_llvm_ad_rgb, static_hemisphere, plot_figures):
         contour = ax.contourf(
             theta,
             r,
-            ref - npvalues,
+            npref - npvalues,
             levels=25,
             cmap="RdBu_r",
             norm=colors.CenteredNorm(),
@@ -258,7 +242,7 @@ def test_hapke_hemisphere(variant_llvm_ad_rgb, static_hemisphere, plot_figures):
         plt.savefig("hapke_hemisphere.png", bbox_inches="tight")
         plt.close()
 
-    assert np.allclose(ref, npvalues)
+    assert dr.allclose(ref, values)
 
 
 def test_hapke_static_principal_plane_reference(
@@ -276,15 +260,15 @@ def test_hapke_static_principal_plane_reference(
         }
     )
 
-    theta_i = np.deg2rad(30.0 * np.ones((180,)))
-    theta_o = np.deg2rad(static_pplane.svza.values)
-    phi_i = np.deg2rad(np.zeros((180,)))
-    phi_o = np.deg2rad(np.zeros((180,)))
+    theta_o = mi.Float(dr.deg2rad(static_pplane.svza.values))
+    phi_o = dr.zeros(mi.Float, dr.shape(theta_o))
+    theta_i = dr.deg2rad(30.0) * dr.ones(mi.Float, dr.shape(theta_o))
+    phi_i = dr.zeros(mi.Float, dr.shape(theta_o))
 
     wi = angles_to_directions(theta_i, phi_i)
     wo = angles_to_directions(theta_o, phi_o)
 
-    values = np.asarray(eval_bsdf(hapke, wi, wo)) / np.abs(np.cos(theta_o))
+    values = eval_bsdf(hapke, wi, wo) / dr.abs(dr.cos(theta_o))
 
     if plot_figures:
         nrows = 2
@@ -293,13 +277,13 @@ def test_hapke_static_principal_plane_reference(
 
         ax = axs[0]
         ax.plot(
-            np.rad2deg(theta_o),
+            dr.rad2deg(theta_o),
             static_pplane.reflectance,
             color="C0",
             label="Reference (Nguyen, Jacquemoud et al.)",
         )
         ax.plot(
-            np.rad2deg(theta_o),
+            dr.rad2deg(theta_o),
             values,
             color="C0",
             marker=".",
@@ -311,13 +295,13 @@ def test_hapke_static_principal_plane_reference(
 
         ax = axs[1]
         ax.plot(
-            np.rad2deg(theta_o),
+            dr.rad2deg(theta_o),
             (values - static_pplane.reflectance) / static_pplane.reflectance,
             color="C0",
             label="Reference (Nguyen, Jacquemoud et al.)",
         )
         ax.set_xlabel(r"$\omega_\mathrm{o}$ [°]")
-        ax.set_xticks(np.arange(-90, 91, 30))
+        ax.set_xticks(dr.arange(-90, 91, 30))
         ax.set_ylabel("(plugin − ref) / ref")
 
         for ax in axs:
@@ -327,7 +311,7 @@ def test_hapke_static_principal_plane_reference(
 
     ref = static_pplane.reflectance.values
 
-    assert np.allclose(ref, values)
+    assert dr.allclose(ref, values)
 
 
 def test_chi2_hapke(variants_vec_backends_once_rgb):
