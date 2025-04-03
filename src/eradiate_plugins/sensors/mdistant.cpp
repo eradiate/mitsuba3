@@ -128,7 +128,7 @@ public:
 
         // Check film size
         ScalarPoint2i expected_size{ m_sensor_count, 1 };
-        if (dr::all(m_film->size() != expected_size))
+        if (!dr::all(m_film->size() == expected_size))
             Throw("Film size must be [sensor_count, 1]. Expected %s, "
                   "got %s",
                   expected_size, m_film->size());

@@ -55,7 +55,7 @@ def test_construct(variant_scalar_rgb):
     # Construct with transform
     sensor = mi.load_dict(
         sensor_dict(
-            to_world=mi.ScalarTransform4f.look_at(
+            to_world=mi.ScalarTransform4f().look_at(
                 origin=[0, 0, 0], target=[0, 0, 1], up=[1, 0, 0]
             )
         )
@@ -146,7 +146,7 @@ def test_sample_ray_target(variant_scalar_rgb, sensor_setup):
             "type": "distantflux",
             "target": {
                 "type": "rectangle",
-                "to_world": mi.ScalarTransform4f.scale(surface_scale),
+                "to_world": mi.ScalarTransform4f().scale(surface_scale),
             },
             "sampler": {
                 "type": "independent",
@@ -163,7 +163,7 @@ def test_sample_ray_target(variant_scalar_rgb, sensor_setup):
             "type": "distantflux",
             "target": {
                 "type": "rectangle",
-                "to_world": mi.ScalarTransform4f.scale(0.5 * surface_scale),
+                "to_world": mi.ScalarTransform4f().scale(0.5 * surface_scale),
             },
             "sampler": {
                 "type": "independent",
@@ -180,7 +180,7 @@ def test_sample_ray_target(variant_scalar_rgb, sensor_setup):
             "type": "distantflux",
             "target": {
                 "type": "rectangle",
-                "to_world": mi.ScalarTransform4f.scale(2.0 * surface_scale),
+                "to_world": mi.ScalarTransform4f().scale(2.0 * surface_scale),
             },
             "sampler": {
                 "type": "independent",
@@ -211,7 +211,7 @@ def test_sample_ray_target(variant_scalar_rgb, sensor_setup):
             "type": "distantflux",
             "target": {
                 "type": "disk",
-                "to_world": mi.ScalarTransform4f.scale(surface_scale),
+                "to_world": mi.ScalarTransform4f().scale(surface_scale),
             },
             "sampler": {
                 "type": "independent",
@@ -231,7 +231,7 @@ def test_sample_ray_target(variant_scalar_rgb, sensor_setup):
         "type": "scene",
         "shape": {
             "type": "rectangle",
-            "to_world": mi.ScalarTransform4f.scale(surface_scale),
+            "to_world": mi.ScalarTransform4f().scale(surface_scale),
             "bsdf": {
                 "type": "diffuse",
                 "reflectance": rho,
@@ -296,7 +296,7 @@ def test_checkerboard(variant_scalar_rgb):
                     "type": "checkerboard",
                     "color0": rho0,
                     "color1": rho1,
-                    "to_uv": mi.ScalarTransform4f.scale(2),
+                    "to_uv": mi.ScalarTransform4f().scale(2),
                 },
             },
         },
@@ -385,7 +385,7 @@ def test_lobe(variant_scalar_rgb, bsdf, w_e):
         "type": "distantflux",
         "target": {
             "type": "rectangle",
-            "to_world": mi.ScalarTransform4f.scale(surface_scale),
+            "to_world": mi.ScalarTransform4f().scale(surface_scale),
         },
         "sampler": {
             "type": "independent",
@@ -404,7 +404,7 @@ def test_lobe(variant_scalar_rgb, bsdf, w_e):
         "type": "scene",
         "shape": {
             "type": "rectangle",
-            "to_world": mi.ScalarTransform4f.scale(surface_scale),
+            "to_world": mi.ScalarTransform4f().scale(surface_scale),
             "bsdf": bsdf_dict,
         },
         "emitter": {"type": "directional", "direction": w_e, "irradiance": l_e},

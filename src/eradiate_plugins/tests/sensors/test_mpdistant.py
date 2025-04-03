@@ -152,7 +152,7 @@ def test_sample_target(variant_scalar_rgb, sensor_setup, w_e, w_o):
             "direction": w_o,
             "target": {
                 "type": "rectangle",
-                "to_world": mi.ScalarTransform4f.scale(surface_scale),
+                "to_world": mi.ScalarTransform4f().scale(surface_scale),
             },
             "sampler": {
                 "type": "independent",
@@ -171,7 +171,7 @@ def test_sample_target(variant_scalar_rgb, sensor_setup, w_e, w_o):
             "direction": w_o,
             "target": {
                 "type": "rectangle",
-                "to_world": mi.ScalarTransform4f.scale(0.5 * surface_scale),
+                "to_world": mi.ScalarTransform4f().scale(0.5 * surface_scale),
             },
             "sampler": {
                 "type": "independent",
@@ -190,7 +190,7 @@ def test_sample_target(variant_scalar_rgb, sensor_setup, w_e, w_o):
             "direction": w_o,
             "target": {
                 "type": "rectangle",
-                "to_world": mi.ScalarTransform4f.scale(2.0 * surface_scale),
+                "to_world": mi.ScalarTransform4f().scale(2.0 * surface_scale),
             },
             "sampler": {
                 "type": "independent",
@@ -225,7 +225,7 @@ def test_sample_target(variant_scalar_rgb, sensor_setup, w_e, w_o):
             "direction": w_o,
             "target": {
                 "type": "disk",
-                "to_world": mi.ScalarTransform4f.scale(surface_scale),
+                "to_world": mi.ScalarTransform4f().scale(surface_scale),
             },
             "sampler": {
                 "type": "independent",
@@ -246,7 +246,7 @@ def test_sample_target(variant_scalar_rgb, sensor_setup, w_e, w_o):
         "type": "scene",
         "shape": {
             "type": "rectangle",
-            "to_world": mi.ScalarTransform4f.scale(surface_scale),
+            "to_world": mi.ScalarTransform4f().scale(surface_scale),
             "bsdf": {
                 "type": "diffuse",
                 "reflectance": rho,
@@ -305,7 +305,7 @@ def test_checkerboard(variants_all_rgb):
                     "type": "checkerboard",
                     "color0": rho0,
                     "color1": rho1,
-                    "to_uv": mi.ScalarTransform4f.scale(2),
+                    "to_uv": mi.ScalarTransform4f().scale(2),
                 },
             },
         },
@@ -329,7 +329,7 @@ def test_checkerboard(variants_all_rgb):
         },
         # "sensor1": {  # In case one would like to check what the scene looks like
         #     "type": "perspective",
-        #     "to_world": mi.ScalarTransform4f.look_at(origin=[0, 0, 5], target=[0, 0, 0], up=[0, 1, 0]),
+        #     "to_world": mi.ScalarTransform4f().look_at(origin=[0, 0, 5], target=[0, 0, 0], up=[0, 1, 0]),
         #     "sampler": {
         #         "type": "independent",
         #         "sample_count": 10000,

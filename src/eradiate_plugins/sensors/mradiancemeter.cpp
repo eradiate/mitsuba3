@@ -125,7 +125,7 @@ public:
         m_transforms    = TensorXf(buffer.data(), 3, shape);
 
         // Check film size
-        if (dr::all(m_film->size() != ScalarPoint2i(m_transforms.size() / 16, 1)))
+        if (!dr::all(m_film->size() == ScalarPoint2i(m_transforms.size() / 16, 1)))
             Throw("Film size must be [n_radiancemeters, 1]. Expected %s, "
                   "found: %s",
                   ScalarPoint2i(m_transforms.size() / 16, 1), m_film->size());

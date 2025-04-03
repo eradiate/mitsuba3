@@ -203,7 +203,7 @@ def test_render_complex(variant_scalar_rgb):
         },
         "light_rectangle": {
             "type": "rectangle",
-            "to_world": mi.ScalarTransform4f.translate((-2, 0, 0)),
+            "to_world": mi.ScalarTransform4f().translate((-2, 0, 0)),
             "bsdf": {
                 "type": "diffuse",
                 "reflectance": {"type": "uniform", "value": 1.0},
@@ -211,7 +211,7 @@ def test_render_complex(variant_scalar_rgb):
         },
         "medium_rectangle": {
             "type": "rectangle",
-            "to_world": mi.ScalarTransform4f.translate((0, 0, 0)),
+            "to_world": mi.ScalarTransform4f().translate((0, 0, 0)),
             "bsdf": {
                 "type": "diffuse",
                 "reflectance": {"type": "uniform", "value": 0.5},
@@ -219,7 +219,7 @@ def test_render_complex(variant_scalar_rgb):
         },
         "dark_rectangle": {
             "type": "rectangle",
-            "to_world": mi.ScalarTransform4f.translate((2, 0, 0)),
+            "to_world": mi.ScalarTransform4f().translate((2, 0, 0)),
             "bsdf": {
                 "type": "diffuse",
                 "reflectance": {"type": "uniform", "value": 0.0},
