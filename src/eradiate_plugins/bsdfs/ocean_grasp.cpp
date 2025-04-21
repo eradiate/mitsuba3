@@ -134,7 +134,6 @@ public:
         // Set all the flags
         for (auto c : m_components)
             m_flags |= c;
-        dr::set_attr(this, "flags", m_flags);
 
         parameters_changed();
     }

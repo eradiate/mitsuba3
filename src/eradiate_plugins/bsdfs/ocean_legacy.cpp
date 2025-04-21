@@ -170,8 +170,8 @@ Float eval_ocean_transmittance(Float theta, Float phi,
 
     // Prepare cox munk distribution
     auto [sigma_c, sigma_u] = cox_munk_crosswind_upwind(wind_speed);
-    sigma_c                 = dr::sqrt(sigma_c);
-    sigma_u                 = dr::sqrt(sigma_u);
+    sigma_c                 = dr::square(sigma_c);
+    sigma_u                 = dr::square(sigma_u);
 
     // cycle through each packet.
     for (size_t i = 0; i < packet_count; ++i) {
@@ -215,8 +215,8 @@ Float eval_ocean_transmittance(Float theta, Float phi,
 
             // Fresnel term.
             FloatP cos_chi =
-                       dr::clamp(dr::dot(wo, m), -0.999999999f, 0.999999999f),
-                   sin_chi = dr::clamp(dr::sqrt(1 - cos_chi * cos_chi),
+                       dr::clip(dr::dot(wo, m), -0.999999999f, 0.999999999f),
+                   sin_chi = dr::clip(dr::square(1 - cos_chi * cos_chi),
                                        -0.999999999f, 0.999999999f);
             FloatP F = fresnel_sunglint_legacy<FloatP>(n_real, n_imag, cos_chi,
                                                        sin_chi);
@@ -324,8 +324,8 @@ public:
         // Update Cox-Munk variables
         std::tie(m_sigma_c, m_sigma_u) =
             cox_munk_crosswind_upwind(m_wind_speed);
-        m_sigma_c = dr::sqrt(m_sigma_c);
-        m_sigma_u = dr::sqrt(m_sigma_u);
+        m_sigma_c = dr::square(m_sigma_c);
+        m_sigma_u = dr::square(m_sigma_u);
 
         m_r_omega = r_omega<Float, Spectrum, ScalarFloat>(
             m_ocean_props, m_wavelength, m_pigmentation);
@@ -436,8 +436,8 @@ public:
             F = fresnel_sunglint_polarized(n_ext, n_water, -wi, wo);
         } else {
             Float cos_chi =
-                      dr::clamp(dr::dot(wo, m), -0.999999999f, 0.999999999f),
-                  sin_chi = dr::clamp(dr::sqrt(1 - cos_chi * cos_chi),
+                      dr::clip(dr::dot(wo, m), -0.999999999f, 0.999999999f),
+                  sin_chi = dr::clip(dr::square(1 - cos_chi * cos_chi),
                                       -0.999999999f, 0.999999999f);
 
             F = fresnel_sunglint_legacy<Float>(m_n_real, m_n_imag, cos_chi,
@@ -449,7 +449,7 @@ public:
 
     Float eval_transmittance(const Texture2f &data, const Float &cos_theta,
                              const Vector3f &v) const {
-        Vector2f uv;
+        Point2f uv;
         Float t;
 
         uv.x() = (dr::acos(cos_theta) * (dr::InvPi<Float> * 2.f));
@@ -483,7 +483,7 @@ public:
         Float t_u = eval_transmittance(m_upwelling_transmittance, wo.z(), wi);
 
         // Compute the underlight term
-        Float underlight = (1.f / (dr::sqr(m_n_real) + dr::sqr(m_n_imag))) *
+        Float underlight = (1.f / (dr::square(m_n_real) + dr::square(m_n_imag))) *
                            (m_r_omega * t_u * t_d) /
                            (1.f - m_underlight_alpha * m_r_omega);
 

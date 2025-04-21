@@ -91,10 +91,10 @@ public:
      * \param alpha_v
      *     The angle of rotation of the anisotropic distribution
      */
-    MicrofacetDistribution(MicrofacetType type, 
-                           Float alpha_u, 
+    MicrofacetDistribution(MicrofacetType type,
+                           Float alpha_u,
                            Float alpha_v,
-                           bool sample_visible = true, 
+                           bool sample_visible = true,
                            Float angle = Float(0.f))
         : m_type(type), m_alpha_u(alpha_u), m_alpha_v(alpha_v),
           m_angle(angle), m_sample_visible(sample_visible) {
@@ -197,7 +197,7 @@ public:
               cos_theta         = Frame3f::cos_theta(m),
               cos_theta_2       = dr::square(cos_theta),
               result;
-        
+
         Vector3f m_p = m;
 
         auto [s_phi, c_phi] = dr::sincos(-m_angle);
@@ -373,8 +373,8 @@ public:
      *     The microfacet normal
      */
     Float smith_g1(const Vector3f &v, const Vector3f &m) const {
-        Float xy_alpha_2 = dr::square(m_alpha_up * v.x()) 
-                         + dr::square(m_alpha_vp * v.y()) 
+        Float xy_alpha_2 = dr::square(m_alpha_up * v.x())
+                         + dr::square(m_alpha_vp * v.y())
                          + v.x()*v.y() * m_correlation,
               tan_theta_alpha_2 = xy_alpha_2 / dr::square(v.z()),
               result;
@@ -410,14 +410,14 @@ public:
      *     The microfacet normal
      */
     Float smith_lambda(const Vector3f &v) const {
-        Float xy_alpha_2 = dr::sqr(m_alpha_up * v.x()) 
-                         + dr::sqr(m_alpha_vp * v.y()) 
+        Float xy_alpha_2 = dr::square(m_alpha_up * v.x())
+                         + dr::square(m_alpha_vp * v.y())
                          + v.x()*v.y() * m_correlation,
-              tan_theta_alpha_2 = xy_alpha_2 / dr::sqr(v.z()),
+              tan_theta_alpha_2 = xy_alpha_2 / dr::square(v.z()),
               result;
 
         if (m_type == MicrofacetType::Beckmann) {
-            Float a = dr::rsqrt(tan_theta_alpha_2), a_sqr = dr::sqr(a);
+            Float a = dr::rsqrt(tan_theta_alpha_2), a_sqr = dr::square(a);
             /* Use a fast and accurate (<0.35% rel. error) rational
                approximation to the shadowing-masking function */
             result = dr::select(a >= 1.6f, 0.f,
@@ -428,7 +428,7 @@ public:
         }
 
         // Perpendicular incidence -- no shadowing/masking
-        dr::masked(result, dr::eq(xy_alpha_2, 0.f)) = 0.f;
+        dr::masked(result, xy_alpha_2 == 0.f) = 0.f;
 
         return result;
     }
@@ -498,9 +498,9 @@ protected:
         // Calculate the correlated coefficient that form the inverse Quadric
         // equation that describe the ellispoid of this distribution.
         auto [s_phi, c_phi] = dr::sincos(m_angle);
-        m_alpha_up = dr::sqrt(dr::sqr(m_alpha_u*c_phi) + dr::sqr(m_alpha_v*s_phi));
-        m_alpha_vp = dr::sqrt(dr::sqr(m_alpha_u*s_phi) + dr::sqr(m_alpha_v*c_phi));
-        m_correlation = 2.f * (dr::sqr(m_alpha_u) - dr::sqr(m_alpha_v))*c_phi*s_phi;
+        m_alpha_up = dr::sqrt(dr::square(m_alpha_u*c_phi) + dr::square(m_alpha_v*s_phi));
+        m_alpha_vp = dr::sqrt(dr::square(m_alpha_u*s_phi) + dr::square(m_alpha_v*c_phi));
+        m_correlation = 2.f * (dr::square(m_alpha_u) - dr::square(m_alpha_v))*c_phi*s_phi;
     }
 
     /// Compute the squared 1D roughness along direction \c v

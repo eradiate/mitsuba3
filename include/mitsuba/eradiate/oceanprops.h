@@ -330,7 +330,7 @@ template<typename Float>
 Float whitecap_coverage_monahan(const Float &wind_speed) {
     static constexpr dr::scalar_t<Float> m_monahan_alpha  = 2.95e-06f;
     static constexpr dr::scalar_t<Float> m_monahan_lambda = 3.52f;
-    return dr::clamp(m_monahan_alpha *
+    return dr::clip(m_monahan_alpha *
                         dr::pow(wind_speed, m_monahan_lambda),
                         0.0f, 1.0f);
 }

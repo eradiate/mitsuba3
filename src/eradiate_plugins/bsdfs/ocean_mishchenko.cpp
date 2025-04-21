@@ -169,7 +169,7 @@ public:
         bs.sampled_type = +BSDFFlags::GlossyReflection;
 
         // Ensure that this is a valid sample
-        active &= dr::neq(bs.pdf, 0.f) && Frame3f::cos_theta(bs.wo) > 0.f;
+        active &= (bs.pdf != 0.f) && Frame3f::cos_theta(bs.wo) > 0.f;
 
         // Jacobian of the half-direction mapping
         bs.pdf /= 4.f * dr::dot(bs.wo, m);
@@ -244,7 +244,7 @@ public:
         Float G = distr.G_height_correlated(si.wi, wo, m);
         UnpolarizedSpectrum result = D * G / (4 * cos_theta_i);
 
-        active &= dr::neq(D, 0.f);
+        active &= (D != 0.f);
 
         Complex2u n_air(m_ext_eta->eval(si, active), 0.);
         Complex2u n_water(m_eta->eval(si, active),
