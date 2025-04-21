@@ -1,5 +1,4 @@
-from pathlib import Path
-
+import drjit as dr
 import mitsuba as mi
 import numpy as np
 import pytest
@@ -51,7 +50,7 @@ def test_eval_basic(variant_scalar_rgb, tmp_path, point, result):
     it = mi.Interaction3f()
     it.p = point
 
-    assert volume.eval(it) == result
+    assert dr.all(volume.eval(it) == result)
 
 
 def test_eval_advanced(variant_scalar_rgb, tmp_path):
@@ -73,9 +72,9 @@ def test_eval_advanced(variant_scalar_rgb, tmp_path):
         }
     )
 
-    # have one point in each sector of the spherical volume
-    # since the atan2 method maps [-pi, pi] to [0, 1], we choose this
-    # order of inputs
+    # Have one point in each sector of the spherical volume.
+    # Since the atan2 method maps [-pi, pi] to [0, 1], we choose the following
+    # order of inputs.
     phis = np.array([-175, -115, -55, 5, 65, 125])  # degree
     results = np.empty((len(phis), 3))
 
