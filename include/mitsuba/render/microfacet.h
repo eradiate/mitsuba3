@@ -75,7 +75,7 @@ public:
      */
     MicrofacetDistribution(MicrofacetType type, Float alpha, bool sample_visible = true)
         : m_type(type), m_alpha_u(alpha), m_alpha_v(alpha),
-          m_sample_visible(sample_visible) {
+          m_angle(Float(0.f)), m_sample_visible(sample_visible) {
         configure();
     }
 
@@ -88,11 +88,16 @@ public:
      *     The surface roughness in the tangent direction
      * \param alpha_v
      *     The surface roughness in the bitangent direction
+     * \param alpha_v
+     *     The angle of rotation of the anisotropic distribution
      */
-    MicrofacetDistribution(MicrofacetType type, Float alpha_u, Float alpha_v,
-                           bool sample_visible = true)
+    MicrofacetDistribution(MicrofacetType type, 
+                           Float alpha_u, 
+                           Float alpha_v,
+                           bool sample_visible = true, 
+                           Float angle = Float(0.f))
         : m_type(type), m_alpha_u(alpha_u), m_alpha_v(alpha_v),
-          m_sample_visible(sample_visible) {
+          m_angle(angle), m_sample_visible(sample_visible) {
         configure();
     }
 
@@ -123,6 +128,8 @@ public:
             if (props.has_property("alpha_u") || props.has_property("alpha_v"))
                 Throw("Microfacet model: please specify"
                       "either 'alpha' or 'alpha_u'/'alpha_v'.");
+            if (props.has_property("angle"))
+                Throw("Microfacet model: cannot specify 'angle' with 'alpha'.");
         } else if (props.has_property("alpha_u") || props.has_property("alpha_v")) {
             if (!props.has_property("alpha_u") || !props.has_property("alpha_v"))
                 Throw("Microfacet model: both 'alpha_u' and 'alpha_v' must be specified.");
@@ -139,7 +146,7 @@ public:
                 "Please use the corresponding smooth reflectance model to get zero roughness.");
 
         m_sample_visible = props.get<bool>("sample_visible", sample_visible);
-
+        m_angle = props.get<ScalarFloat>("angle", 0.f);
         configure();
     }
 
@@ -155,6 +162,9 @@ public:
 
     /// Return the roughness along the bitangent direction
     Float alpha_v() const { return m_alpha_v; }
+
+    /// Return the angle of anisotropy
+    Float angle() const { return m_angle; }
 
     /// Return whether or not only visible normals are sampled?
     bool sample_visible() const { return m_sample_visible; }
@@ -187,19 +197,25 @@ public:
               cos_theta         = Frame3f::cos_theta(m),
               cos_theta_2       = dr::square(cos_theta),
               result;
+        
+        Vector3f m_p = m;
+
+        auto [s_phi, c_phi] = dr::sincos(-m_angle);
+        m_p = Vector3f(c_phi*m.x()-s_phi*m.y(), s_phi*m.x()+c_phi*m.y(), m.z());
+        m_p = dr::normalize(m_p);
 
         if (m_type == MicrofacetType::Beckmann) {
             // Beckmann distribution function for Gaussian random surfaces
-            result = dr::exp(-(dr::square(m.x() / m_alpha_u) +
-                               dr::square(m.y() / m_alpha_v)) /
+            result = dr::exp(-(dr::square(m_p.x() / m_alpha_u) +
+                               dr::square(m_p.y() / m_alpha_v)) /
                              cos_theta_2) /
                      (dr::Pi<Float> * alpha_uv * dr::square(cos_theta_2));
         } else {
             // GGX / Trowbridge-Reitz distribution function
             result =
                 dr::rcp(dr::Pi<Float> * alpha_uv *
-                        dr::square(dr::square(m.x() / m_alpha_u) +
-                                dr::square(m.y() / m_alpha_v) + dr::square(m.z())));
+                        dr::square(dr::square(m_p.x() / m_alpha_u) +
+                                   dr::square(m_p.y() / m_alpha_v) + dr::square(m_p.z())));
         }
 
         // Prevent potential numerical issues in other stages of the model
@@ -296,11 +312,12 @@ public:
         } else {
             // Visible normal sampling.
             Float sin_phi, cos_phi, cos_theta;
+            auto [sin_dir, cos_dir] = dr::sincos(m_angle);
 
             // Step 1: stretch wi
             Vector3f wi_p = dr::normalize(Vector3f(
-                m_alpha_u * wi.x(),
-                m_alpha_v * wi.y(),
+                m_alpha_u * ( wi.x() * cos_dir + wi.y() * sin_dir),
+                m_alpha_v * (-wi.x() * sin_dir + wi.y() * cos_dir),
                 wi.z()
             ));
 
@@ -317,6 +334,11 @@ public:
 
             // Step 4: compute normal & PDF
             Normal3f m = dr::normalize(Vector3f(-slope.x(), -slope.y(), 1));
+            m = dr::normalize(Vector3f(
+                (m.x() * cos_dir - m.y() * sin_dir),
+                (m.x() * sin_dir + m.y() * cos_dir),
+                m.z()
+            ));
 
             Float pdf = eval(m) * smith_g1(wi, m) * dr::abs_dot(wi, m) /
                         Frame3f::cos_theta(wi);
@@ -327,7 +349,19 @@ public:
 
     /// Smith's separable shadowing-masking approximation
     Float G(const Vector3f &wi, const Vector3f &wo, const Vector3f &m) const {
-        return smith_g1(wi, m) * smith_g1(wo, m);
+        return smith_g1(wi, m) * smith_g1(wo, m);;
+    }
+
+    /// Smith's height-correlated shadowing-masking approximation
+    Float G_height_correlated(const Vector3f &wi, const Vector3f &wo, const Vector3f &m) const {
+        Float result =  dr::rcp(1.f+smith_lambda(wi)+smith_lambda(wo));
+
+        /* Ensure consistent orientation (can't see the back
+           of the microfacet from the front and vice versa) */
+        dr::masked(result, dr::dot(wi, m) * Frame3f::cos_theta(wi) <= 0.f) = 0.f;
+        dr::masked(result, dr::dot(wo, m) * Frame3f::cos_theta(wo) <= 0.f) = 0.f;
+
+        return result;
     }
 
     /**
@@ -339,7 +373,9 @@ public:
      *     The microfacet normal
      */
     Float smith_g1(const Vector3f &v, const Vector3f &m) const {
-        Float xy_alpha_2 = dr::square(m_alpha_u * v.x()) + dr::square(m_alpha_v * v.y()),
+        Float xy_alpha_2 = dr::square(m_alpha_up * v.x()) 
+                         + dr::square(m_alpha_vp * v.y()) 
+                         + v.x()*v.y() * m_correlation,
               tan_theta_alpha_2 = xy_alpha_2 / dr::square(v.z()),
               result;
 
@@ -360,6 +396,39 @@ public:
         /* Ensure consistent orientation (can't see the back
            of the microfacet from the front and vice versa) */
         dr::masked(result, dr::dot(v, m) * Frame3f::cos_theta(v) <= 0.f) = 0.f;
+
+        return result;
+    }
+
+
+    /**
+     * \brief Smith's shadowing-masking lambda function for a single direction
+     *
+     * \param v
+     *     An arbitrary direction
+     * \param m
+     *     The microfacet normal
+     */
+    Float smith_lambda(const Vector3f &v) const {
+        Float xy_alpha_2 = dr::sqr(m_alpha_up * v.x()) 
+                         + dr::sqr(m_alpha_vp * v.y()) 
+                         + v.x()*v.y() * m_correlation,
+              tan_theta_alpha_2 = xy_alpha_2 / dr::sqr(v.z()),
+              result;
+
+        if (m_type == MicrofacetType::Beckmann) {
+            Float a = dr::rsqrt(tan_theta_alpha_2), a_sqr = dr::sqr(a);
+            /* Use a fast and accurate (<0.35% rel. error) rational
+               approximation to the shadowing-masking function */
+            result = dr::select(a >= 1.6f, 0.f,
+                                (1.f - 1.259f * a + 0.396f * a_sqr) /
+                                    (3.535f * a + 2.181f * a_sqr));
+        } else {
+            result = 0.5f * (1.f + dr::sqrt(1.f + tan_theta_alpha_2));
+        }
+
+        // Perpendicular incidence -- no shadowing/masking
+        dr::masked(result, dr::eq(xy_alpha_2, 0.f)) = 0.f;
 
         return result;
     }
@@ -425,6 +494,13 @@ protected:
     void configure() {
         m_alpha_u = dr::maximum(m_alpha_u, 1e-4f);
         m_alpha_v = dr::maximum(m_alpha_v, 1e-4f);
+
+        // Calculate the correlated coefficient that form the inverse Quadric
+        // equation that describe the ellispoid of this distribution.
+        auto [s_phi, c_phi] = dr::sincos(m_angle);
+        m_alpha_up = dr::sqrt(dr::sqr(m_alpha_u*c_phi) + dr::sqr(m_alpha_v*s_phi));
+        m_alpha_vp = dr::sqrt(dr::sqr(m_alpha_u*s_phi) + dr::sqr(m_alpha_v*c_phi));
+        m_correlation = 2.f * (dr::sqr(m_alpha_u) - dr::sqr(m_alpha_v))*c_phi*s_phi;
     }
 
     /// Compute the squared 1D roughness along direction \c v
@@ -441,6 +517,8 @@ protected:
 protected:
     MicrofacetType m_type;
     Float m_alpha_u, m_alpha_v;
+    Float m_alpha_up, m_alpha_vp, m_correlation;
+    Float m_angle;
     bool  m_sample_visible;
 };
 
@@ -456,6 +534,7 @@ std::ostream &operator<<(std::ostream &os, const MicrofacetDistribution<Float, S
        << "  alpha_u = " << md.alpha_u() << "," << std::endl
        << "  alpha_v = " << md.alpha_v() << "," << std::endl
        << "  sample_visible = " << md.sample_visible() << std::endl
+       << "  angle = " << md.angle() << std::endl
        << "]";
     return os;
 }

@@ -4821,6 +4821,8 @@ Normals" by Eric Heitz)doc";
 
 static const char *__doc_mitsuba_MicrofacetDistribution_G = R"doc(Smith's separable shadowing-masking approximation)doc";
 
+static const char *__doc_mitsuba_MicrofacetDistribution_G_height_correlated = R"doc(Smith's height-correlated shadowing-masking approximation)doc";
+
 static const char *__doc_mitsuba_MicrofacetDistribution_MicrofacetDistribution =
 R"doc(Create an isotropic microfacet distribution of the specified type
 
@@ -4840,7 +4842,10 @@ Parameter ``alpha_u``:
     The surface roughness in the tangent direction
 
 Parameter ``alpha_v``:
-    The surface roughness in the bitangent direction)doc";
+    The surface roughness in the bitangent direction
+
+Parameter ``alpha_v``:
+    The angle of rotation of the anisotropic distribution)doc";
 
 static const char *__doc_mitsuba_MicrofacetDistribution_MicrofacetDistribution_3 = R"doc(Create a microfacet distribution from a Property data structure)doc";
 
@@ -4849,6 +4854,8 @@ static const char *__doc_mitsuba_MicrofacetDistribution_alpha = R"doc(Return the
 static const char *__doc_mitsuba_MicrofacetDistribution_alpha_u = R"doc(Return the roughness along the tangent direction)doc";
 
 static const char *__doc_mitsuba_MicrofacetDistribution_alpha_v = R"doc(Return the roughness along the bitangent direction)doc";
+
+static const char *__doc_mitsuba_MicrofacetDistribution_angle = R"doc(Return the angle of anisotropy)doc";
 
 static const char *__doc_mitsuba_MicrofacetDistribution_configure = R"doc()doc";
 
@@ -4864,7 +4871,15 @@ static const char *__doc_mitsuba_MicrofacetDistribution_is_isotropic = R"doc(Is 
 
 static const char *__doc_mitsuba_MicrofacetDistribution_m_alpha_u = R"doc()doc";
 
+static const char *__doc_mitsuba_MicrofacetDistribution_m_alpha_up = R"doc()doc";
+
 static const char *__doc_mitsuba_MicrofacetDistribution_m_alpha_v = R"doc()doc";
+
+static const char *__doc_mitsuba_MicrofacetDistribution_m_alpha_vp = R"doc()doc";
+
+static const char *__doc_mitsuba_MicrofacetDistribution_m_angle = R"doc()doc";
+
+static const char *__doc_mitsuba_MicrofacetDistribution_m_correlation = R"doc()doc";
 
 static const char *__doc_mitsuba_MicrofacetDistribution_m_sample_visible = R"doc()doc";
 
@@ -4905,6 +4920,15 @@ static const char *__doc_mitsuba_MicrofacetDistribution_scale_alpha = R"doc(Scal
 
 static const char *__doc_mitsuba_MicrofacetDistribution_smith_g1 =
 R"doc(Smith's shadowing-masking function for a single direction
+
+Parameter ``v``:
+    An arbitrary direction
+
+Parameter ``m``:
+    The microfacet normal)doc";
+
+static const char *__doc_mitsuba_MicrofacetDistribution_smith_lambda =
+R"doc(Smith's shadowing-masking lambda function for a single direction
 
 Parameter ``v``:
     An arbitrary direction
