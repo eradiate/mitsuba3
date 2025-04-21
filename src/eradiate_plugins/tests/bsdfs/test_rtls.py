@@ -95,10 +95,10 @@ def test_create_rtls(variant_scalar_rgb):
     assert "f_vol.value" in params
 
 
-def angles_to_directions(theta, phi):
-    return mi.Vector3f(
-        np.sin(theta) * np.cos(phi), np.sin(theta) * np.sin(phi), np.cos(theta)
-    )
+def sph_to_dir(theta, phi):
+    st, ct = dr.sincos(theta)
+    sp, cp = dr.sincos(phi)
+    return mi.Vector3f(st * cp, st * sp, ct)
 
 
 def eval_bsdf(bsdf, wi, wo):
@@ -135,8 +135,8 @@ regression_test_geometries = [
 def test_k_vol_angles(variant_scalar_mono, theta_i, theta_o, phi_i, phi_o):
     rtls = mi.load_dict({"type": "rtls", "f_iso": 0.0, "f_vol": 1.0, "f_geo": 0.0})
 
-    wi = angles_to_directions(theta_i, phi_i)
-    wo = angles_to_directions(theta_o, phi_o)
+    wi = sph_to_dir(theta_i, phi_i)
+    wo = sph_to_dir(theta_o, phi_o)
     value = eval_bsdf(rtls, wi, wo) / np.cos(theta_o)
 
     reference, k_vol, k_geo = rtls_reference(
@@ -156,8 +156,8 @@ def test_k_vol_angles(variant_scalar_mono, theta_i, theta_o, phi_i, phi_o):
 def test_k_geo_angles(variant_scalar_rgb, theta_i, theta_o, phi_i, phi_o):
     rtls = mi.load_dict({"type": "rtls", "f_iso": 0.0, "f_vol": 0.0, "f_geo": 1.0})
 
-    wi = angles_to_directions(theta_i, phi_i)
-    wo = angles_to_directions(theta_o, phi_o)
+    wi = sph_to_dir(theta_i, phi_i)
+    wo = sph_to_dir(theta_o, phi_o)
     value = eval_bsdf(rtls, wi, wo) / np.cos(theta_o)
 
     reference, k_vol, k_geo = rtls_reference(
@@ -189,8 +189,8 @@ def test_rtls_scalar_combinations(variant_scalar_rgb, f_iso, f_vol, f_geo):
 
     values = []
     for j in range(num_samples):
-        wi = angles_to_directions(theta_i[j], phi_i[j])
-        wo = angles_to_directions(theta_o[j], phi_o[j])
+        wi = sph_to_dir(theta_i[j], phi_i[j])
+        wo = sph_to_dir(theta_o[j], phi_o[j])
         value = eval_bsdf(rtls, wi, wo) / np.cos(theta_o[j])
         values.append(value)
 
@@ -210,15 +210,15 @@ def test_rtls_vect(variant_llvm_ad_rgb, f_iso, f_vol, f_geo):
     rtls = mi.load_dict(
         {"type": "rtls", "f_iso": f_iso, "f_vol": f_vol, "f_geo": f_geo}
     )
-    num_samples = 100
 
-    theta_i = np.random.rand(num_samples) * np.pi / 2.0
-    theta_o = np.random.rand(num_samples) * np.pi / 2.0
-    phi_i = np.random.rand(num_samples) * np.pi * 2.0
-    phi_o = np.random.rand(num_samples) * np.pi * 2.0
+    rng = mi.PCG32(10000)
+    theta_i = mi.Float(rng.next_float32()) * dr.pi / 2.0
+    theta_o = mi.Float(rng.next_float32()) * dr.pi / 2.0
+    phi_i = mi.Float(rng.next_float32()) * dr.pi * 2.0
+    phi_o = mi.Float(rng.next_float32()) * dr.pi * 2.0
 
-    wi = angles_to_directions(theta_i, phi_i)
-    wo = angles_to_directions(theta_o, phi_o)
+    wi = sph_to_dir(theta_i, phi_i)
+    wo = sph_to_dir(theta_o, phi_o)
     values = eval_bsdf(rtls, wi, wo) / np.cos(theta_o)
 
     reference, k_vol, k_geo = rtls_reference(
@@ -233,7 +233,7 @@ def test_eval_diffuse(variant_scalar_rgb, R):
     Compare a degenerate RTLS case with a diffuse BRDF.
     """
 
-    f_iso = R / np.pi
+    f_iso = R / dr.pi
     f_vol = 0.0
     f_geo = 0.0
 
@@ -242,31 +242,34 @@ def test_eval_diffuse(variant_scalar_rgb, R):
     )
     diffuse = mi.load_dict({"type": "diffuse", "reflectance": R})
 
-    theta_i = np.random.rand(1) * np.pi / 2.0
-    theta_o = np.random.rand(1) * np.pi / 2.0
-    phi_i = np.random.rand(1) * np.pi * 2.0
-    phi_o = np.random.rand(1) * np.pi * 2.0
+    rng = mi.PCG32(10000)
+    theta_i = mi.Float(rng.next_float32()) * dr.pi / 2.0
+    theta_o = mi.Float(rng.next_float32()) * dr.pi / 2.0
+    phi_i = mi.Float(rng.next_float32()) * dr.pi * 2.0
+    phi_o = mi.Float(rng.next_float32()) * dr.pi * 2.0
 
-    wi = angles_to_directions(theta_i, phi_i)
-    wo = angles_to_directions(theta_o, phi_o)
+    wi = sph_to_dir(theta_i, phi_i)
+    wo = sph_to_dir(theta_o, phi_o)
     values = eval_bsdf(rtls, wi, wo)
     reference = eval_bsdf(diffuse, wi, wo) / np.pi
 
-    assert np.allclose(values, reference, rtol=1e-3, atol=1e-3, equal_nan=True)
+    assert dr.allclose(values, reference, rtol=1e-3, atol=1e-3, equal_nan=True)
 
 
 def test_chi2_rtls(variants_vec_backends_once_rgb):
     from mitsuba.chi2 import BSDFAdapter, ChiSquareTest, SphericalDomain
 
-    sample_func, pdf_func = BSDFAdapter("rtls",
-    """
+    sample_func, pdf_func = BSDFAdapter(
+        "rtls",
+        """
         <float name="f_iso" value="0.209741"/>
         <float name="f_vol" value="0.081384"/>
         <float name="f_geo" value="0.004140"/>
         <float name="h" value="2"/>
         <float name="r" value="1"/>
         <float name="b" value="1"/>
-    """)
+    """,
+    )
 
     chi2 = ChiSquareTest(
         domain=SphericalDomain(),
@@ -279,7 +282,7 @@ def test_chi2_rtls(variants_vec_backends_once_rgb):
 
 
 @pytest.mark.parametrize("wi", [[0, 0, 1], [0, 1, 1], [1, 1, 1]])
-def test_sampling_weights_rpv(variant_scalar_rgb, wi):
+def test_sampling_weights_rtls(variant_llvm_ad_rgb, wi):
     """
     Sampling weights are correctly computed, i.e. equal to eval() / pdf().
     """
@@ -301,7 +304,7 @@ rami4atm_RLI_parameters = [
 
 
 @pytest.mark.parametrize("f_iso,f_vol,f_geo", rami4atm_RLI_parameters)
-def test_rami4atm_sanity_check(variant_llvm_ad_rgb, f_iso, f_geo, f_vol, np_rng):
+def test_rami4atm_sanity_check(variant_llvm_ad_rgb, f_iso, f_geo, f_vol):
     # Given a set of parameters taken from the RAMI4ATM benchmark, assumed to be
     # physically correct, test the BRDF common properties:
     #  - Take positive values
@@ -313,16 +316,15 @@ def test_rami4atm_sanity_check(variant_llvm_ad_rgb, f_iso, f_geo, f_vol, np_rng)
         {"type": "rtls", "f_iso": f_iso, "f_vol": f_vol, "f_geo": f_geo}
     )
 
-    num_samples = 1000
-
     # Use RAMI4ATM angle limits
-    theta_i = np.deg2rad(np_rng.random(num_samples) * 80)
-    theta_o = np.deg2rad(np_rng.random(num_samples) * 80)
-    phi_i = np_rng.random(num_samples) * np.pi * 2.0
-    phi_o = np_rng.random(num_samples) * np.pi * 2.0
+    rng = mi.PCG32(100000)
+    theta_i = dr.deg2rad(rng.next_float32() * 80.0)
+    theta_o = dr.deg2rad(rng.next_float32() * 80.0)
+    phi_i = rng.next_float32() * dr.pi * 2.0
+    phi_o = rng.next_float32() * dr.pi * 2.0
 
-    wi = angles_to_directions(theta_i, phi_i)
-    wo = angles_to_directions(theta_o, phi_o)
+    wi = sph_to_dir(theta_i, phi_i)
+    wo = sph_to_dir(theta_o, phi_o)
     values = eval_bsdf(rtls, wi, wo)
 
     reference, k_vol, k_geo = rtls_reference(
@@ -335,18 +337,19 @@ def test_rami4atm_sanity_check(variant_llvm_ad_rgb, f_iso, f_geo, f_vol, np_rng)
     # Check all positives
     problematic_geometries = np.concatenate(
         [
-            np.rad2deg(theta_i.reshape(-1, 1)),
-            np.rad2deg(theta_o.reshape(-1, 1)),
-            np.rad2deg(phi_i.reshape(-1, 1)),
-            np.rad2deg(phi_o.reshape(-1, 1)),
-            np.array(values).reshape(-1, 1),
+            np.rad2deg(np.reshape(theta_i, (-1, 1))),
+            np.rad2deg(np.reshape(theta_o, (-1, 1))),
+            np.rad2deg(np.reshape(phi_i, (-1, 1))),
+            np.rad2deg(np.reshape(phi_o, (-1, 1))),
+            np.reshape(values, (-1, 1)),
         ],
         axis=1,
     )[values / np.cos(theta_o) < 0.0]
 
     if len(problematic_geometries):
         print(
-            "Found negative values in RTLS evaluation: [theta_i, theta_o, phi_i, phi_o, rtls_bsdf]"
+            "Found negative values in RTLS evaluation: "
+            "[theta_i, theta_o, phi_i, phi_o, rtls_bsdf]"
         )
         print(problematic_geometries)
 
@@ -354,32 +357,19 @@ def test_rami4atm_sanity_check(variant_llvm_ad_rgb, f_iso, f_geo, f_vol, np_rng)
 
     # Checking Helmholtz reciprocity
     reciprocal_values = eval_bsdf(rtls, wo, wi)
-    assert dr.allclose(
-        values / np.cos(theta_o),
-        reciprocal_values / np.cos(theta_i),
-        rtol=1e-3,
-        atol=1e-3,
-    )
+    assert dr.allclose(values / np.cos(theta_o), reciprocal_values / np.cos(theta_i))
 
-    # Checking the integral over the hemisphere is lower than 1
-    def sph_to_dir(theta, phi):
-        """Map spherical to Euclidean coordinates"""
-        st, ct = dr.sincos(theta)
-        sp, cp = dr.sincos(phi)
-        return mi.Vector3f(cp * st, sp * st, ct)
-
+    # Check energy conservation: reflectivity must be lower than 1
     si = dr.zeros(mi.SurfaceInteraction3f)
     si.wi = sph_to_dir(dr.deg2rad(45.0), 0.0)
-    n = 100
+    res = 1000
     theta_o, phi_o = dr.meshgrid(
-        dr.linspace(mi.Float, 0, dr.pi, n), dr.linspace(mi.Float, 0, 2 * dr.pi, 2 * n)
+        dr.linspace(mi.Float, 0.0, dr.pi, res),
+        dr.linspace(mi.Float, 0.0, 2.0 * dr.pi, 2 * res),
     )
     wo = sph_to_dir(theta_o, phi_o)
-    rho_wi = np.array(rtls.eval(mi.BSDFContext(), si, wo))
-    diff_wo = np.sin(theta_o) * (np.pi / n) * (np.pi / n)
-    diff_wo = diff_wo.reshape(diff_wo.shape[0], 1) @ np.ones((1, rho_wi.shape[1]))
-    rho_wi = rho_wi * diff_wo
-    assert all(np.nan_to_num(np.sum(rho_wi, axis=0)) <= 1.0)
+    rho_wi = rtls.eval(mi.BSDFContext(), si, wo) * dr.sin(theta_o) * dr.square(dr.pi / res)
+    assert dr.all(dr.sum(rho_wi, axis=1) <= 1.0)
 
 
 # check other values of h, r and b
@@ -413,8 +403,8 @@ def test_hrb_parameters(variant_scalar_rgb, f_iso, f_geo, f_vol, h, r, b):
 
     values = []
     for j in range(num_samples):
-        wi = angles_to_directions(theta_i[j], phi_i[j])
-        wo = angles_to_directions(theta_o[j], phi_o[j])
+        wi = sph_to_dir(theta_i[j], phi_i[j])
+        wo = sph_to_dir(theta_o[j], phi_o[j])
         value = eval_bsdf(rtls, wi, wo) / np.cos(theta_o[j])
         values.append(value)
 
