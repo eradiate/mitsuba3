@@ -170,8 +170,8 @@ Float eval_ocean_transmittance(Float theta, Float phi,
 
     // Prepare cox munk distribution
     auto [sigma_c, sigma_u] = cox_munk_crosswind_upwind(wind_speed);
-    sigma_c                 = dr::square(sigma_c);
-    sigma_u                 = dr::square(sigma_u);
+    sigma_c                 = dr::sqrt(sigma_c);
+    sigma_u                 = dr::sqrt(sigma_u);
 
     // cycle through each packet.
     for (size_t i = 0; i < packet_count; ++i) {
@@ -216,7 +216,7 @@ Float eval_ocean_transmittance(Float theta, Float phi,
             // Fresnel term.
             FloatP cos_chi =
                        dr::clip(dr::dot(wo, m), -0.999999999f, 0.999999999f),
-                   sin_chi = dr::clip(dr::square(1 - cos_chi * cos_chi),
+                   sin_chi = dr::clip(dr::sqrt(1 - cos_chi * cos_chi),
                                        -0.999999999f, 0.999999999f);
             FloatP F = fresnel_sunglint_legacy<FloatP>(n_real, n_imag, cos_chi,
                                                        sin_chi);
@@ -324,8 +324,8 @@ public:
         // Update Cox-Munk variables
         std::tie(m_sigma_c, m_sigma_u) =
             cox_munk_crosswind_upwind(m_wind_speed);
-        m_sigma_c = dr::square(m_sigma_c);
-        m_sigma_u = dr::square(m_sigma_u);
+        m_sigma_c = dr::sqrt(m_sigma_c);
+        m_sigma_u = dr::sqrt(m_sigma_u);
 
         m_r_omega = r_omega<Float, Spectrum, ScalarFloat>(
             m_ocean_props, m_wavelength, m_pigmentation);
@@ -437,7 +437,7 @@ public:
         } else {
             Float cos_chi =
                       dr::clip(dr::dot(wo, m), -0.999999999f, 0.999999999f),
-                  sin_chi = dr::clip(dr::square(1 - cos_chi * cos_chi),
+                  sin_chi = dr::clip(dr::sqrt(1 - cos_chi * cos_chi),
                                       -0.999999999f, 0.999999999f);
 
             F = fresnel_sunglint_legacy<Float>(m_n_real, m_n_imag, cos_chi,
@@ -456,7 +456,12 @@ public:
         uv.y() =
             (dr::atan2(v.y(), v.x()) - m_wind_direction) * dr::InvTwoPi<Float>;
         uv.y() = uv.y() - (1.f * dr::floor(uv.y())); // equivalent to uv.y % 1.f
-        data.eval(uv, &t);
+        
+        if (m_accel)
+            data.template eval<Float>(uv, &t);
+        else
+            data.template eval_nonaccel<Float>(uv, &t);
+
         return t;
     }
 
