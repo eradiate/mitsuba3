@@ -202,7 +202,7 @@ public:
 
             active &= depth < (uint32_t) m_max_depth;
             if (dr::none_or<false>(active))
-                break;
+                return;
 
             // ----------------------- Sampling the RTE -----------------------
             Mask active_medium    = active && (medium != nullptr);
