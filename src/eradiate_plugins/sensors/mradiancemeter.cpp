@@ -68,7 +68,7 @@ the other located at (0, 1, 0) and pointing in the direction (0, -1, 0).
 MI_VARIANT class MultiRadianceMeter final : public Sensor<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Sensor, m_film, m_to_world, m_needs_sample_2,
-                    m_needs_sample_3)
+                    m_needs_sample_3, sample_wavelengths)
     MI_IMPORT_TYPES()
 
     using Matrix = dr::Matrix<Float, AffineTransform4f::Size>;
@@ -150,7 +150,9 @@ public:
 
         // 1. Sample spectrum
         auto [wavelengths, wav_weight] =
-            sample_wavelength<Float, Spectrum>(wavelength_sample);
+            sample_wavelengths(dr::zeros<SurfaceInteraction3f>(),
+                               wavelength_sample,
+                               active);
         ray.wavelengths = wavelengths;
 
         // 2. Set ray origin and direction

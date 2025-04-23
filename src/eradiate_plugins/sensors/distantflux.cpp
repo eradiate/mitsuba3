@@ -88,7 +88,7 @@ Ray origins are positioned outside of the scene's geometry.
 template <typename Float, typename Spectrum>
 class DistantFluxSensor final : public Sensor<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(Sensor, m_to_world, m_film)
+    MI_IMPORT_BASE(Sensor, m_to_world, m_film, sample_wavelengths)
     MI_IMPORT_TYPES(Scene, Shape)
 
     DistantFluxSensor(const Properties &props) : Base(props) {
@@ -157,7 +157,9 @@ public:
 
         // Sample spectrum
         auto [wavelengths, wav_weight] =
-            sample_wavelength<Float, Spectrum>(wavelength_sample);
+            sample_wavelengths(dr::zeros<SurfaceInteraction3f>(),
+                               wavelength_sample,
+                               active);
         ray.wavelengths = wavelengths;
 
         // Sample ray direction
