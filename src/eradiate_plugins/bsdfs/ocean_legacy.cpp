@@ -216,8 +216,8 @@ Float eval_ocean_transmittance(Float theta, Float phi,
             // Fresnel term.
             FloatP cos_chi =
                        dr::clip(dr::dot(wo, m), -0.999999999f, 0.999999999f),
-                   sin_chi = dr::clip(dr::sqrt(1 - cos_chi * cos_chi),
-                                       -0.999999999f, 0.999999999f);
+                   sin_chi = dr::clip(dr::sqrt(1.f - cos_chi * cos_chi),
+                                      -0.999999999f, 0.999999999f);
             FloatP F = fresnel_sunglint_legacy<FloatP>(n_real, n_imag, cos_chi,
                                                        sin_chi);
 
@@ -437,7 +437,7 @@ public:
         } else {
             Float cos_chi =
                       dr::clip(dr::dot(wo, m), -0.999999999f, 0.999999999f),
-                  sin_chi = dr::clip(dr::sqrt(1 - cos_chi * cos_chi),
+                  sin_chi = dr::clip(dr::sqrt(1.f - cos_chi * cos_chi),
                                       -0.999999999f, 0.999999999f);
 
             F = fresnel_sunglint_legacy<Float>(m_n_real, m_n_imag, cos_chi,
@@ -456,7 +456,7 @@ public:
         uv.y() =
             (dr::atan2(v.y(), v.x()) - m_wind_direction) * dr::InvTwoPi<Float>;
         uv.y() = uv.y() - (1.f * dr::floor(uv.y())); // equivalent to uv.y % 1.f
-        
+
         if (m_accel)
             data.template eval<Float>(uv, &t);
         else
@@ -516,7 +516,7 @@ public:
         Float t_i =
             eval_transmittance(m_downwelling_transmittance, cos_theta_i, si.wi);
         Float whitecap      = eval_whitecaps();
-        Float prob_diffuse  = whitecap + t_i * (1 - whitecap),
+        Float prob_diffuse  = whitecap + t_i * (1.f - whitecap),
               prob_specular = (1.f - m_coverage);
 
         // Cater for case where only one lobe is activated
