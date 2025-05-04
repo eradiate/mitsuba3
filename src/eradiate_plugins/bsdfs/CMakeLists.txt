@@ -9,5 +9,6 @@ add_plugin(selectbsdf selectbsdf.cpp)
 add_plugin(ocean_grasp ocean_grasp.cpp)
 add_plugin(ocean_legacy ocean_legacy.cpp)
 add_plugin(ocean_mishchenko ocean_mishchenko.cpp)
+add_plugin(maignan maignan.cpp)
 
 set(MI_PLUGIN_TARGETS "${MI_PLUGIN_TARGETS}" PARENT_SCOPE)
