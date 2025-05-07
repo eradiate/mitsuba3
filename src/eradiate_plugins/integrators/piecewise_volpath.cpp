@@ -429,54 +429,44 @@ public:
 
         Float total_dist        = 0.f;
         SurfaceInteraction3f si = dr::zeros<SurfaceInteraction3f>();
-        Mask needs_intersection = true;
         DirectionSample3f dir_sample = ds;
 
         struct LoopState {
             Mask active;
             Ray3f ray;
             Float total_dist;
-            Mask needs_intersection;
             MediumPtr medium;
             SurfaceInteraction3f si;
             Spectrum transmittance;
-            DirectionSample3f dir_sample;
-            Sampler* sampler;
 
             DRJIT_STRUCT(LoopState, active, ray, total_dist, \
-                needs_intersection, medium, si, transmittance, \
-                dir_sample, sampler)
+                         medium, si, transmittance)
         } ls = {
             active,
             ray,
             total_dist,
-            needs_intersection,
             medium,
             si,
-            transmittance,
-            dir_sample,
-            sampler
+            transmittance
         };
 
         dr::tie(ls) = dr::while_loop(dr::make_tuple(ls),
             [](const LoopState& ls) { return dr::detach(ls.active); },
-            [this, scene, channel, max_dist](LoopState& ls) {
+            // uncomment this if needed to access any member variable or functions.
+            [/*this,*/ scene, channel, max_dist](LoopState& ls) {
 
             Mask& active = ls.active;
             Ray3f& ray = ls.ray;
             Float& total_dist = ls.total_dist;
-            Mask& needs_intersection = ls.needs_intersection;
             MediumPtr& medium = ls.medium;
             SurfaceInteraction3f& si = ls.si;
             Spectrum& transmittance = ls.transmittance;
-            DirectionSample3f& dir_sample = ls.dir_sample;
-            Sampler* sampler = ls.sampler;
 
             Float remaining_dist = max_dist - total_dist;
             ray.maxt             = remaining_dist;
             active &= remaining_dist > 0.f;
             if (dr::none_or<false>(active))
-                break;
+                return;
 
             dr::masked(si, active) = scene->ray_intersect(ray, active);
 
