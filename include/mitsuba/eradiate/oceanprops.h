@@ -631,7 +631,7 @@ Float cox_munk_anisotropic_distrib(const Float &wind_direction,
 
     Float prob = coef * dr::InvTwoPi<Float> * dr::rcp(sigma_u * sigma_c) *
                  dr::exp(-(xe2 + xn2) * 0.5f);
-    return prob;
+    return dr::maximum(prob, 0.f);
 }
 
 /**
@@ -672,7 +672,7 @@ Float cox_munk_gram_charlier_coef(const Float &wind_direction,
     coef = coef + (c_04 / 24.f) * (xn2 * xn2 - 6.f * xn2 + 3.f);
     coef = coef + (c_22 / 4.f) * (xe2 - 1.f) * (xn2 - 1.f);
 
-    return coef;
+    return dr::maximum(coef, 0.f);
 }
 
 /**

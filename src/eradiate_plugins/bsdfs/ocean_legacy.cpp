@@ -330,6 +330,7 @@ public:
         m_r_omega = r_omega<Float, Spectrum, ScalarFloat>(
             m_ocean_props, m_wavelength, m_pigmentation);
 
+        m_specular_sampling_weight = 1.f / (m_r_omega + 1.f);
         {
             // Pre-compute textures for the upwelling and downwelling
             // transmittances of radiance in the water body.
@@ -512,22 +513,33 @@ public:
         if (unlikely(dr::none_or<false>(active)) || (!has_diffuse && !has_specular))
             return { bs, 0.f };
 
-        // Determine which component should be sampled
-        Float t_i =
-            eval_transmittance(m_downwelling_transmittance, cos_theta_i, si.wi);
-        Float whitecap      = eval_whitecaps();
-        Float prob_diffuse  = whitecap + t_i * (1.f - whitecap),
-              prob_specular = (1.f - m_coverage);
+        Float prob_whitecap       = Float(0.),
+              prob_water_specular = Float(0.),
+              prob_water_diffuse  = Float(0.);
 
         // Cater for case where only one lobe is activated
-        if (unlikely(has_specular != has_diffuse))
-            prob_specular = has_specular ? 1.f : 0.f;
-        else
-            prob_specular = prob_specular / (prob_specular + prob_diffuse);
-        prob_diffuse = 1.f - prob_specular;
+        if (unlikely(has_specular != has_diffuse)) {
 
-        // sample diffuse or specular lobe.
-        Mask sample_diffuse  = active && (sample1 < prob_diffuse),
+            prob_water_specular = has_specular ? 1.f : 0.f;
+            prob_water_diffuse  = 1.f - prob_water_specular,
+            prob_whitecap       = 1.f - prob_water_specular;
+        }
+        else {
+            // Determine which component should be sampled
+            Float t_i      = eval_transmittance(m_downwelling_transmittance, cos_theta_i, si.wi);
+            Float whitecap = eval_whitecaps();
+
+            prob_whitecap       = whitecap;
+            prob_water_specular = (1.f - whitecap) * (1.f - t_i) * m_specular_sampling_weight;
+            prob_water_diffuse  = (1.f - m_coverage) * t_i * (1.f - m_specular_sampling_weight);
+
+            Float sum = prob_whitecap + prob_water_diffuse + prob_water_specular;
+            prob_whitecap /= sum;
+            prob_water_diffuse /= sum;
+            prob_water_specular /= sum;
+        }
+
+        Mask sample_diffuse  = active && (sample1 < (prob_whitecap + prob_water_diffuse)),
              sample_specular = active && !sample_diffuse;
 
         if (dr::any_or<true>(sample_diffuse)) {
@@ -541,15 +553,15 @@ public:
         }
 
         if (dr::any_or<true>(sample_specular)) {
+
             MicrofacetDistribution distr(
-                MicrofacetType::Beckmann, dr::SqrtTwo<Float> * m_sigma_u,
-                dr::SqrtTwo<Float> * m_sigma_c, true, Float(m_wind_direction));
+            MicrofacetType::Beckmann, dr::SqrtTwo<Float> * m_sigma_u,
+            dr::SqrtTwo<Float> * m_sigma_c, true, Float(m_wind_direction));
 
             auto [H, weight] = distr.sample(si.wi, sample2);
             Vector3f wo      = reflect(si.wi, H);
 
             dr::masked(bs.wo, sample_specular) = wo;
-
             dr::masked(bs.sampled_component, sample_specular) = 1;
             dr::masked(bs.sampled_type, sample_specular) =
                 +BSDFFlags::GlossyReflection;
@@ -682,23 +694,37 @@ public:
                      dr::none_or<false>(active)))
             return 0.f;
 
-        Float prob_whitecap = eval_whitecaps();
-        Float t_i =
-            eval_transmittance(m_downwelling_transmittance, cos_theta_i, si.wi);
+        Float prob_whitecap       = Float(0.),
+              prob_water_specular = Float(0.),
+              prob_water_diffuse  = Float(0.);
 
-        Float prob_diffuse  = t_i * (1.f - prob_whitecap) + prob_whitecap,
-              prob_specular = (1.f - m_coverage);
+        // Cater for case where only one lobe is activated
+        if (unlikely(has_specular != has_diffuse)) {
 
-        if (unlikely(has_specular != has_diffuse))
-            prob_specular = has_specular ? 1.f : 0.f;
-        else
-            prob_specular = prob_specular / (prob_specular + prob_diffuse);
-        prob_diffuse = 1.f - prob_specular;
+            prob_water_specular = has_specular ? 1.f : 0.f;
+            prob_water_diffuse  = 1.f - prob_water_specular,
+            prob_whitecap       = 1.f - prob_water_specular;
+        }
+        else {
+            // Determine which component should be sampled
+            Float t_i      = eval_transmittance(m_downwelling_transmittance, cos_theta_i, si.wi);
+            Float whitecap = eval_whitecaps();
+
+            prob_whitecap       = whitecap;
+            prob_water_specular = (1.f - whitecap) * (1.f - t_i) * m_specular_sampling_weight;
+            prob_water_diffuse  = (1.f - m_coverage) * t_i * (1.f - m_specular_sampling_weight);
+
+            Float sum = prob_whitecap + prob_water_diffuse + prob_water_specular;
+            prob_whitecap /= sum;
+            prob_water_diffuse /= sum;
+            prob_water_specular /= sum;
+        }
+
 
         // diffuse probability
         Float prob_cosine = warp::square_to_cosine_hemisphere_pdf(wo);
         prob_whitecap *= prob_cosine;
-        prob_diffuse *= prob_cosine;
+        prob_water_diffuse *= prob_cosine;
 
         // Weight the specular component using the visible beckmann pdf
         Vector3f H = dr::normalize(wo + si.wi);
@@ -707,10 +733,10 @@ public:
             MicrofacetType::Beckmann, dr::SqrtTwo<Float> * m_sigma_u,
             dr::SqrtTwo<Float> * m_sigma_c, true, Float(m_wind_direction));
 
-        prob_specular *=
-            distr.eval(H) * distr.smith_g1(si.wi, H) / (4.f * cos_theta_i);
+        Float prob_microfacet = distr.eval(H) * distr.smith_g1(si.wi, H) / (4.f * cos_theta_i);
+        prob_water_specular *= prob_microfacet;
 
-        Float result = prob_diffuse + prob_specular;
+        Float result = prob_whitecap + prob_water_diffuse + prob_water_specular;
 
         return dr::select(active, result, 0.f);
     }
@@ -756,6 +782,8 @@ private:
     ScalarFloat m_sigma_c = 1.f;
     ScalarFloat m_sigma_u = 1.f;
     ScalarFloat m_r_omega = 0.f;
+
+    Float m_specular_sampling_weight;
 
     Texture2f m_downwelling_transmittance;
     Texture2f m_upwelling_transmittance;

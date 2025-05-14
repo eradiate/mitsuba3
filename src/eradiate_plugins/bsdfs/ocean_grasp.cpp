@@ -12,6 +12,8 @@
 #include <mitsuba/eradiate/oceanprops.h>
 #include <tuple>
 
+#define MI_ROUGH_TRANSMITTANCE_RES 64
+
 NAMESPACE_BEGIN(mitsuba)
 
 /**!
@@ -160,6 +162,39 @@ public:
         Float d_mean = m_water_body_reflectance->mean(), s_mean = 1.f;
 
         m_specular_sampling_weight = s_mean / (d_mean + s_mean);
+
+        // Precompute rough reflectance (vectorized)
+        // Retrieve slope RMS
+        ScalarFloat wind_speed = dr::slice(m_wind_speed->mean());
+        ScalarFloat sigma      = dr::slice(eval_sigma(Float(wind_speed)));
+
+        // Evaluate the water and air index of refractions
+        ScalarFloat eta = dr::slice(m_eta->mean()) / dr::slice(m_ext_ior->mean());
+
+        using FloatX = DynamicBuffer<ScalarFloat>;
+        using Vector3fX = Vector<FloatX, 3>;
+
+        using FloatP = dr::Packet<dr::scalar_t<Float>>;
+         mitsuba::MicrofacetDistribution<FloatP, Spectrum> distr(
+            MicrofacetType::Beckmann,
+            dr::SqrtTwo<ScalarFloat> * sigma,
+            true
+        );
+        FloatX mu = dr::maximum(1e-6f, dr::linspace<FloatX>(0, 1, MI_ROUGH_TRANSMITTANCE_RES));
+        FloatX zero = dr::zeros<FloatX>(MI_ROUGH_TRANSMITTANCE_RES);
+
+        Vector3fX wi = Vector3fX(dr::sqrt(1 - mu * mu), zero, mu);
+
+        auto external_transmittance = eval_transmittance(distr, wi, eta);
+
+        m_external_transmittance = dr::load<DynamicBuffer<Float>>(
+            external_transmittance.data(),
+            dr::width(external_transmittance));
+
+        m_internal_reflectance =
+            dr::mean(eval_reflectance(distr, wi, 1.f / eta) * wi.z()) * 2.f;
+
+        dr::make_opaque(m_specular_sampling_weight, m_internal_reflectance);
     }
 
     /**
@@ -257,6 +292,18 @@ public:
 
     }
 
+    Float lerp_gather(const DynamicBuffer<Float> &data, Float x, size_t size,
+                      Mask active = true) const {
+        using UInt32 = dr::uint32_array_t<Float>;
+        x *= Float(size - 1);
+        UInt32 index = dr::minimum(UInt32(x), uint32_t(size - 2));
+
+        Float v0 = dr::gather<Float>(data, index, active),
+              v1 = dr::gather<Float>(data, index + 1, active);
+
+        return dr::lerp(v0, v1, x - Float(index));
+    }
+
     std::pair<BSDFSample3f, Spectrum>
     sample(const BSDFContext &ctx, const SurfaceInteraction3f &si,
            Float sample1, const Point2f &sample2, Mask active) const override {
@@ -275,32 +322,38 @@ public:
             (!has_diffuse && !has_specular))
             return { bs, 0.f };
 
+        Float prob_whitecap       = Float(0.),
+              prob_water_specular = Float(0.),
+              prob_water_diffuse  = Float(0.);
+
         Float wind_speed = m_wind_speed->eval(si, active)[0];
-        Float coverage   = whitecap_coverage_monahan(wind_speed);
-
-        Float prob_foam = coverage;
-
-        // Determine which component should be sampled
-        Float prob_water_specular =  m_specular_sampling_weight,
-              prob_water_diffuse  =  (1.f - m_specular_sampling_weight);
 
         // Cater for case where only one lobe is activated
-        if (unlikely(has_specular != has_diffuse))
+        if (unlikely(has_specular != has_diffuse)) {
+
             prob_water_specular = has_specular ? 1.f : 0.f;
-        else
-            prob_water_specular = prob_water_specular /
-                                  (prob_water_specular + prob_water_diffuse);
-        prob_water_diffuse = 1.f - prob_water_specular;
+            prob_water_diffuse  = 1.f - prob_water_specular,
+            prob_whitecap       = 1.f - prob_water_specular;
+        }
+        else {
+            // Determine which component should be sampled
+            Float coverage   = whitecap_coverage_monahan(wind_speed);
+            Float whitecap    = eval_whitecaps(wind_speed);
+            Float t_i = lerp_gather(m_external_transmittance, cos_theta_i,
+                            MI_ROUGH_TRANSMITTANCE_RES, active);
 
-        // sample foam coverage first
-        Mask sample_foam = active && (sample1 < prob_foam);
-        // Update to reuse on diffuse vs specular
-        sample1 = (sample1 - coverage) * dr::rcp(1.f - coverage);
+            prob_whitecap       = whitecap;
+            prob_water_specular = (1.f - coverage) * (1.f - t_i) * m_specular_sampling_weight;
+            prob_water_diffuse  = (1.f - coverage) * t_i * (1.f - m_specular_sampling_weight);
 
-        // sample diffuse or specular lobe.
-        Mask sample_diffuse =
-                 active && (sample_foam || (sample1 < prob_water_diffuse)),
-             sample_specular = active && !sample_foam && !sample_diffuse;
+            Float sum = prob_whitecap + prob_water_diffuse + prob_water_specular;
+            prob_whitecap /= sum;
+            prob_water_diffuse /= sum;
+            prob_water_specular /= sum;
+        }
+
+        Mask sample_diffuse  = active && (sample1 < (prob_whitecap + prob_water_diffuse)),
+             sample_specular = active && !sample_diffuse;
 
         if (dr::any_or<true>(sample_diffuse)) {
             // In the case of sampling the diffuse component, the outgoing
@@ -374,8 +427,19 @@ public:
         Float coverage   = whitecap_coverage_monahan(wind_speed);
 
         if (has_diffuse) {
+            Float t_i = lerp_gather(m_external_transmittance, cos_theta_i,
+                                    MI_ROUGH_TRANSMITTANCE_RES, active),
+                  t_o = lerp_gather(m_external_transmittance, cos_theta_o,
+                                    MI_ROUGH_TRANSMITTANCE_RES, active);
+            UnpolarizedSpectrum n_air = m_ext_ior->eval(si, active);
+            UnpolarizedSpectrum n_water = m_eta->eval(si, active);
+            UnpolarizedSpectrum m_inv_eta_2 = dr::square(n_air / n_water);
+
             whitecap_reflectance   = eval_whitecaps(wind_speed);
             underlight_reflectance = eval_underlight(si, active);
+
+            underlight_reflectance /= 1.f - UnpolarizedSpectrum(m_internal_reflectance);
+            underlight_reflectance *= (m_inv_eta_2 * t_i * t_o);
 
             // Diffuse scattering implies no polarization.
             result += depolarizer<Spectrum>(whitecap_reflectance +
@@ -428,14 +492,19 @@ public:
                 result[active] = (1.f - coverage) * glint_reflectance;
                 break;
             case 3:
+            {
                 result[active] = depolarizer<Spectrum>((1.f - coverage) *
                                                        underlight_reflectance);
                 break;
+
+            }
             case 4:
+            {
                 result[active] = depolarizer<Spectrum>(
                     whitecap_reflectance +
                     (1.f - coverage) * underlight_reflectance);
                 break;
+            }
             default:
                 break;
         }
@@ -459,27 +528,40 @@ public:
                      dr::none_or<false>(active)))
             return 0.f;
 
-        // Determine the contribution of each component by the coverage
+        Float prob_whitecap       = Float(0.),
+              prob_water_specular = Float(0.),
+              prob_water_diffuse  = Float(0.);
+
         Float wind_speed = m_wind_speed->eval(si, active)[0];
-        Float coverage   = whitecap_coverage_monahan(wind_speed);
-        Float sigma      = eval_sigma(wind_speed);
+        Float sigma = eval_sigma(wind_speed);
 
-        Float prob_whitecap = coverage,
-              prob_water    = (1.f - coverage);
+        // Cater for case where only one lobe is activated
+        if (unlikely(has_specular != has_diffuse)) {
 
-        Float prob_water_diffuse  = (1.f - m_specular_sampling_weight),
-              prob_water_specular = m_specular_sampling_weight;
-
-        if (unlikely(has_specular != has_diffuse))
             prob_water_specular = has_specular ? 1.f : 0.f;
-        else
-            prob_water_specular = prob_water_specular /
-                                  (prob_water_specular + prob_water_diffuse);
-        prob_water_diffuse = 1.f - prob_water_specular;
+            prob_water_diffuse  = 1.f - prob_water_specular,
+            prob_whitecap       = 1.f - prob_water_specular;
+        }
+        else {
+            // Determine which component should be sampled
+            Float coverage   = whitecap_coverage_monahan(wind_speed);
+            Float whitecap   = eval_whitecaps(wind_speed);
+            Float t_i = lerp_gather(m_external_transmittance, cos_theta_i,
+                            MI_ROUGH_TRANSMITTANCE_RES, active);
+
+            prob_whitecap       = whitecap;
+            prob_water_specular = (1.f - coverage) * (1.f - t_i) * m_specular_sampling_weight;
+            prob_water_diffuse  = (1.f - coverage) * t_i * (1.f - m_specular_sampling_weight);
+
+            Float sum = prob_whitecap + prob_water_diffuse + prob_water_specular;
+            prob_whitecap /= sum;
+            prob_water_diffuse /= sum;
+            prob_water_specular /= sum;
+        }
 
         // Weight the diffuse component by the cosine hemisphere pdf
         Float prob_cosine = warp::square_to_cosine_hemisphere_pdf(wo);
-        prob_whitecap *= prob_cosine;
+        prob_whitecap      *= prob_cosine;
         prob_water_diffuse *= prob_cosine;
 
         // Weight the specular component using the visible beckmann pdf
@@ -493,8 +575,7 @@ public:
             distr.eval(H) * distr.smith_g1(si.wi, H) / (4.f * cos_theta_i);
 
         // bring the three together.
-        Float result = prob_whitecap +
-                       prob_water * (prob_water_diffuse + prob_water_specular);
+        Float result = prob_whitecap + prob_water_diffuse + prob_water_specular;
 
         return dr::select(active, result, 0.f);
     }
@@ -526,6 +607,9 @@ private:
     ref<Texture> m_k;
     ref<Texture> m_ext_ior;
     ref<Texture> m_water_body_reflectance;
+
+    DynamicBuffer<Float> m_external_transmittance;
+    Float m_internal_reflectance;
 };
 
 MI_IMPLEMENT_CLASS_VARIANT(GRASPOceanBSDF, BSDF)
