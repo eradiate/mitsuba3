@@ -256,20 +256,13 @@ public:
     OceanBSDF(const Properties &props) : Base(props) {
         // Retrieve parameters
         m_wavelength     = props.get<ScalarFloat>("wavelength");
-        m_wind_speed     = props.get<ScalarFloat>("wind_speed", 0.1f);
-        m_wind_direction = props.get<ScalarFloat>("wind_direction", 0.);
-        m_chlorinity     = props.get<ScalarFloat>("chlorinity", 19.f);
+        m_wind_speed     = props.texture<Texture>("wind_speed", 0.1f);
+        m_wind_direction = props.texture<Texture>("wind_direction", 0.);
+        m_chlorinity     = props.texture<Texture>("chlorinity", 19.f);
         m_pigmentation   = props.get<ScalarFloat>("pigmentation", 0.3f);
         m_component      = props.get<ScalarInt32>("component", 0);
         m_shadowing      = props.get<bool>("shadowing", true);
         m_accel          = props.get<bool>("accel", true);
-
-        // convert from North Left to East Right.
-        m_wind_direction = -m_wind_direction + 90.f;
-        // m_wind_direction % 360.
-        m_wind_direction = m_wind_direction - (360.f * dr::floor(m_wind_direction / 360.f));
-        // Degree to radians.
-        m_wind_direction = dr::deg_to_rad(m_wind_direction);
 
         update();
 
@@ -291,17 +284,15 @@ public:
     void traverse(TraversalCallback *callback) override {
         callback->put_parameter("wavelength", m_wavelength,
                                 +ParamFlags::NonDifferentiable);
-        callback->put_parameter("wind_speed", m_wind_speed,
+        callback->put_object("wind_speed", m_wind_speed,
                                 +ParamFlags::Differentiable);
-        callback->put_parameter("wind_direction", m_wind_direction,
+        callback->put_object("wind_direction", m_wind_direction,
                                 +ParamFlags::Differentiable);
-        callback->put_parameter("chlorinity", m_chlorinity,
+        callback->put_object("chlorinity", m_chlorinity,
                                 +ParamFlags::Differentiable);
         callback->put_parameter("pigmentation", m_pigmentation,
                                 +ParamFlags::Differentiable);
         callback->put_parameter("shadowing", m_shadowing,
-                                +ParamFlags::NonDifferentiable);
-        callback->put_parameter("coverage", m_coverage,
                                 +ParamFlags::NonDifferentiable);
     }
 
@@ -319,17 +310,23 @@ public:
     void update() {
 
         // compute the index of refraction
-        std::tie(m_n_real, m_n_imag) = water_ior<Float, Spectrum, ScalarFloat>(
-            m_ocean_props, m_wavelength, m_chlorinity);
+        auto [n_real, n_imag] = water_ior<Float, Spectrum, ScalarFloat>(
+            m_ocean_props, 
+            m_wavelength, 
+            Float(m_chlorinity->mean())
+        );
 
         // Update Cox-Munk variables
-        std::tie(m_sigma_c, m_sigma_u) =
-            cox_munk_crosswind_upwind(m_wind_speed);
-        m_sigma_c = dr::sqrt(m_sigma_c);
-        m_sigma_u = dr::sqrt(m_sigma_u);
+        auto [sigma_c, sigma_u] =
+            cox_munk_crosswind_upwind(m_wind_speed->mean());
+        sigma_c = dr::sqrt(sigma_c);
+        sigma_u = dr::sqrt(sigma_u);
 
         m_r_omega = r_omega<Float, Spectrum, ScalarFloat>(
-            m_ocean_props, m_wavelength, m_pigmentation);
+            m_ocean_props, 
+            m_wavelength, 
+            m_pigmentation
+        );
 
         {
             // Pre-compute textures for the upwelling and downwelling
@@ -345,9 +342,20 @@ public:
             auto [zeniths_x, azimuths_y] = dr::meshgrid(zeniths, azimuths);
 
             FloatX downwelling = eval_ocean_transmittance(
-                zeniths_x, azimuths_y, m_n_real, m_n_imag, m_wind_speed, false);
+                zeniths_x, 
+                azimuths_y, 
+                dr::slice(n_real,0), 
+                dr::slice(n_imag,0), 
+                m_wind_speed, 
+                false
+            );
             FloatX upwelling = eval_ocean_transmittance(
-                zeniths_x, azimuths_y, m_n_real, m_n_imag, m_wind_speed, true);
+                zeniths_x, 
+                azimuths_y, 
+                dr::slice(n_real,0), 
+                dr::slice(n_imag,0), 
+                m_wind_speed, 
+                true);
 
             size_t shape[3] = { MI_OCEAN_TRANSMITTANCE_RES,
                                 MI_OCEAN_TRANSMITTANCE_RES, 1 };
@@ -363,8 +371,6 @@ public:
             dr::eval(m_upwelling_transmittance);
         }
 
-        // Pre-compute whitecap coverage
-        m_coverage = eval_whitecap_coverage();
     }
 
     /**
@@ -375,8 +381,8 @@ public:
      *
      * @return Float The whitecap coverage.
      */
-    ScalarFloat eval_whitecap_coverage() const {
-        return whitecap_coverage_monahan(m_wind_speed);
+    Float eval_whitecap_coverage(const Float &wind_speed) const {
+        return whitecap_coverage_monahan(wind_speed);
     }
 
     /**
@@ -387,13 +393,15 @@ public:
      *
      * @return Float The whitecap reflectance.
      */
-    Float eval_whitecaps() const {
+    Float eval_whitecaps(const Float &wind_speed) const {
         // Proper interpolation of the effective reflectance
         ScalarFloat eff_reflectance =
             m_ocean_props.effective_reflectance(m_wavelength);
 
         // Compute the whitecap reflectance
-        ScalarFloat whitecap_reflectance = m_coverage * eff_reflectance;
+        Float whitecap_reflectance = 
+            eval_whitecap_coverage(wind_speed) 
+            * eff_reflectance;
 
         return whitecap_reflectance;
     }
@@ -408,21 +416,34 @@ public:
      * @param wo The outgoing direction of the light in graphics convention.
      * @return Float The sun glint reflectance.
      */
-    Spectrum eval_glint(const Vector3f &wi, const Vector3f &wo) const {
+    Spectrum eval_glint(
+        const Vector3f &wi, 
+        const Vector3f &wo, 
+        Float wind_speed,
+        Float wind_direction, 
+        Float n_real,
+        Float n_imag
+    ) const {
 
         Float cos_theta_i = Frame3f::cos_theta(wi),
               cos_theta_o = Frame3f::cos_theta(wo);
 
+        auto [sigma_c, sigma_u] =
+            cox_munk_crosswind_upwind(wind_speed);
+        sigma_c = dr::sqrt(sigma_c);
+        sigma_u = dr::sqrt(sigma_u);
+
         MicrofacetDistribution distr(MicrofacetType::Beckmann,
-                                     dr::SqrtTwo<Float> * Float(m_sigma_u),
-                                     dr::SqrtTwo<Float> * Float(m_sigma_c),
-                                     true, Float(m_wind_direction));
+                                     dr::SqrtTwo<Float> * Float(sigma_u),
+                                     dr::SqrtTwo<Float> * Float(sigma_c),
+                                     true, 
+                                     wind_direction);
 
         const Vector3f m = dr::normalize(wi + wo);
 
         Float D = distr.eval(m);
-        D *= cox_munk_gram_charlier_coef<Float>(m_wind_direction, m_wind_speed,
-                                          m_sigma_u, m_sigma_c, m);
+        D *= cox_munk_gram_charlier_coef<Float>(wind_direction, wind_speed,
+                                          sigma_u, sigma_c, m);
         Float result = D / (4.f * cos_theta_i * cos_theta_o);
 
         if (m_shadowing) {
@@ -433,7 +454,7 @@ public:
         Spectrum F;
         if constexpr (is_polarized_v<Spectrum>) {
             Complex2u n_ext(1.f, 0.f);
-            Complex2u n_water(m_n_real, m_n_imag);
+            Complex2u n_water(n_real, n_imag);
             F = fresnel_sunglint_polarized(n_ext, n_water, -wi, wo);
         } else {
             Float cos_chi =
@@ -441,21 +462,26 @@ public:
                   sin_chi = dr::clamp(dr::sqrt(1 - cos_chi * cos_chi),
                                       -0.999999999f, 0.999999999f);
 
-            F = fresnel_sunglint_legacy<Float>(m_n_real, m_n_imag, cos_chi,
+            F = fresnel_sunglint_legacy<Float>(n_real, n_imag, cos_chi,
                                                sin_chi);
         }
 
         return result * F * dr::Pi<Float>;
     }
 
-    Float eval_transmittance(const Texture2f &data, const Float &cos_theta,
-                             const Vector3f &v) const {
+    Float eval_transmittance(
+        Float wind_direction, 
+        const Texture2f &data, 
+        const Float &cos_theta,
+        const Vector3f &v
+    ) const {
+
         Vector2f uv;
         Float t;
 
         uv.x() = (dr::acos(cos_theta) * (dr::InvPi<Float> * 2.f));
         uv.y() =
-            (dr::atan2(v.y(), v.x()) - m_wind_direction) * dr::InvTwoPi<Float>;
+            (dr::atan2(v.y(), v.x()) - wind_direction) * dr::InvTwoPi<Float>;
         uv.y() = uv.y() - (1.f * dr::floor(uv.y())); // equivalent to uv.y % 1.f
         data.eval(uv, &t);
         return t;
@@ -472,7 +498,13 @@ public:
      * @param wo The outgoing direction of the light.
      * @return Float The underwater light reflectance.
      */
-    Float eval_underlight(const Vector3f &wi, const Vector3f &wo) const {
+    Float eval_underlight(
+        const Vector3f &wi, 
+        const Vector3f &wo, 
+        Float wind_direction, 
+        const Float &n_real,
+        const Float &n_imag
+    ) const {
 
         // Analogue to 6SV, we return 0.0 if the wavelength is outside the range
         // of [0.4, 0.7]
@@ -480,11 +512,11 @@ public:
         if (dr::any_or<false>(outside_range))
             return 0.f;
 
-        Float t_d = eval_transmittance(m_downwelling_transmittance, wi.z(), wi);
-        Float t_u = eval_transmittance(m_upwelling_transmittance, wo.z(), wi);
+        Float t_d = eval_transmittance(wind_direction, m_downwelling_transmittance, wi.z(), wi);
+        Float t_u = eval_transmittance(wind_direction, m_upwelling_transmittance, wo.z(), wi);
 
         // Compute the underlight term
-        Float underlight = (1.f / (dr::sqr(m_n_real) + dr::sqr(m_n_imag))) *
+        Float underlight = (1.f / (dr::sqr(n_real) + dr::sqr(n_imag))) *
                            (m_r_omega * t_u * t_d) /
                            (1.f - m_underlight_alpha * m_r_omega);
 
@@ -508,12 +540,24 @@ public:
         if (unlikely(dr::none_or<false>(active)) || (!has_diffuse && !has_specular))
             return { bs, 0.f };
 
+        // Update Cox-Munk variables
+        Float wind_speed = m_wind_speed->eval_1(si, active);
+        Float wind_direction = from_NR_to_EL(m_wind_direction->eval_1(si, active));
+
+        // Update Cox-Munk variables
+        auto [sigma_c, sigma_u] =
+            cox_munk_crosswind_upwind(wind_speed);
+        sigma_c = dr::sqrt(sigma_c);
+        sigma_u = dr::sqrt(sigma_u);
+
+        Float coverage = eval_whitecap_coverage(wind_speed);
+
         // Determine which component should be sampled
         Float t_i =
-            eval_transmittance(m_downwelling_transmittance, cos_theta_i, si.wi);
-        Float whitecap      = eval_whitecaps();
+            eval_transmittance(wind_direction, m_downwelling_transmittance, cos_theta_i, si.wi);
+        Float whitecap      = eval_whitecaps(wind_speed);
         Float prob_diffuse  = whitecap + t_i * (1 - whitecap),
-              prob_specular = (1.f - m_coverage);
+              prob_specular = (1.f - coverage);
 
         // Cater for case where only one lobe is activated
         if (unlikely(has_specular != has_diffuse))
@@ -538,8 +582,8 @@ public:
 
         if (dr::any_or<true>(sample_specular)) {
             MicrofacetDistribution distr(
-                MicrofacetType::Beckmann, dr::SqrtTwo<Float> * m_sigma_u,
-                dr::SqrtTwo<Float> * m_sigma_c, true, Float(m_wind_direction));
+                MicrofacetType::Beckmann, dr::SqrtTwo<Float> * sigma_u,
+                dr::SqrtTwo<Float> * sigma_c, true, Float(wind_direction));
 
             auto [H, weight] = distr.sample(si.wi, sample2);
             Vector3f wo      = reflect(si.wi, H);
@@ -576,6 +620,18 @@ public:
         if (unlikely(dr::none_or<false>(active) || (!has_glint && !has_diffuse)))
             return 0.f;
 
+        // Update Cox-Munk variables
+        Float wind_speed = m_wind_speed->eval_1(si, active);
+        Float wind_direction = from_NR_to_EL(m_wind_direction->eval_1(si, active));
+
+        // compute the index of refraction
+        auto [n_real, n_imag] = water_ior<Float, Spectrum, ScalarFloat>(
+            m_ocean_props, 
+            m_wavelength, 
+            m_chlorinity->eval_1(si, active)
+        );
+
+        Float coverage = eval_whitecap_coverage(wind_speed);
 
         // Compute the whitecap reflectance
         Spectrum result(0.f);
@@ -594,8 +650,8 @@ public:
         Spectrum glint_reflectance(0.f);
 
         if (has_diffuse) {
-            whitecap_reflectance   = eval_whitecaps();
-            underlight_reflectance = eval_underlight(wo_hat, wi_hat);
+            whitecap_reflectance   = eval_whitecaps(wind_speed);
+            underlight_reflectance = eval_underlight(wo_hat, wi_hat, wind_direction, n_real, n_imag);
             // Diffuse scattering implies no polarization.
             result += depolarizer<Spectrum>(
                 whitecap_reflectance + (1.f - whitecap_reflectance) * underlight_reflectance
@@ -606,7 +662,9 @@ public:
 
             if constexpr( is_polarized_v<Spectrum> ) {
                 // If sun glint is enabled, compute the glint reflectance
-                glint_reflectance = eval_glint(wo_hat, wi_hat);
+                glint_reflectance = eval_glint(
+                    wo_hat, wi_hat, wind_speed, wind_direction, n_real, n_imag
+                );
 
                 /* The Stokes reference frame vector of this matrix lies in the meridian plane
                 spanned by wi and n. */
@@ -629,10 +687,12 @@ public:
 
             } else {
                 // If sun glint is enabled, compute the glint reflectance
-                glint_reflectance = eval_glint(wo_hat, wi_hat);
+                glint_reflectance = eval_glint(
+                    wo_hat, wi_hat, wind_speed, wind_direction, n_real, n_imag
+                );
             }
 
-            result += (1.f - m_coverage) * glint_reflectance;
+            result += (1.f - coverage) * glint_reflectance;
         }
 
         dr::masked(result, active) *= cos_theta_o * dr::InvPi<Float>;
@@ -644,7 +704,7 @@ public:
                 break;
             case 2:
                 result[active] =
-                    (1.f - m_coverage) * glint_reflectance;
+                    (1.f - coverage) * glint_reflectance;
                 break;
             case 3:
                 result[active] = depolarizer<Spectrum>(
@@ -678,12 +738,23 @@ public:
                      dr::none_or<false>(active)))
             return 0.f;
 
-        Float prob_whitecap = eval_whitecaps();
+        // Update Cox-Munk variables
+        Float wind_speed = m_wind_speed->eval_1(si, active);
+        Float wind_direction = from_NR_to_EL(m_wind_direction->eval_1(si, active));
+        
+        auto [sigma_c, sigma_u] =
+            cox_munk_crosswind_upwind(wind_speed);
+        sigma_c = dr::sqrt(sigma_c);
+        sigma_u = dr::sqrt(sigma_u);
+
+        Float coverage = eval_whitecap_coverage(wind_speed);
+        
+        Float prob_whitecap = eval_whitecaps(wind_speed);
         Float t_i =
-            eval_transmittance(m_downwelling_transmittance, cos_theta_i, si.wi);
+            eval_transmittance(wind_direction, m_downwelling_transmittance, cos_theta_i, si.wi);
 
         Float prob_diffuse  = t_i * (1.f - prob_whitecap) + prob_whitecap,
-              prob_specular = (1.f - m_coverage);
+              prob_specular = (1.f - coverage);
 
         if (unlikely(has_specular != has_diffuse))
             prob_specular = has_specular ? 1.f : 0.f;
@@ -700,8 +771,8 @@ public:
         Vector3f H = dr::normalize(wo + si.wi);
 
         MicrofacetDistribution distr(
-            MicrofacetType::Beckmann, dr::SqrtTwo<Float> * m_sigma_u,
-            dr::SqrtTwo<Float> * m_sigma_c, true, Float(m_wind_direction));
+            MicrofacetType::Beckmann, dr::SqrtTwo<Float> * sigma_u,
+            dr::SqrtTwo<Float> * sigma_c, true, wind_direction);
 
         prob_specular *=
             distr.eval(H) * distr.smith_g1(si.wi, H) / (4.f * cos_theta_i);
@@ -709,6 +780,15 @@ public:
         Float result = prob_diffuse + prob_specular;
 
         return dr::select(active, result, 0.f);
+    }
+
+    Float from_NR_to_EL(Float angle) const {
+         // convert from North Left to East Right.
+        angle = -angle + 90.f;
+        // angle % 360.
+        angle = angle - (360.f * dr::floor(angle / 360.f));
+        // Degree to radians.
+        return dr::deg_to_rad(angle);
     }
 
     std::string to_string() const override {
@@ -727,8 +807,6 @@ public:
             << "  pigmentation = " << string::indent(m_pigmentation) << ","
             << std::endl
             << "  shadowing = " << string::indent(m_shadowing) << ","
-            << std::endl
-            << "  coverage = " << string::indent(m_coverage) << std::endl
             << "]";
         return oss.str();
     }
@@ -738,19 +816,14 @@ private:
     //  User-provided fields
     ScalarInt32 m_component;
     ScalarFloat m_wavelength;
-    ScalarFloat m_wind_speed;
-    ScalarFloat m_wind_direction;
-    ScalarFloat m_chlorinity;
+    ref<Texture> m_wind_speed;
+    ref<Texture> m_wind_direction;
+    ref<Texture> m_chlorinity;
     ScalarFloat m_pigmentation;
-    ScalarFloat m_coverage;
     bool m_shadowing;
     bool m_accel;
 
     // On update fields
-    ScalarFloat m_n_real;
-    ScalarFloat m_n_imag;
-    ScalarFloat m_sigma_c = 1.f;
-    ScalarFloat m_sigma_u = 1.f;
     ScalarFloat m_r_omega = 0.f;
 
     Texture2f m_downwelling_transmittance;

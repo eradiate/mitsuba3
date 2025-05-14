@@ -385,13 +385,13 @@ Float friedman_sverdrup(const Float &chlorinity) {
  * @return The complex index of refraction of water.
  */
 template<typename Float, typename Spectrum, typename ScalarFloat>
-std::pair<ScalarFloat, ScalarFloat>
+std::pair<Float, Float>
 water_ior( const OceanProperties<Float, Spectrum> &ocean_props,
            const ScalarFloat &wavelength,
-           const ScalarFloat &chlorinity) {
-    ScalarFloat n_real =
-        ocean_props.ior_real(wavelength) + friedman_sverdrup<ScalarFloat>(chlorinity);
-    ScalarFloat n_imag = ocean_props.ior_cplx(wavelength);
+           const Float &chlorinity) {
+    Float n_real =
+        ocean_props.ior_real(wavelength) + friedman_sverdrup<Float>(chlorinity);
+    Float n_imag = ocean_props.ior_cplx(wavelength);
 
     return { n_real, n_imag };
 }
