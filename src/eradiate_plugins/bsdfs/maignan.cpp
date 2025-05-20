@@ -6,6 +6,7 @@
 #include <mitsuba/core/warp.h>
 #include <mitsuba/render/bsdf.h>
 #include <mitsuba/render/texture.h>
+#include <mitsuba/eradiate/oceanprops.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -101,12 +102,14 @@ The following snippet describes an RPV material with monochromatic parameters:
 */
 
 MI_VARIANT
-class MAIGNANBSDF final : public BSDF<Float, Spectrum> {
+class MaignanBSDF final : public BSDF<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(BSDF, m_flags, m_components)
     MI_IMPORT_TYPES(Texture)
 
-    MAIGNANBSDF(const Properties &props) : Base(props) {
+    using Complex2u = dr::Complex<UnpolarizedSpectrum>;
+    
+    MaignanBSDF(const Properties &props) : Base(props) {
         m_rho_0 = props.texture<Texture>("rho_0", 0.1f);
         m_g = props.texture<Texture>("g", 0.f);
         m_k = props.texture<Texture>("k", 0.1f);
@@ -155,10 +158,52 @@ public:
         bs.sampled_type = +BSDFFlags::GlossyReflection;
         bs.sampled_component = 0;
 
-        UnpolarizedSpectrum value =
-            eval_rpv(si, bs.wo, active) * Frame3f::cos_theta(bs.wo) / bs.pdf;
+        UnpolarizedSpectrum ndvi = m_ndvi->eval(si, active);
 
-        return { bs, depolarizer<Spectrum>(value) & (active && bs.pdf > 0.f) };
+        //CE copied from ocean_mishchenko probably needed with polarization
+        // `TransportMode` has two states:
+        //     - `Radiance`, trace from the sensor to the light sources
+        //     - `Importance`, trace from the light sources to the sensor
+        Vector3f wo_hat = ctx.mode == TransportMode::Radiance ? bs.wo : si.wi,
+                 wi_hat = ctx.mode == TransportMode::Radiance ? si.wi : bs.wo;
+
+        //CE: replace ref_re amd ref_im by eta, k as in bsdf-ocean-reflection?
+        Complex2u n_air(bs.eta, 0.);
+        // refractive index of "vegetation" or "surface", input to Maignan BPDF
+        Complex2u n_water(m_refr_re->eval(si, active), m_refr_im->eval(si, active)); 
+        
+        Spectrum F;
+        if constexpr (is_polarized_v<Spectrum>) {
+          F = fresnel_sunglint_polarized(n_air, n_water, -wo_hat, wi_hat);
+
+          //CE: Replace F11 by RPV BRDF, how to assess elements?
+          
+          /* The Stokes reference frame vector of this matrix lies in the
+             meridian plane spanned by wi and n. */
+          Vector3f n(0, 0, 1);
+          Vector3f p_axis_in  =
+            dr::normalize(dr::cross(dr::normalize(dr::cross(n,-wo_hat)),-wo_hat));
+          Vector3f p_axis_out =
+            dr::normalize(dr::cross(dr::normalize(dr::cross(n,wi_hat)),wi_hat));
+          
+          dr::masked(p_axis_in, dr::any(dr::isnan(p_axis_in))) =
+            Vector3f(0.f, 1.f, 0.f);
+          dr::masked(p_axis_out, dr::any(dr::isnan(p_axis_out))) =
+            Vector3f(0.f, 1.f, 0.f);
+          
+          // Rotate in/out reference vector of `value` s.t. it aligns with the
+          // implicit Stokes bases of -wo_hat & wi_hat. */
+          F = mueller::rotate_mueller_basis(
+              F, -wo_hat, p_axis_in, mueller::stokes_basis(-wo_hat),
+              wi_hat, p_axis_out, mueller::stokes_basis(wi_hat));
+          }
+        else {
+          F =  eval_rpv(si, bs.wo, active) * exp(-ndvi) *  Frame3f::cos_theta(bs.wo) / bs.pdf;
+          
+        }
+        
+        return   { bs, F & (active) };
+        //return { bs, depolarizer<Spectrum>(value) & (active && bs.pdf > 0.f) };
     }
 
     /* Evaluation of the RPV BRDF (without foreshortening factor) as per the
@@ -169,9 +214,9 @@ public:
         UnpolarizedSpectrum rho_c = m_rho_c->eval(si, active);
         UnpolarizedSpectrum g = m_g->eval(si, active);
         UnpolarizedSpectrum k = m_k->eval(si, active);
-        UnpolarizedSpectrum ndvi = m_ndvi->eval(si, active);
-        UnpolarizedSpectrum refr_re = m_refr_re->eval(si, active);
-        UnpolarizedSpectrum refr_im = m_refr_im->eval(si, active);
+        //UnpolarizedSpectrum ndvi = m_ndvi->eval(si, active);
+        //UnpolarizedSpectrum refr_re = m_refr_re->eval(si, active);
+        //UnpolarizedSpectrum refr_im = m_refr_im->eval(si, active);
 
         auto [sin_phi_i, cos_phi_i] = Frame3f::sincos_phi(si.wi);
         auto [sin_phi_o, cos_phi_o] = Frame3f::sincos_phi(wo);
@@ -202,14 +247,18 @@ public:
             cos_theta_i * cos_theta_o * (cos_theta_i + cos_theta_o), k - 1.f);
 
         
-        // Total value
+        // Total value 
         UnpolarizedSpectrum value = rho_0 * M * F * H * dr::InvPi<Float>;
 
+        
+
+        
+        
         return value;
     }
     
     void debug_message() const {
-        std::cout << "Debugging MAIGNANBSDF: " << to_string() << std::endl;
+        std::cout << "Debugging MaignanBSDF: " << to_string() << std::endl;
     }
 
     Spectrum eval(const BSDFContext & /*ctx*/, const SurfaceInteraction3f &si,
@@ -240,7 +289,7 @@ public:
 
     std::string to_string() const override {
         std::ostringstream oss;
-        oss << "RPVBSDF[" << std::endl
+        oss << "MaignanBSDF[" << std::endl
             << "  rho_0 = " << string::indent(m_rho_0) << "," << std::endl
             << "  g = " << string::indent(m_g) << "," << std::endl
             << "  k = " << string::indent(m_k) << "," << std::endl
@@ -267,6 +316,6 @@ private:
     ref<Texture> m_refr_im;
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(MAIGNANBSDF, BSDF)
-MI_EXPORT_PLUGIN(MAIGNANBSDF, "Maignan BSDF")
+MI_IMPLEMENT_CLASS_VARIANT(MaignanBSDF, BSDF)
+MI_EXPORT_PLUGIN(MaignanBSDF, "Maignan BSDF")
 NAMESPACE_END(mitsuba)

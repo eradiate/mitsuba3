@@ -3,161 +3,110 @@ import mitsuba as mi
 import numpy as np
 import pytest
 
-from ..tools import sample_eval_pdf_bsdf
-
-# These are the tests from RPV, to be adapted to Maignan when finished ... 
-
-def test_create_rpv3(variant_scalar_rgb):
-    # Test constructor of 3-parameter version of RPV
-    rpv = mi.load_dict({"type": "rpv"})
-    assert isinstance(rpv, mi.BSDF)
-    assert rpv.component_count() == 1
-    assert rpv.flags(0) == mi.BSDFFlags.GlossyReflection | mi.BSDFFlags.FrontSide
-    assert rpv.flags() == rpv.flags(0)
-
-    # rho_c is not exposed: it is always equal to rho_0
-    params = mi.traverse(rpv)
-    assert "rho_c.value" not in params
+_bsdf_dict = {
+    "type": "maignan",
+    "rho_0": 0.1,
+    "k": 0.1,
+    "g": 0.0,
+    "ndvi": 0.0,
+    "ref_re": 1.5,
+    "ref_im": 0.0
+}
 
 
-def rpv_reference(rho_0, rho_0_hotspot, g, k, theta_i, phi_i, theta_o, phi_o):
-    """Reference for RPV, adapted from a C implementation."""
-
-    sin_theta_i, cos_theta_i = np.sin(theta_i), np.cos(theta_i)
-    tan_theta_i = sin_theta_i / cos_theta_i
-    sin_theta_o, cos_theta_o = np.sin(theta_o), np.cos(theta_o)
-    tan_theta_o = sin_theta_o / cos_theta_o
-    cos_delta_phi = np.cos(phi_i - phi_o)
-
-    K1 = np.power(cos_theta_i * cos_theta_o * (cos_theta_i + cos_theta_o), k - 1.0)
-
-    cos_Theta = cos_theta_i * cos_theta_o + sin_theta_i * sin_theta_o * cos_delta_phi
-
-    FgDenum = 1.0 + g * g + 2.0 * g * cos_Theta
-    Fg = (1.0 - g * g) / np.power(FgDenum, 1.5)
-
-    G = np.sqrt(
-        tan_theta_i * tan_theta_i
-        + tan_theta_o * tan_theta_o
-        - 2.0 * tan_theta_i * tan_theta_o * cos_delta_phi
-    )
-    K3 = 1.0 + (1.0 - rho_0_hotspot) / (1.0 + G)
-
-    return rho_0 * K1 * Fg * K3 / np.pi * np.abs(cos_theta_o)
-    # 1/π factor because the paper gives BRF expression (not BRDF)
-    # Foreshortening factor included
-
-
-def angles_to_directions(theta, phi):
-    return mi.Vector3f(
-        np.sin(theta) * np.cos(phi), np.sin(theta) * np.sin(phi), np.cos(theta)
-    )
-
-
-def eval_bsdf(bsdf, wi, wo):
-    si = mi.SurfaceInteraction3f()
-    si.wi = wi
-    ctx = mi.BSDFContext()
-    return bsdf.eval(ctx, si, wo, True)[0]
-
-
-@pytest.mark.parametrize("rho_0", [0.004, 0.1, 0.497])
-@pytest.mark.parametrize("k", [0.543, 0.634, 0.851])
-@pytest.mark.parametrize("g", [-0.29, 0.086, 0.2])
-def test_eval(variant_llvm_ad_rgb, rho_0, k, g):
+@pytest.mark.slow
+def test_chi2_maignan(variants_vec_backends_once_rgb):
     """
-    Test the eval method of the RPV plugin, comparing to a reference implementation.
+    Test the consistency of the oceanic BSDF using the chi2 test.
     """
+    sample_func, pdf_func = mi.chi2.BSDFAdapter("ocean_maignan", _bsdf_dict)
 
-    rpv = mi.load_dict({"type": "rpv", "k": k, "rho_0": rho_0, "g": g})
-    num_samples = 100
-
-    theta_i = np.random.rand(num_samples) * np.pi / 2.0
-    theta_o = np.random.rand(num_samples) * np.pi / 2.0
-    phi_i = np.random.rand(num_samples) * np.pi * 2.0
-    phi_o = np.random.rand(num_samples) * np.pi * 2.0
-
-    wi = angles_to_directions(theta_i, phi_i)
-    wo = angles_to_directions(theta_o, phi_o)
-    values = eval_bsdf(rpv, wi, wo)
-    reference = rpv_reference(rho_0, rho_0, g, k, theta_i, phi_i, theta_o, phi_o)
-
-    assert dr.allclose(values, reference, rtol=1e-3, atol=1e-3)
-
-
-@pytest.mark.parametrize("rho_0", [0.0, 0.5, 1.0])
-def test_eval_diffuse(variant_llvm_ad_rgb, rho_0):
-    """
-    Compare a degenerate RPV case with a diffuse BRDF.
-    """
-    k = 1.0
-    g = 0.0
-    rho_c = 1.0
-
-    rpv = mi.load_dict({"type": "rpv", "rho_0": rho_0, "k": k, "g": g, "rho_c": rho_c})
-    diffuse = mi.load_dict({"type": "diffuse", "reflectance": rho_0})
-
-    num_samples = 100
-
-    theta_i = np.random.rand(num_samples) * np.pi / 2.0
-    theta_o = np.random.rand(num_samples) * np.pi / 2.0
-    phi_i = np.random.rand(num_samples) * np.pi * 2.0
-    phi_o = np.random.rand(num_samples) * np.pi * 2.0
-
-    wi = angles_to_directions(theta_i, phi_i)
-    wo = angles_to_directions(theta_o, phi_o)
-    values = eval_bsdf(rpv, wi, wo)
-    reference = eval_bsdf(diffuse, wi, wo)
-
-    assert np.allclose(values, reference)
-
-
-def test_chi2_rpv3(variants_vec_backends_once_rgb):
-    from mitsuba.chi2 import BSDFAdapter, ChiSquareTest, SphericalDomain
-
-    sample_func, pdf_func = BSDFAdapter("rpv", "")
-
-    chi2 = ChiSquareTest(
-        domain=SphericalDomain(),
+    chi2 = mi.chi2.ChiSquareTest(
+        domain=mi.chi2.SphericalDomain(),
         sample_func=sample_func,
         pdf_func=pdf_func,
         sample_dim=3,
+        ires=16,
+        res=201,
     )
 
     assert chi2.run()
 
 
-def test_chi2_rpv4(variants_vec_backends_once_rgb):
-    from mitsuba.chi2 import BSDFAdapter, ChiSquareTest, SphericalDomain
+def test_create_oceanic(variants_vec_backends_once_rgb):
+    # Test constructor of oceanic BSDF
+    brdf = mi.load_dict(_bsdf_dict)
+    gloss = brdf.flags()
 
-    sample_func, pdf_func = BSDFAdapter(
-        "rpv",
-        """
-            <float name="rho_0" value="0.1"/>
-            <float name="g" value="0.497"/>
-            <float name="k" value="0.004"/>
-            <float name="rho_c" value="1.05"/>
-        """,
-    )
+    # Obtain binary Mitsuba flags
+    gloss_flag = mi.BSDFFlags.GlossyReflection | mi.BSDFFlags.FrontSide
 
-    chi2 = ChiSquareTest(
-        domain=SphericalDomain(),
-        sample_func=sample_func,
-        pdf_func=pdf_func,
-        sample_dim=3,
-    )
-
-    result = chi2.run()
-    assert result
+    assert isinstance(brdf, mi.BSDF)
+    assert gloss == gloss_flag
 
 
-@pytest.mark.parametrize("wi", [[0, 0, 1], [0, 1, 1], [1, 1, 1]])
-def test_sampling_weights_rpv(variant_llvm_ad_rgb, wi):
-    """
-    Sampling weights are correctly computed, i.e. equal to eval() / pdf().
-    """
-    rpv = mi.load_dict({"type": "rpv"})
-    (_, weight), eval, pdf = sample_eval_pdf_bsdf(
-        rpv, dr.normalize(mi.ScalarVector3f(wi))
-    )
-    assert dr.allclose(weight, eval / pdf)
+def test_traverse_oceanic(variant_scalar_mono_polarized):
+    # Mishchenko reference :
+    # wavelenth 550, windspeed 2, eta 1.33, vza 15, vaa 0, sza 15, saa 180
+    ref_550_2 = [
+        [0.125155, -0.0132689, 0.0, 0.0],
+        [-0.0132689, 0.125155, 0.0, -0.0],
+        [0.0, 0.0, -0.124450, 0.0],
+        [0.0, 0.0, -0.0, -0.124450],
+    ]
+
+    # wavelenth 900, windspeed 10, eta 1.39, vza 60, vaa 0, sza 40, saa 170
+    ref2_900_10 = [
+        [0.733924e-01, -0.713385e-01, 0.000000e00, -0.000000e00],
+        [-0.713385e-01, 0.733924e-01, 0.000000e00, -0.000000e00],
+        [0.000000e00, 0.000000e00, -0.172412e-01, 0.000000e00],
+        [0.000000e00, 0.000000e00, -0.000000e00, -0.172412e-01],
+    ]
+
+    def sph_to_eucl(theta, phi):
+        """angles in radians, return Vector3f"""
+        x = dr.sin(theta) * dr.cos(phi)
+        y = dr.sin(theta) * dr.sin(phi)
+        z = dr.cos(theta)
+        return mi.Vector3f(x, y, z)
+
+    vza = 15
+    vaa = 0.0
+    sza = 15
+    saa = 180.0
+
+    wi = sph_to_eucl(dr.deg2rad(vza), dr.deg2rad(vaa))
+    wo = sph_to_eucl(dr.deg2rad(sza), dr.deg2rad(saa))
+    n = dr.zeros(mi.Vector3f, dr.width(wi))
+    n.z = 1.0
+    si = dr.zeros(mi.SurfaceInteraction3f, dr.width(wi))
+    si.wi = wi
+    si.n = n
+
+    ctx = mi.BSDFContext(mi.TransportMode.Radiance)
+
+    brdf = mi.load_dict(_bsdf_dict)
+
+    brdf_dr = brdf.eval(ctx, si, wo)
+    brdf_np = brdf_dr.numpy()[0]
+
+    assert dr.allclose(brdf_np, ref_550_2, 0.0001, 0.00001)
+
+    params = mi.traverse(brdf)
+
+    params["ndvi"] = 0.2
+    params["ref_re"] = 1.7
+    params.update()
+
+    vza = 60
+    vaa = 0.0
+    sza = 40
+    saa = 180.0
+
+    wo = sph_to_eucl(dr.deg2rad(sza), dr.deg2rad(saa))
+    si.wi = sph_to_eucl(dr.deg2rad(vza), dr.deg2rad(vaa))
+
+    brdf_dr = brdf.eval(ctx, si, wo)
+    brdf_np = brdf_dr.numpy()[0]
+
+    assert dr.allclose(brdf_np, ref2_900_10, 0.001, 0.0001)
