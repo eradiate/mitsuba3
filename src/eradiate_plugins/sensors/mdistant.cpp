@@ -76,7 +76,7 @@ template <typename Float, typename Spectrum>
 class MultiDistantSensor final : public Sensor<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Sensor, m_to_world, m_film, m_needs_sample_2,
-                   m_needs_sample_3)
+                   m_needs_sample_3, sample_wavelengths)
     MI_IMPORT_TYPES(Scene, Shape)
 
     using Matrix = dr::Matrix<Float, Transform4f::Size>;
@@ -188,7 +188,9 @@ public:
 
         // Sample spectrum
         auto [wavelengths, wav_weight] =
-            sample_wavelength<Float, Spectrum>(wavelength_sample);
+            sample_wavelengths(dr::zeros<SurfaceInteraction3f>(),
+                               wavelength_sample,
+                               active);
         ray.wavelengths = wavelengths;
 
         // Select sub-sensor
