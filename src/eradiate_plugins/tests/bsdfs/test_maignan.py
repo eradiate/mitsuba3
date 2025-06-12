@@ -12,24 +12,24 @@ _bsdf_dict = {
     "ext_ior": 1.0
     }
 
-# This test does not work yet
-# @pytest.mark.slow
-# def test_chi2_maignan(variants_vec_backends_once_rgb):
-#     """
-#     Test the consistency of the Maignan BSDF using the chi2 test.
-#     """
-#     sample_func, pdf_func = mi.chi2.BSDFAdapter("maignan", _bsdf_dict)
+#This test does not work yet
+@pytest.mark.slow
+def test_chi2_maignan(variants_vec_backends_once_rgb):
+    """
+    Test the consistency of the Maignan BSDF using the chi2 test.
+    """
+    sample_func, pdf_func = mi.chi2.BSDFAdapter("maignan", _bsdf_dict)
 
-#     chi2 = mi.chi2.ChiSquareTest(
-#         domain=mi.chi2.SphericalDomain(),
-#         sample_func=sample_func,
-#         pdf_func=pdf_func,
-#         sample_dim=3,
-#         ires=16,
-#         res=201,
-#     )
+    chi2 = mi.chi2.ChiSquareTest(
+        domain=mi.chi2.SphericalDomain(),
+        sample_func=sample_func,
+        pdf_func=pdf_func,
+        sample_dim=3,
+        ires=16,
+        res=201,
+    )
 
-#     assert chi2.run()
+    assert chi2.run()
 
 def test_create_maignan(variants_vec_backends_once_rgb):
     # Test constructor of Maigan BSDF

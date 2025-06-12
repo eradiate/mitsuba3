@@ -210,10 +210,10 @@ public:
                 F, -wo_hat, p_axis_in, mueller::stokes_basis(-wo_hat), wi_hat,
                 p_axis_out, mueller::stokes_basis(wi_hat));
         } else {
-           UnpolarizedSpectrum(fresnel_sunglint_polarized(n_air, n_surface, -wo_hat, wi_hat)[0][0]);
+          F = UnpolarizedSpectrum(fresnel_sunglint_polarized(n_air, n_surface, -wo_hat, wi_hat)[0][0]);
         }
 
-        return { bs, C*F & (active) };
+        return { bs, C*F & (active && bs.pdf > 0.f) };
         
     }
 
@@ -283,7 +283,7 @@ public:
                 F, -wo_hat, p_axis_in, mueller::stokes_basis(-wo_hat), wi_hat,
                 p_axis_out, mueller::stokes_basis(wi_hat));
         } else {
-            UnpolarizedSpectrum(fresnel_sunglint_polarized(n_air, n_surface, -wo_hat, wi_hat)[0][0]);
+          F = UnpolarizedSpectrum(fresnel_sunglint_polarized(n_air, n_surface, -wo_hat, wi_hat)[0][0]);
         }
         
         // if constexpr (is_polarized_v<Spectrum>) {
