@@ -38,6 +38,10 @@ public:
         PYBIND11_OVERRIDE(void, Medium, parameters_changed, keys);
     }
 
+    void precompute() const override {
+        PYBIND11_OVERRIDE(void, Medium, precompute, );
+    }
+
     using Medium::m_sample_emitters;
     using Medium::m_is_homogeneous;
     using Medium::m_has_spectral_extinction;
@@ -85,7 +89,7 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
             "ray"_a, "si"_a, "sample"_a, "channel"_a, "active"_a,
             D(Medium, sample_interaction_real))
         .def("eval_transmittance_pdf_real",
-            [](Ptr ptr, const Ray3f &ray,  
+            [](Ptr ptr, const Ray3f &ray,
                 const SurfaceInteraction3f &si, UInt32 channel, Mask active) {
                 return ptr->eval_transmittance_pdf_real(ray, si, channel, active); },
             "ray"_a, "si"_a, "channel"_a, "active"_a,
@@ -94,7 +98,11 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
             [](Ptr ptr, const MediumInteraction3f &mi, Mask active = true) {
                 return ptr->get_scattering_coefficients(mi, active); },
             "mi"_a, "active"_a=true,
-            D(Medium, get_scattering_coefficients));
+            D(Medium, get_scattering_coefficients))
+        .def("precompute",
+            [](Ptr ptr) {
+                return ptr->precompute();
+            });
 
     if constexpr (dr::is_array_v<Ptr>)
         bind_drjit_ptr_array(cls);

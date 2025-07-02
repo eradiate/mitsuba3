@@ -29,6 +29,8 @@ public:
     get_scattering_coefficients(const MediumInteraction3f &mi,
                                 Mask active = true) const = 0;
 
+    virtual void precompute() const = 0;
+
     /**
      * \brief Sample a free-flight distance in the medium.
      *
@@ -143,6 +145,7 @@ DRJIT_VCALL_TEMPLATE_BEGIN(mitsuba::Medium)
     DRJIT_VCALL_METHOD(sample_interaction_real)
     DRJIT_VCALL_METHOD(eval_transmittance_pdf_real)
     DRJIT_VCALL_METHOD(get_scattering_coefficients)
+    DRJIT_VCALL_METHOD(precompute)
 DRJIT_VCALL_TEMPLATE_END(mitsuba::Medium)
 
 //! @}
