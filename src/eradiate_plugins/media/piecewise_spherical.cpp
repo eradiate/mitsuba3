@@ -60,20 +60,33 @@ public:
     }
 
     void precompute() const override {
-        precompute_angles();
+        std::vector<ScalarVector3f> directions = precompute_directions();
         //precompute_optical_thickness()
     }
 
-    void precompute_angles() const {
+    std::vector<ScalarVector3f> precompute_directions() const {
         ScalarPoint3f p = m_sigmat->bbox().min;
-
-        Log(Warn, "p = {}", p);
 
         //  Compute angles based on a regularly spaced interval
         int32_t sided_samples = 4;
-        for (int32_t i = -sided_samples; i < sided_samples + 1; i++) {
-            ScalarPoint3f offset = ScalarPoint3f(0.0f, 0.0f, 1.0f);
+        int32_t extent = sided_samples * 2 + 1;
+        int32_t total_samples = extent * extent;
+
+        //  Storage for the direction vectors
+        //  TODO -> Change this to a drjit::DynamicArray?
+        std::vector<ScalarVector3f> directions(total_samples);
+
+        for (int32_t off_x = -sided_samples; off_x < sided_samples + 1; off_x++) {
+            for (int32_t off_y = -sided_samples; off_y < sided_samples + 1; off_y++) {    
+                ScalarPoint3f offset = p + ScalarPoint3f(off_x, off_y, 1.0f);
+                ScalarVector3f direction = drjit::normalize(offset - p);
+
+                int32_t idx = (off_x + sided_samples) * extent + (off_y + sided_samples);
+                directions[idx] = direction;
+            }
         }
+
+        return directions;
     }
 
     void precompute_optical_thickness() const {
