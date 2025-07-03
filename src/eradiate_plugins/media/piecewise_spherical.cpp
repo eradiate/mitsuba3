@@ -66,23 +66,32 @@ public:
 
     std::vector<ScalarFloat> precompute_directions() const {
         //  Compute angles based on a regularly spaced interval
-        int32_t sided_samples = 4;
+        int32_t sided_samples = 0;
         int32_t extent = sided_samples * 2 + 1;
         int32_t total_samples = extent;
 
         //  Storage for the direction vectors
         //  TODO -> Change this to a drjit::DynamicArray?
         std::vector<ScalarFloat> angles(total_samples);
-
+    
         //  Critical angle (define how?)
-        ScalarFloat critical_angle = 80.0f * (dr::Pi<ScalarFloat> / 180.0f);
-        ScalarFloat step = critical_angle / sided_samples;
+        ScalarFloat critical_angle = 0.0f;
+        ScalarFloat step = 0.0f;
+
+        if (total_samples =! 1) {
+            critical_angle = 80.0f * (dr::Pi<ScalarFloat> / 180.0f);
+            step = critical_angle / sided_samples;
+        }
+
+        ScalarFloat to_deg = 180.0f / dr::Pi<ScalarFloat>;
 
         //  Compute all angles theta for sampling
         for (int32_t idx_x = -sided_samples; idx_x < sided_samples + 1; idx_x++) {
             //  Based on step, compute angle
             ScalarFloat theta = idx_x * step;
             ScalarFloat alpha = theta + (dr::Pi<ScalarFloat> / 2.0f);
+
+            Log(Warn, "Angle = ", alpha * to_deg);
 
             angles[idx_x + sided_samples] = alpha;
         }
@@ -122,6 +131,8 @@ public:
             ScalarFloat alpha = angles[i];
             ScalarFloat tan_alpha = dr::tan(alpha);
             
+            //  TODO: Fix tangent calculation for alpha = (-) pi / 2
+
             //  Since coefficient a is constant for all radii, we can precompute it
             ScalarFloat a = (1 + (tan_alpha * tan_alpha));
 
@@ -162,9 +173,10 @@ public:
                     // Both intersections behind the ray origin
                     if (t1 < 0 && t2 < 0) 
                         continue;
-                    p.z() = r_max + std::min(t1, t2);
+                    ScalarFloat x = std::min(t1, t2);
+                    ScalarFloat y = r_max + x * tan_alpha;
 
-                    Log(Warn, "Intersection found at = ", p.z(), 
+                    Log(Warn, "Intersection found at = (", x, ", ", y, "), ", 
                         " for angle = ", alpha * to_deg, 
                         " with r = ", r, 
                         " and tan(alpha) = ", tan_alpha);
