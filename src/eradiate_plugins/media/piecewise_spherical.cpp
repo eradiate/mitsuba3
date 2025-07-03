@@ -34,7 +34,7 @@ public:
 
         m_max_density = dr::opaque<Float>(m_sigmat->max());
 
-        precompute_optical_thickness();
+        precompute();
 
         dr::set_attr(this, "is_homogeneous", m_is_homogeneous);
         dr::set_attr(this, "has_spectral_extinction", m_has_spectral_extinction);
@@ -60,36 +60,37 @@ public:
     }
 
     void precompute() const override {
-        std::vector<ScalarVector3f> directions = precompute_directions();
-        //precompute_optical_thickness()
+        std::vector<ScalarFloat> angles = precompute_directions();
+        precompute_optical_thickness(angles);
     }
 
-    std::vector<ScalarVector3f> precompute_directions() const {
-        ScalarPoint3f p = m_sigmat->bbox().min;
-
+    std::vector<ScalarFloat> precompute_directions() const {
         //  Compute angles based on a regularly spaced interval
         int32_t sided_samples = 4;
         int32_t extent = sided_samples * 2 + 1;
-        int32_t total_samples = extent * extent;
+        int32_t total_samples = extent;
 
         //  Storage for the direction vectors
         //  TODO -> Change this to a drjit::DynamicArray?
-        std::vector<ScalarVector3f> directions(total_samples);
+        std::vector<ScalarFloat> angles(total_samples);
 
-        for (int32_t off_x = -sided_samples; off_x < sided_samples + 1; off_x++) {
-            for (int32_t off_y = -sided_samples; off_y < sided_samples + 1; off_y++) {    
-                ScalarPoint3f offset = p + ScalarPoint3f(off_x, off_y, 1.0f);
-                ScalarVector3f direction = drjit::normalize(offset - p);
+        //  Critical angle (define how?)
+        ScalarFloat critical_angle = 80.0f * (dr::Pi<ScalarFloat> / 180.0f);
+        ScalarFloat step = critical_angle / sided_samples;
 
-                int32_t idx = (off_x + sided_samples) * extent + (off_y + sided_samples);
-                directions[idx] = direction;
-            }
+        //  Compute all angles theta for sampling
+        for (int32_t idx_x = -sided_samples; idx_x < sided_samples + 1; idx_x++) {
+            //  Based on step, compute angle
+            ScalarFloat theta = idx_x * step;
+            ScalarFloat alpha = theta + (dr::Pi<ScalarFloat> / 2.0f);
+
+            angles[idx_x + sided_samples] = alpha;
         }
 
-        return directions;
+        return angles;
     }
 
-    void precompute_optical_thickness() const {
+    void precompute_optical_thickness(const std::vector<ScalarFloat> angles) const {
         static constexpr size_t SpectralSize = dr::array_size_v<UnpolarizedSpectrum>;
         using ScalarUnpolarized = dr::Array<dr::scalar_t<UnpolarizedSpectrum>, SpectralSize>;
 
@@ -106,13 +107,69 @@ public:
         ScalarVector3f step     = ScalarVector3d(0.f, 0.f, voxel_size.z());
 
         //  The interaction point from where we calculate directions
-        ScalarPoint3f p         = m_sigmat-> bbox().min;
+        ScalarPoint3f p         = m_sigmat-> bbox().max;
+        ScalarFloat r_max       = p.z();
 
-        //  Precompute
+        ScalarFloat to_deg = 180.0f / dr::Pi<ScalarFloat>;
 
         //  Here we assume we start at the top shell
-        for (int32_t i = 0; i < (int32_t) resolution.z(); ++i) {
+        for (int32_t i = 0; i < (int32_t) angles.size(); ++i) {
+            //  We assume that the voxel size is the radius of a spherical shell!
+            //  The intersection point with the shell from P can then be found by 
+            //  using the equation of a circle (x^2 + y^2 = r^2) and of the line
+            //  defining the directional through P (y = theta * x + r_max) where 
+            //  r_max is defined by the z-coordinate of the max bounding box point.
+            ScalarFloat alpha = angles[i];
+            ScalarFloat tan_alpha = dr::tan(alpha);
+            
+            //  Since coefficient a is constant for all radii, we can precompute it
+            ScalarFloat a = (1 + (tan_alpha * tan_alpha));
 
+            //  Loop over all radii
+            for (int32_t r_idx = 1; r_idx <= (int32_t) resolution.z(); ++r_idx) {
+                ScalarFloat r = r_idx * voxel_size.z();
+
+                //  Calculate the intersection point with the spherical shell 
+                ScalarFloat b = 2.0f * tan_alpha * r_max;
+                ScalarFloat c = r_max * r_max - r * r;
+                
+                //Log(Warn, "alpha = ", alpha * to_deg, ", tan(alpha) = ", tan_alpha);
+                //Log(Warn, "     r_max = ", r_max, ", r = ", r, ", b = ", b, ", c = ", c);
+
+                ScalarFloat discriminant = b * b - 4 * a * c;
+                //Log(Warn, "     discriminant = ", discriminant);
+
+                if (discriminant < 0) {
+                    // No intersection with the spherical shell
+                    continue;   
+                }
+
+                if (discriminant == 0) {
+                    // One intersection point, calculate it
+                    ScalarFloat t = -b / (2 * a);
+                    
+                    // Intersection behind the ray origin?
+                    if (t < 0) 
+                        continue; 
+
+                    p.z() = r_max + t;
+                } else {
+                    // Two intersection points, take the first one
+                    ScalarFloat sqrt_discriminant = dr::sqrt(discriminant);
+                    ScalarFloat t1 = (-b + sqrt_discriminant) / (2 * a);
+                    ScalarFloat t2 = (-b - sqrt_discriminant) / (2 * a);
+                    
+                    // Both intersections behind the ray origin
+                    if (t1 < 0 && t2 < 0) 
+                        continue;
+                    p.z() = r_max + std::min(t1, t2);
+
+                    Log(Warn, "Intersection found at = ", p.z(), 
+                        " for angle = ", alpha * to_deg, 
+                        " with r = ", r, 
+                        " and tan(alpha) = ", tan_alpha);
+                }
+            }
         }
     }
 
