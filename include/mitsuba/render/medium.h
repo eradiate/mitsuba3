@@ -4,6 +4,7 @@
 #include <mitsuba/core/spectrum.h>
 #include <mitsuba/core/traits.h>
 #include <mitsuba/render/fwd.h>
+#include <drjit/texture.h>
 #include <drjit/vcall.h>
 
 NAMESPACE_BEGIN(mitsuba)
@@ -30,6 +31,8 @@ public:
                                 Mask active = true) const = 0;
 
     virtual void precompute() const = 0;
+
+    //virtual const Texture2f* get_texture() const = 0;
 
     /**
      * \brief Sample a free-flight distance in the medium.
@@ -146,6 +149,7 @@ DRJIT_VCALL_TEMPLATE_BEGIN(mitsuba::Medium)
     DRJIT_VCALL_METHOD(eval_transmittance_pdf_real)
     DRJIT_VCALL_METHOD(get_scattering_coefficients)
     DRJIT_VCALL_METHOD(precompute)
+    //DRJIT_VCALL_METHOD(get_texture)
 DRJIT_VCALL_TEMPLATE_END(mitsuba::Medium)
 
 //! @}

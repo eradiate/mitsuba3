@@ -69,6 +69,12 @@ public:
         precompute_optical_thickness(angles);
     }
 
+    /*
+    const Texture2f* get_texture() const override {
+        return &m_opt_thickness_cdf;
+    }
+    */
+
     std::vector<ScalarFloat> precompute_directions() const {
         //  Compute angles based on a regularly spaced interval
         int32_t sided_samples = 0;
@@ -234,6 +240,8 @@ public:
         //  Publish the optical thickness CDF as a texture
         m_opt_thickness_cdf = Texture2f(TensorXf(opt_thickness_data.data(), 3, shape), true, 
             true, dr::FilterMode::Linear, dr::WrapMode::Clamp);
+
+        //Log(Warn, "Texture: ", m_opt_thickness_cdf);
     }
 
     std::vector<ScalarFloat> compute_cdf(const std::vector<ScalarPoint3f> intersections) const {

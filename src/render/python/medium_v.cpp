@@ -3,6 +3,7 @@
 #include <mitsuba/render/phase.h>
 #include <mitsuba/render/scene.h>
 #include <mitsuba/python/python.h>
+#include <drjit/texture.h>
 
 /// Trampoline for derived types implemented in Python
 MI_VARIANT class PyMedium : public Medium<Float, Spectrum> {
@@ -41,6 +42,10 @@ public:
     void precompute() const override {
         PYBIND11_OVERRIDE(void, Medium, precompute);
     }
+
+    //const Texture2f& get_texture() const override {
+    //    PYBIND11_OVERRIDE(Texture2f, Medium, get_texture);
+    //}
 
     using Medium::m_sample_emitters;
     using Medium::m_is_homogeneous;
@@ -103,6 +108,10 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
             [](Ptr ptr) {
                 return ptr->precompute();
             });
+        //.def("get_texture",
+        //    [](Ptr ptr) {
+        //        return ptr->get_texture();
+        //    });
 
     if constexpr (dr::is_array_v<Ptr>)
         bind_drjit_ptr_array(cls);
