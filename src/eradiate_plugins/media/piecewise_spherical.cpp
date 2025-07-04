@@ -91,8 +91,6 @@ public:
             ScalarFloat theta = idx_x * step;
             ScalarFloat alpha = theta + (dr::Pi<ScalarFloat> / 2.0f);
 
-            Log(Warn, "Angle = ", alpha * to_deg);
-
             angles[idx_x + sided_samples] = alpha;
         }
 
@@ -188,9 +186,11 @@ public:
                         ScalarFloat t1 = (-b + sqrt_discriminant) / (2 * a);
                         ScalarFloat t2 = (-b - sqrt_discriminant) / (2 * a);
                         
-                        // Both intersections behind the ray origin
+                        // TODO: Check if this can actually occur?
+                        // Both intersections behind the ray origin?
                         if (t1 < 0 && t2 < 0) 
                             continue;
+
                         ScalarFloat x_1 = std::min(t1, t2);
                         ScalarFloat z_1 = r_max + x_1 * tan_alpha;
 
@@ -215,27 +215,49 @@ public:
     }
 
     void compute_cdf(const std::vector<ScalarPoint3f> intersections) const {
+        static constexpr size_t SpectralSize = dr::array_size_v<UnpolarizedSpectrum>;
+        using ScalarUnpolarized = dr::Array<dr::scalar_t<UnpolarizedSpectrum>, SpectralSize>;
+
         MediumInteraction3f mei = dr::zeros<MediumInteraction3f>();
 
         for (size_t i = 0; i < intersections.size() - 1; i++) {
             ScalarPoint3f p1 = intersections[i];
             ScalarPoint3f p2 = intersections[i + 1];
-            
+
+            //  Calculate the length of the segment
+            ScalarFloat segment_length = dr::norm(p2 - p1);
+
             //  Calculate the middle point to use as sample point 
             //  to get the medium interaction
             ScalarPoint3f sample_point = (p1 + p2) * 0.5f;
 
+            //  Set the sample point z-coordinate to a POSITIVE value
+            //  to ensure we are sampling the "spherical shell" medium
+            //  (medium is not defined below the z-coordinate of the bounding box)
+            sample_point.z() = std::abs(sample_point.z());
+
             //  Set the medium interaction point
             mei.p = sample_point;
 
-            Log(Warn, "Interaction point = ", mei.p);
+            ScalarUnpolarized cumulative = dr::zeros<ScalarUnpolarized>();
+            std::vector<ScalarFloat> cum_opt_thickness(intersections.size() * SpectralSize);
 
             //  Get the scattering coefficients at the sample point
             std::tie(mei.sigma_s, mei.sigma_n, mei.sigma_t) =
                 get_scattering_coefficients(mei, true);
 
-            //  Calculate the optical thickness
-            Log(Warn, "Extinction at sample = ", mei.sigma_t);
+            //  Calculate the optical thickness per wavelength channel
+            for (size_t k = 0; k < SpectralSize; ++k) {
+                if constexpr (dr::is_jit_v<UnpolarizedSpectrum>)
+                    cumulative[k] += ScalarFloat(mei.sigma_t[k][0]) * segment_length;
+                else
+                    cumulative[k] += ScalarFloat(mei.sigma_t[k]) * segment_length;
+
+                Log(Warn, "Cumulative optical thickness at index ", i, " and channel ", k,
+                    " = ", cumulative[k]);
+
+                cum_opt_thickness[i * SpectralSize + k] = cumulative[k];
+            }
         }
     }
 
@@ -246,6 +268,16 @@ public:
     std::tuple<UnpolarizedSpectrum, UnpolarizedSpectrum, UnpolarizedSpectrum>
     get_scattering_coefficients(const MediumInteraction3f &mi,
                                 Mask active) const override {
+        MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
+
+        auto sigmat = m_sigmat->eval(mi, active);
+        if (has_flag(m_phase_function->flags(), PhaseFunctionFlags::Microflake))
+            sigmat *= m_phase_function->projected_area(mi, active);
+
+        auto sigmas = sigmat * m_albedo->eval(mi, active);
+        auto sigman = m_max_density - sigmat;
+
+        return { sigmas, sigman, sigmat };
     }
 
     std::tuple<Mask, Float, Float>
