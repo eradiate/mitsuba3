@@ -120,6 +120,7 @@ public:
         ScalarFloat r_max       = p.z();
 
         ScalarFloat to_deg = 180.0f / dr::Pi<ScalarFloat>;
+    
 
         //  Here we assume we start at the top shell
         for (int32_t i = 0; i < (int32_t) angles.size(); ++i) {
@@ -130,59 +131,84 @@ public:
             //  r_max is defined by the z-coordinate of the max bounding box point.
             ScalarFloat alpha = angles[i];
             ScalarFloat tan_alpha = dr::tan(alpha);
+
+            std::vector<ScalarPoint3f> intersections;
             
             //  TODO: Fix tangent calculation for alpha = (-) pi / 2
+            if (alpha == dr::Pi<ScalarFloat> / 2.0f || alpha == -dr::Pi<ScalarFloat> / 2.0f) {
+                //  If alpha is pi/2, we have a vertical ray. The intersection
+                //  with the spherical shell is then given by y^2 = r^2
+                for (int32_t r_idx = 1; r_idx <= (int32_t) resolution.z(); ++r_idx) {
+                    ScalarFloat r = r_idx * voxel_size.z();
+                    ScalarFloat z = r;
 
-            //  Since coefficient a is constant for all radii, we can precompute it
-            ScalarFloat a = (1 + (tan_alpha * tan_alpha));
-
-            //  Loop over all radii
-            for (int32_t r_idx = 1; r_idx <= (int32_t) resolution.z(); ++r_idx) {
-                ScalarFloat r = r_idx * voxel_size.z();
-
-                //  Calculate the intersection point with the spherical shell 
-                ScalarFloat b = 2.0f * tan_alpha * r_max;
-                ScalarFloat c = r_max * r_max - r * r;
-                
-                //Log(Warn, "alpha = ", alpha * to_deg, ", tan(alpha) = ", tan_alpha);
-                //Log(Warn, "     r_max = ", r_max, ", r = ", r, ", b = ", b, ", c = ", c);
-
-                ScalarFloat discriminant = b * b - 4 * a * c;
-                //Log(Warn, "     discriminant = ", discriminant);
-
-                if (discriminant < 0) {
-                    // No intersection with the spherical shell
-                    continue;   
+                    ScalarPoint3f icts{p.x(), p.y(), z };
                 }
+            } else {
+                //  Since coefficient a is constant for all radii, we can precompute it
+                ScalarFloat a = (1 + (tan_alpha * tan_alpha));
 
-                if (discriminant == 0) {
-                    // One intersection point, calculate it
-                    ScalarFloat t = -b / (2 * a);
+                //  Loop over all radii
+                for (int32_t r_idx = 1; r_idx <= (int32_t) resolution.z(); ++r_idx) {
+                    ScalarFloat r = r_idx * voxel_size.z();
+
+                    //  Calculate the intersection point with the spherical shell 
+                    ScalarFloat b = 2.0f * tan_alpha * r_max;
+                    ScalarFloat c = r_max * r_max - r * r;
                     
-                    // Intersection behind the ray origin?
-                    if (t < 0) 
-                        continue; 
+                    //Log(Warn, "alpha = ", alpha * to_deg, ", tan(alpha) = ", tan_alpha);
+                    //Log(Warn, "     r_max = ", r_max, ", r = ", r, ", b = ", b, ", c = ", c);
 
-                    p.z() = r_max + t;
-                } else {
-                    // Two intersection points, take the first one
-                    ScalarFloat sqrt_discriminant = dr::sqrt(discriminant);
-                    ScalarFloat t1 = (-b + sqrt_discriminant) / (2 * a);
-                    ScalarFloat t2 = (-b - sqrt_discriminant) / (2 * a);
-                    
-                    // Both intersections behind the ray origin
-                    if (t1 < 0 && t2 < 0) 
-                        continue;
-                    ScalarFloat x = std::min(t1, t2);
-                    ScalarFloat y = r_max + x * tan_alpha;
+                    ScalarFloat discriminant = b * b - 4 * a * c;
+                    //Log(Warn, "     discriminant = ", discriminant);
 
-                    Log(Warn, "Intersection found at = (", x, ", ", y, "), ", 
-                        " for angle = ", alpha * to_deg, 
-                        " with r = ", r, 
-                        " and tan(alpha) = ", tan_alpha);
+                    if (discriminant < 0) {
+                        // No intersection with the spherical shell
+                        continue;   
+                    }
+
+                    if (discriminant == 0) {
+                        // One intersection point, calculate it
+                        ScalarFloat t = -b / (2 * a);
+                        
+                        // Intersection behind the ray origin?
+                        if (t < 0) 
+                            continue; 
+
+                        ScalarFloat x = t;
+                        ScalarFloat z = r_max + x * tan_alpha;
+                        
+                        // Add the intersection point to the list
+                        intersections.push_back(ScalarPoint3f{x, p.y(), z});
+                    } else {
+                        // Two intersection points, take the first one
+                        ScalarFloat sqrt_discriminant = dr::sqrt(discriminant);
+                        ScalarFloat t1 = (-b + sqrt_discriminant) / (2 * a);
+                        ScalarFloat t2 = (-b - sqrt_discriminant) / (2 * a);
+                        
+                        // Both intersections behind the ray origin
+                        if (t1 < 0 && t2 < 0) 
+                            continue;
+                        ScalarFloat x_1 = std::min(t1, t2);
+                        ScalarFloat z_1 = r_max + x * tan_alpha;
+
+                        ScalarFloat x_2 = std::max(t1, t2);
+                        ScalarFloat z_2 = r_max + x * tan_alpha;
+
+                        //  Add the intersection points to the list
+                        intersections.push_back(ScalarPoint3f{x_1, p.y(), z_1});
+                        intersections.push_back(ScalarPoint3f{x_2, p.y(), z_2});    
+                    }
                 }
             }
         }
+    }
+
+    void compute_optical_thickness(const ScalarPoint3f start,
+                                   const ScalarPoint3f end) const {
+        //  Since we are working with an origin at centered at (0, 0, 0), the 
+        //  coordinates of points are also the vector from the origin to the point.
+        //  We now calcumate the distance 
     }
 
     UnpolarizedSpectrum get_majorant(const MediumInteraction3f &mi,
