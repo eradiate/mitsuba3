@@ -39,7 +39,7 @@ public:
     }
 
     void precompute() const override {
-        PYBIND11_OVERRIDE(void, Medium, precompute, );
+        PYBIND11_OVERRIDE(void, Medium, precompute);
     }
 
     using Medium::m_sample_emitters;

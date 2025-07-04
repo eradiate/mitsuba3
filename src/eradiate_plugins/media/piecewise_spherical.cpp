@@ -1,3 +1,4 @@
+#include <drjit/texture.h>
 #include <mitsuba/core/distr_1d.h>
 #include <mitsuba/core/frame.h>
 #include <mitsuba/core/properties.h>
@@ -8,6 +9,7 @@
 #include <mitsuba/render/phase.h>
 #include <mitsuba/render/sampler.h>
 #include <mitsuba/render/scene.h>
+#include <mitsuba/render/texture.h>
 #include <mitsuba/render/volume.h>
 
 NAMESPACE_BEGIN(mitsuba)
@@ -119,6 +121,10 @@ public:
 
         ScalarFloat to_deg = 180.0f / dr::Pi<ScalarFloat>;
     
+        //  The maximum number of intersection is the resolution * the number of angles *
+        //  the spectral size (if spectral data is used)
+        int32_t max_intersections = resolution.z() * (int32_t) angles.size() * SpectralSize;
+        std::vector<ScalarFloat> opt_thickness_data(max_intersections * SpectralSize);
 
         //  Here we assume we start at the top shell
         for (int32_t i = 0; i < (int32_t) angles.size(); ++i) {
@@ -210,14 +216,30 @@ public:
                           return a.z() > b.z();
                       });
 
-            compute_cdf(intersections);
+            std::vector<ScalarFloat> cdf = compute_cdf(intersections);
+
+            //  TODO -> THIS DOES NOT WORK SINCE THE NUMBER OF ICTS IS NOT THE SAME FOR EACH DIRECTION
+            //  Store the optical thickness CDF for this angle
+            for (size_t j = 0; j < cdf.size(); ++j) {
+                //  Store the CDF value for each spectral channel
+                for (size_t k = 0; k < SpectralSize; ++k)
+                    opt_thickness_data[(i * SpectralSize + k) * max_intersections + j] = cdf[j];
+            }
         }
+
+        size_t shape[3] = { angles.size(),
+                            static_cast<size_t>(max_intersections), 
+                            SpectralSize };
+
+        //  Publish the optical thickness CDF as a texture
+        m_opt_thickness_cdf = Texture2f(TensorXf(opt_thickness_data.data(), 3, shape), true, 
+            true, dr::FilterMode::Linear, dr::WrapMode::Clamp);
     }
 
-    void compute_cdf(const std::vector<ScalarPoint3f> intersections) const {
+    std::vector<ScalarFloat> compute_cdf(const std::vector<ScalarPoint3f> intersections) const {
         MediumInteraction3f mei = dr::zeros<MediumInteraction3f>();
         ScalarUnpolarized cumulative = dr::zeros<ScalarUnpolarized>();
-        std::vector<ScalarFloat> cum_opt_thickness(intersections.size() * SpectralSize);
+        std::vector<ScalarFloat> opt_thickness_cdf(intersections.size() * SpectralSize);
 
         for (size_t i = 0; i < intersections.size() - 1; i++) {
             ScalarPoint3f p1 = intersections[i];
@@ -249,11 +271,11 @@ public:
                 else 
                     cumulative[k] += ScalarFloat(mei.sigma_t[k]) * segment_length;
 
-                cum_opt_thickness[i * SpectralSize + k] = 1 - dr::exp(-cumulative[k]);
+                opt_thickness_cdf[i * SpectralSize + k] = 1 - dr::exp(-cumulative[k]);
             }
         }
 
-        m_cum_opt_thickness = dr::load<FloatStorage>(cum_opt_thickness.data(), intersections.size() * SpectralSize);
+        return opt_thickness_cdf;
     }
 
     UnpolarizedSpectrum get_majorant(const MediumInteraction3f &mi,
@@ -307,8 +329,10 @@ private:
     ref<Volume> m_sigmat, m_albedo;
 
     Float m_max_density;
-    FloatStorage m_cum_opt_thickness;
-    FloatStorage m_reverse_cum_opt_thickness;
+    mutable Texture2f m_opt_thickness_cdf;
+
+    //FloatStorage m_cum_opt_thickness;
+    //FloatStorage m_reverse_cum_opt_thickness;
 };
 
 MI_IMPLEMENT_CLASS_VARIANT(PiecewiseSphericalMedium, Medium)
