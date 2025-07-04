@@ -78,7 +78,7 @@ public:
         ScalarFloat critical_angle = 0.0f;
         ScalarFloat step = 0.0f;
 
-        if (total_samples =! 1) {
+        if (total_samples != 1) {
             critical_angle = 80.0f * (dr::Pi<ScalarFloat> / 180.0f);
             step = critical_angle / sided_samples;
         }
@@ -142,7 +142,9 @@ public:
                     ScalarFloat r = r_idx * voxel_size.z();
                     ScalarFloat z = r;
 
-                    ScalarPoint3f icts{p.x(), p.y(), z };
+                    //  Calculate the intersection points with the spherical shell
+                    intersections.push_back(ScalarPoint3f{p.x(), p.y(), z});
+                    intersections.push_back(ScalarPoint3f{p.x(), p.y(), -z});
                 }
             } else {
                 //  Since coefficient a is constant for all radii, we can precompute it
@@ -190,10 +192,10 @@ public:
                         if (t1 < 0 && t2 < 0) 
                             continue;
                         ScalarFloat x_1 = std::min(t1, t2);
-                        ScalarFloat z_1 = r_max + x * tan_alpha;
+                        ScalarFloat z_1 = r_max + x_1 * tan_alpha;
 
                         ScalarFloat x_2 = std::max(t1, t2);
-                        ScalarFloat z_2 = r_max + x * tan_alpha;
+                        ScalarFloat z_2 = r_max + x_2 * tan_alpha;
 
                         //  Add the intersection points to the list
                         intersections.push_back(ScalarPoint3f{x_1, p.y(), z_1});
@@ -201,14 +203,40 @@ public:
                     }
                 }
             }
+
+            //  Sort the intersection points by z-coordinate
+            std::sort(intersections.begin(), intersections.end(),
+                      [](const ScalarPoint3f &a, const ScalarPoint3f &b) {
+                          return a.z() > b.z();
+                      });
+
+            compute_cdf(intersections);
         }
     }
 
-    void compute_optical_thickness(const ScalarPoint3f start,
-                                   const ScalarPoint3f end) const {
-        //  Since we are working with an origin at centered at (0, 0, 0), the 
-        //  coordinates of points are also the vector from the origin to the point.
-        //  We now calcumate the distance 
+    void compute_cdf(const std::vector<ScalarPoint3f> intersections) const {
+        MediumInteraction3f mei = dr::zeros<MediumInteraction3f>();
+
+        for (size_t i = 0; i < intersections.size() - 1; i++) {
+            ScalarPoint3f p1 = intersections[i];
+            ScalarPoint3f p2 = intersections[i + 1];
+            
+            //  Calculate the middle point to use as sample point 
+            //  to get the medium interaction
+            ScalarPoint3f sample_point = (p1 + p2) * 0.5f;
+
+            //  Set the medium interaction point
+            mei.p = sample_point;
+
+            Log(Warn, "Interaction point = ", mei.p);
+
+            //  Get the scattering coefficients at the sample point
+            std::tie(mei.sigma_s, mei.sigma_n, mei.sigma_t) =
+                get_scattering_coefficients(mei, true);
+
+            //  Calculate the optical thickness
+            Log(Warn, "Extinction at sample = ", mei.sigma_t);
+        }
     }
 
     UnpolarizedSpectrum get_majorant(const MediumInteraction3f &mi,
