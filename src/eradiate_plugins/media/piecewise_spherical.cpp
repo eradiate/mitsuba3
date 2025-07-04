@@ -24,6 +24,9 @@ public:
     using FloatStorage      = DynamicBuffer<Float>;
     using index             = dr::uint32_array_t<Float>;
 
+    static constexpr size_t SpectralSize = dr::array_size_v<UnpolarizedSpectrum>;
+    using ScalarUnpolarized = dr::Array<dr::scalar_t<UnpolarizedSpectrum>, SpectralSize>;
+
     PiecewiseSphericalMedium(const Properties &props) : Base(props) {
         m_is_homogeneous = false;
         m_albedo         = props.volume<Volume>("albedo", 0.75f);
@@ -98,9 +101,6 @@ public:
     }
 
     void precompute_optical_thickness(const std::vector<ScalarFloat> angles) const {
-        static constexpr size_t SpectralSize = dr::array_size_v<UnpolarizedSpectrum>;
-        using ScalarUnpolarized = dr::Array<dr::scalar_t<UnpolarizedSpectrum>, SpectralSize>;
-
         // Check that the first two dimensions are equal to 1 and that z is one
         // or more.
         const ScalarVector3i resolution = m_sigmat->resolution();
@@ -215,10 +215,9 @@ public:
     }
 
     void compute_cdf(const std::vector<ScalarPoint3f> intersections) const {
-        static constexpr size_t SpectralSize = dr::array_size_v<UnpolarizedSpectrum>;
-        using ScalarUnpolarized = dr::Array<dr::scalar_t<UnpolarizedSpectrum>, SpectralSize>;
-
         MediumInteraction3f mei = dr::zeros<MediumInteraction3f>();
+        ScalarUnpolarized cumulative = dr::zeros<ScalarUnpolarized>();
+        std::vector<ScalarFloat> cum_opt_thickness(intersections.size() * SpectralSize);
 
         for (size_t i = 0; i < intersections.size() - 1; i++) {
             ScalarPoint3f p1 = intersections[i];
@@ -239,9 +238,6 @@ public:
             //  Set the medium interaction point
             mei.p = sample_point;
 
-            ScalarUnpolarized cumulative = dr::zeros<ScalarUnpolarized>();
-            std::vector<ScalarFloat> cum_opt_thickness(intersections.size() * SpectralSize);
-
             //  Get the scattering coefficients at the sample point
             std::tie(mei.sigma_s, mei.sigma_n, mei.sigma_t) =
                 get_scattering_coefficients(mei, true);
@@ -250,15 +246,14 @@ public:
             for (size_t k = 0; k < SpectralSize; ++k) {
                 if constexpr (dr::is_jit_v<UnpolarizedSpectrum>)
                     cumulative[k] += ScalarFloat(mei.sigma_t[k][0]) * segment_length;
-                else
+                else 
                     cumulative[k] += ScalarFloat(mei.sigma_t[k]) * segment_length;
 
-                Log(Warn, "Cumulative optical thickness at index ", i, " and channel ", k,
-                    " = ", cumulative[k]);
-
-                cum_opt_thickness[i * SpectralSize + k] = cumulative[k];
+                cum_opt_thickness[i * SpectralSize + k] = 1 - dr::exp(-cumulative[k]);
             }
         }
+
+        m_cum_opt_thickness = dr::load<FloatStorage>(cum_opt_thickness.data(), intersections.size() * SpectralSize);
     }
 
     UnpolarizedSpectrum get_majorant(const MediumInteraction3f &mi,
