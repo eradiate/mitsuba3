@@ -1,3 +1,4 @@
+#include "drjit/array_router.h"
 #include <drjit/texture.h>
 #include <mitsuba/core/distr_1d.h>
 #include <mitsuba/core/frame.h>
@@ -33,6 +34,7 @@ public:
         m_is_homogeneous = false;
         m_albedo         = props.volume<Volume>("albedo", 0.75f);
         m_sigmat         = props.volume<Volume>("sigma_t", 1.f);
+        m_angle_samples  = props.get<int32_t>("samples", 0);
 
         m_has_spectral_extinction =
             props.get<bool>("has_spectral_extinction", true);
@@ -49,7 +51,14 @@ public:
     sample_interaction_real(const Ray3f &ray, const SurfaceInteraction3f &si,
                             Float sample, UInt32 channel,
                             Mask active) const override {
+        MI_MASKED_FUNCTION(ProfilerPhase::MediumSample, active);
 
+        // Initial intersection with the medium
+        auto [aabb_its, mint, maxt] = intersect_aabb(ray);
+        aabb_its &= (dr::isfinite(mint) || dr::isfinite(maxt));
+        active &= aabb_its;
+        dr::masked(mint, !active) = 0.f;
+        dr::masked(maxt, !active) = dr::Infinity<Float>;
     }
 
     std::tuple<Float, Float, Mask>
@@ -59,6 +68,13 @@ public:
     }
 
     void traverse(TraversalCallback *callback) override {
+        //callback->put_object("albedo", m_albedo.get(),
+        //                     +ParamFlags::Differentiable);
+        //callback->put_object("sigma_t", m_sigmat.get(),
+        //                     +ParamFlags::Differentiable);
+        callback->put_parameter("optical_thickness_cdf", m_opt_thickness_cdf.tensor(),
+                                +ParamFlags::NonDifferentiable);
+        Base::traverse(callback);
     }
 
     void parameters_changed(const std::vector<std::string> & /*keys*/ = {}) override {
@@ -69,20 +85,13 @@ public:
         precompute_optical_thickness(angles);
     }
 
-    /*
-    const Texture2f* get_texture() const override {
-        return &m_opt_thickness_cdf;
-    }
-    */
-
     std::vector<ScalarFloat> precompute_directions() const {
         //  Compute angles based on a regularly spaced interval
-        int32_t sided_samples = 0;
+        int32_t sided_samples = (m_angle_samples != 0) ? m_angle_samples : 0;
         int32_t extent = sided_samples * 2 + 1;
         int32_t total_samples = extent;
 
         //  Storage for the direction vectors
-        //  TODO -> Change this to a drjit::DynamicArray?
         std::vector<ScalarFloat> angles(total_samples);
     
         //  Critical angle (define how?)
@@ -93,8 +102,6 @@ public:
             critical_angle = 80.0f * (dr::Pi<ScalarFloat> / 180.0f);
             step = critical_angle / sided_samples;
         }
-
-        ScalarFloat to_deg = 180.0f / dr::Pi<ScalarFloat>;
 
         //  Compute all angles theta for sampling
         for (int32_t idx_x = -sided_samples; idx_x < sided_samples + 1; idx_x++) {
@@ -124,13 +131,13 @@ public:
         //  The interaction point from where we calculate directions
         ScalarPoint3f p         = m_sigmat-> bbox().max;
         ScalarFloat r_max       = p.z();
-
-        ScalarFloat to_deg = 180.0f / dr::Pi<ScalarFloat>;
     
         //  The maximum number of intersection is the resolution * the number of angles *
         //  the spectral size (if spectral data is used)
         int32_t max_intersections = resolution.z() * (int32_t) angles.size() * SpectralSize;
         std::vector<ScalarFloat> opt_thickness_data(max_intersections * SpectralSize);
+
+        ScalarFloat to_deg = 180.0f / dr::Pi<ScalarFloat>;
 
         //  Here we assume we start at the top shell
         for (int32_t i = 0; i < (int32_t) angles.size(); ++i) {
@@ -145,20 +152,24 @@ public:
             std::vector<ScalarPoint3f> intersections;
             
             //  TODO: Fix tangent calculation for alpha = (-) pi / 2
-            if (alpha == dr::Pi<ScalarFloat> / 2.0f || alpha == -dr::Pi<ScalarFloat> / 2.0f) {
+            if (alpha == dr::Pi<ScalarFloat> / 2.0f || alpha == -dr::Pi<ScalarFloat> / 2.0f) {                
                 //  If alpha is pi/2, we have a vertical ray. The intersection
                 //  with the spherical shell is then given by y^2 = r^2
                 for (int32_t r_idx = 1; r_idx <= (int32_t) resolution.z(); ++r_idx) {
                     ScalarFloat r = r_idx * voxel_size.z();
                     ScalarFloat z = r;
 
+                    ScalarPoint3f p1{p.x(), p.y(), z};
+                    ScalarPoint3f p2{p.x(), p.y(), -z};
+
                     //  Calculate the intersection points with the spherical shell
                     intersections.push_back(ScalarPoint3f{p.x(), p.y(), z});
                     intersections.push_back(ScalarPoint3f{p.x(), p.y(), -z});
                 }
             } else {
-                //  Since coefficient a is constant for all radii, we can precompute it
-                ScalarFloat a = (1 + (tan_alpha * tan_alpha));
+                //  Since coefficient a is constant for all radii, we can precompute it.
+                //  Also, geometric identity: 1 + tan^2(alpha) = sec^2(alpha)
+                ScalarFloat a = dr::sqr(dr::sec(alpha));
 
                 //  Loop over all radii
                 for (int32_t r_idx = 1; r_idx <= (int32_t) resolution.z(); ++r_idx) {
@@ -166,13 +177,8 @@ public:
 
                     //  Calculate the intersection point with the spherical shell 
                     ScalarFloat b = 2.0f * tan_alpha * r_max;
-                    ScalarFloat c = r_max * r_max - r * r;
-                    
-                    //Log(Warn, "alpha = ", alpha * to_deg, ", tan(alpha) = ", tan_alpha);
-                    //Log(Warn, "     r_max = ", r_max, ", r = ", r, ", b = ", b, ", c = ", c);
-
-                    ScalarFloat discriminant = b * b - 4 * a * c;
-                    //Log(Warn, "     discriminant = ", discriminant);
+                    ScalarFloat c = (r_max * r_max) - (r * r);
+                    ScalarFloat discriminant = (b * b) - (4 * a * c);
 
                     if (discriminant < 0) {
                         // No intersection with the spherical shell
@@ -209,6 +215,9 @@ public:
                         ScalarFloat x_2 = std::max(t1, t2);
                         ScalarFloat z_2 = r_max + x_2 * tan_alpha;
 
+                        ScalarPoint3f p1{x_1, p.y(), z_1};
+                        ScalarPoint3f p2{x_2, p.y(), z_2};
+
                         //  Add the intersection points to the list
                         intersections.push_back(ScalarPoint3f{x_1, p.y(), z_1});
                         intersections.push_back(ScalarPoint3f{x_2, p.y(), z_2});    
@@ -216,6 +225,7 @@ public:
                 }
             }
 
+            /*
             //  Sort the intersection points by z-coordinate
             std::sort(intersections.begin(), intersections.end(),
                       [](const ScalarPoint3f &a, const ScalarPoint3f &b) {
@@ -231,6 +241,7 @@ public:
                 for (size_t k = 0; k < SpectralSize; ++k)
                     opt_thickness_data[(i * SpectralSize + k) * max_intersections + j] = cdf[j];
             }
+            */
         }
 
         size_t shape[3] = { angles.size(),
@@ -335,6 +346,7 @@ public:
 
 private:
     ref<Volume> m_sigmat, m_albedo;
+    int32_t m_angle_samples;
 
     Float m_max_density;
     mutable Texture2f m_opt_thickness_cdf;
