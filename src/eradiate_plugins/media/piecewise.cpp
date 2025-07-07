@@ -438,6 +438,11 @@ public:
                              +ParamFlags::Differentiable);
         callback->put_object("sigma_t", m_sigmat.get(),
                              +ParamFlags::Differentiable);
+        callback->put_parameter("optical_thickness_cdf", m_cum_opt_thickness,
+                                +ParamFlags::NonDifferentiable);
+        callback->put_parameter("reverse_optical_thickness_cdf",
+                                m_reverse_cum_opt_thickness,
+                                +ParamFlags::NonDifferentiable);
         Base::traverse(callback);
     }
 
@@ -447,6 +452,8 @@ public:
         Log(Info, "Medium Parameters changed!");
         precompute_optical_thickness();
     }
+
+    void precompute() const override {    }
 
     void precompute_optical_thickness() {
 
