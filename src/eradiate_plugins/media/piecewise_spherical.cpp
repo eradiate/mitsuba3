@@ -134,7 +134,7 @@ public:
     
         //  The maximum number of intersection is the resolution * the number of angles *
         //  the spectral size (if spectral data is used)
-        int32_t max_intersections = resolution.z() * (int32_t) angles.size() * SpectralSize;
+        int32_t max_intersections = resolution.z() * 2 * SpectralSize;
         std::vector<ScalarFloat> opt_thickness_data(max_intersections * SpectralSize);
 
         ScalarFloat to_deg = 180.0f / dr::Pi<ScalarFloat>;
@@ -225,13 +225,16 @@ public:
                 }
             }
 
-            /*
+            Log(Warn, "Found ", intersections.size(), " intersections for angle ", 
+                angles[i] * to_deg, " degrees (", angles[i], " radians).");
+
             //  Sort the intersection points by z-coordinate
             std::sort(intersections.begin(), intersections.end(),
                       [](const ScalarPoint3f &a, const ScalarPoint3f &b) {
                           return a.z() > b.z();
                       });
 
+            /*
             std::vector<ScalarFloat> cdf = compute_cdf(intersections);
 
             //  TODO -> THIS DOES NOT WORK SINCE THE NUMBER OF ICTS IS NOT THE SAME FOR EACH DIRECTION
