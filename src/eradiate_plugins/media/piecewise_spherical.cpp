@@ -26,6 +26,8 @@ public:
     using ScalarSize        = uint32_t;
     using FloatStorage      = DynamicBuffer<Float>;
     using index             = dr::uint32_array_t<Float>;
+    using ShellIntersection = std::tuple<int32_t, int32_t, ScalarPoint3f>;
+    using CDFEntry          = std::tuple<int32_t, int32_t, ScalarPoint3f, int32_t, ScalarFloat>;
 
     static constexpr size_t SpectralSize = dr::array_size_v<UnpolarizedSpectrum>;
     using ScalarUnpolarized = dr::Array<dr::scalar_t<UnpolarizedSpectrum>, SpectralSize>;
@@ -149,13 +151,15 @@ public:
             ScalarFloat alpha = angles[i];
             ScalarFloat tan_alpha = dr::tan(alpha);
 
-            std::vector<ScalarPoint3f> intersections;
+            std::vector<ShellIntersection> intersections;
             
             //  TODO: Fix tangent calculation for alpha = (-) pi / 2
             if (alpha == dr::Pi<ScalarFloat> / 2.0f || alpha == -dr::Pi<ScalarFloat> / 2.0f) {                
                 //  If alpha is pi/2, we have a vertical ray. The intersection
                 //  with the spherical shell is then given by y^2 = r^2
-                for (int32_t r_idx = 1; r_idx <= (int32_t) resolution.z(); ++r_idx) {
+
+                //  Loop over all radii from largest to smallest to account for CDF indexing
+                for (int32_t r_idx = (int32_t) resolution.z(); r_idx >= 1; --r_idx) {
                     ScalarFloat r = r_idx * voxel_size.z();
                     ScalarFloat z = r;
 
@@ -163,16 +167,16 @@ public:
                     ScalarPoint3f p2{p.x(), p.y(), -z};
 
                     //  Calculate the intersection points with the spherical shell
-                    intersections.push_back(ScalarPoint3f{p.x(), p.y(), z});
-                    intersections.push_back(ScalarPoint3f{p.x(), p.y(), -z});
+                    intersections.emplace_back(r_idx, 0, ScalarPoint3f{p.x(), p.y(), z});
+                    intersections.emplace_back(r_idx, 1, ScalarPoint3f{p.x(), p.y(), -z});
                 }
             } else {
                 //  Since coefficient a is constant for all radii, we can precompute it.
                 //  Also, geometric identity: 1 + tan^2(alpha) = sec^2(alpha)
                 ScalarFloat a = dr::sqr(dr::sec(alpha));
 
-                //  Loop over all radii
-                for (int32_t r_idx = 1; r_idx <= (int32_t) resolution.z(); ++r_idx) {
+                //  Loop over all radii from largest to smallest to account for CDF indexing
+                for (int32_t r_idx = (int32_t) resolution.z(); r_idx >= 1; --r_idx) {                    
                     ScalarFloat r = r_idx * voxel_size.z();
 
                     //  Calculate the intersection point with the spherical shell 
@@ -185,6 +189,7 @@ public:
                         continue;   
                     }
 
+                    //  THIS IS PROBLEMATIC -> Store at 0 index for r_idx for now
                     if (discriminant == 0) {
                         // One intersection point, calculate it
                         ScalarFloat t = -b / (2 * a);
@@ -197,7 +202,7 @@ public:
                         ScalarFloat z = r_max + x * tan_alpha;
                         
                         // Add the intersection point to the list
-                        intersections.push_back(ScalarPoint3f{x, p.y(), z});
+                        intersections.emplace_back(r_idx, 0, ScalarPoint3f{x, p.y(), z});
                     } else {
                         // Two intersection points, take the first one
                         ScalarFloat sqrt_discriminant = dr::sqrt(discriminant);
@@ -219,24 +224,26 @@ public:
                         ScalarPoint3f p2{x_2, p.y(), z_2};
 
                         //  Add the intersection points to the list
-                        intersections.push_back(ScalarPoint3f{x_1, p.y(), z_1});
-                        intersections.push_back(ScalarPoint3f{x_2, p.y(), z_2});    
+                        intersections.emplace_back(r_idx, 0, ScalarPoint3f{x_1, p.y(), z_1});
+                        intersections.emplace_back(r_idx, 1, ScalarPoint3f{x_2, p.y(), z_2});    
                     }
                 }
             }
 
-            Log(Warn, "Found ", intersections.size(), " intersections for angle ", 
-                angles[i] * to_deg, " degrees (", angles[i], " radians).");
-
             //  Sort the intersection points by z-coordinate
             std::sort(intersections.begin(), intersections.end(),
-                      [](const ScalarPoint3f &a, const ScalarPoint3f &b) {
-                          return a.z() > b.z();
-                      });
+                      [](const auto &a, const auto &b) {
+                            auto p1 = std::get<2>(a);
+                            auto p2 = std::get<2>(b);
+                            return p1.z() > p2.z();
+                        });
+
+            Log(Warn, "Computing CDF for Angle: ", angles[i] * to_deg,
+                " degrees, with ", intersections.size(), " intersections.");
+            std::vector<CDFEntry> cdf = compute_cdf(intersections);
+
 
             /*
-            std::vector<ScalarFloat> cdf = compute_cdf(intersections);
-
             //  TODO -> THIS DOES NOT WORK SINCE THE NUMBER OF ICTS IS NOT THE SAME FOR EACH DIRECTION
             //  Store the optical thickness CDF for this angle
             for (size_t j = 0; j < cdf.size(); ++j) {
@@ -258,14 +265,22 @@ public:
         //Log(Warn, "Texture: ", m_opt_thickness_cdf);
     }
 
-    std::vector<ScalarFloat> compute_cdf(const std::vector<ScalarPoint3f> intersections) const {
+    std::vector<CDFEntry> compute_cdf(const std::vector<ShellIntersection> intersections) const {
         MediumInteraction3f mei = dr::zeros<MediumInteraction3f>();
         ScalarUnpolarized cumulative = dr::zeros<ScalarUnpolarized>();
-        std::vector<ScalarFloat> opt_thickness_cdf(intersections.size() * SpectralSize);
+        std::vector<CDFEntry> opt_thickness_cdf(intersections.size() * SpectralSize);
 
         for (size_t i = 0; i < intersections.size() - 1; i++) {
-            ScalarPoint3f p1 = intersections[i];
-            ScalarPoint3f p2 = intersections[i + 1];
+            auto primary = intersections[i];
+            auto secondary = intersections[i + 1];
+
+            ScalarPoint3f p1 = std::get<2>(primary);
+            ScalarPoint3f p2 = std::get<2>(secondary);
+            
+            //  Get the metadata of the first intersection, for which we have
+            //  to store the data in the CDF
+            int32_t r_idx = std::get<0>(primary);
+            int32_t intersection_idx = std::get<1>(primary);
 
             //  Calculate the length of the segment
             ScalarFloat segment_length = dr::norm(p2 - p1);
@@ -293,7 +308,9 @@ public:
                 else 
                     cumulative[k] += ScalarFloat(mei.sigma_t[k]) * segment_length;
 
-                opt_thickness_cdf[i * SpectralSize + k] = 1 - dr::exp(-cumulative[k]);
+                opt_thickness_cdf[i * SpectralSize + k] = std::make_tuple(
+                    r_idx, intersection_idx, p1, k, 1 - dr::exp(-cumulative[k])
+                );
             }
         }
 
