@@ -76,6 +76,9 @@ public:
                              +ParamFlags::Differentiable);
         callback->put_parameter("optical_thickness_cdf", m_opt_thickness_cdf.tensor(),
                                 +ParamFlags::NonDifferentiable);
+        callback->put_parameter("angles",
+                                m_angles,
+                                +ParamFlags::NonDifferentiable);
         Base::traverse(callback);
     }
 
@@ -101,7 +104,7 @@ public:
         ScalarFloat step = 0.0f;
 
         if (total_samples != 1) {
-            critical_angle = 80.0f * (dr::Pi<ScalarFloat> / 180.0f);
+            critical_angle = 89.0f * (dr::Pi<ScalarFloat> / 180.0f);
             step = critical_angle / sided_samples;
         }
 
@@ -113,6 +116,8 @@ public:
 
             angles[idx_x + sided_samples] = alpha;
         }
+
+        m_angles = dr::load<FloatStorage>(angles.data(), total_samples);
 
         return angles;
     }
@@ -134,7 +139,7 @@ public:
         //  the spectral size (if spectral data is used)
         int32_t max_intersections = resolution.z() * 2 * SpectralSize;
         std::vector<ScalarFloat> opt_thickness_data(angles.size() * max_intersections * SpectralSize);
-                
+
         //  Here we assume we start at the top shell
         for (int32_t i = 0; i < (int32_t) angles.size(); ++i) {
             //  We assume that the voxel size is the radius of a spherical shell!
@@ -145,15 +150,15 @@ public:
             ScalarFloat alpha = angles[i];
             ScalarFloat tan_alpha = dr::tan(alpha);
 
-            std::vector<ShellIntersection> intersections;
-            
+            std::vector<ShellIntersection> intersections;        
+
             //  TODO: Fix tangent calculation for alpha = (-) pi / 2
             if (alpha == dr::Pi<ScalarFloat> / 2.0f || alpha == -dr::Pi<ScalarFloat> / 2.0f) {                
                 //  If alpha is pi/2, we have a vertical ray. The intersection
                 //  with the spherical shell is then given by y^2 = r^2
-
+                
                 //  Loop over all radii from largest to smallest to account for CDF indexing
-                for (int32_t r_idx = (int32_t) resolution.z(); r_idx >= 1; --r_idx) {                    
+                for (int32_t r_idx = (int32_t) resolution.z(); r_idx >= 1; --r_idx) {
                     ScalarFloat r = r_idx * voxel_size.z();
                     ScalarFloat z = r;
 
@@ -170,7 +175,7 @@ public:
                 ScalarFloat a = dr::sqr(dr::sec(alpha));
 
                 //  Loop over all radii from largest to smallest to account for CDF indexing
-                for (int32_t r_idx = (int32_t) resolution.z(); r_idx > 1; --r_idx) {                    
+                for (int32_t r_idx = (int32_t) resolution.z(); r_idx > 1; --r_idx) { 
                     ScalarFloat r = r_idx * voxel_size.z();
 
                     //  Calculate the intersection point with the spherical shell 
@@ -219,7 +224,7 @@ public:
 
                         //  Add the intersection points to the list
                         intersections.emplace_back(r_idx, 0, ScalarPoint3f{x_1, p.y(), z_1});
-                        intersections.emplace_back(r_idx, 1, ScalarPoint3f{x_2, p.y(), z_2});    
+                        intersections.emplace_back(r_idx, 1, ScalarPoint3f{x_2, p.y(), z_2});       
                     }
                 }
             }
@@ -233,22 +238,27 @@ public:
                         });
 
             std::vector<CDFEntry> cdf = compute_cdf(intersections);
-
+            
             //  Once we obtained the CDF, we can insert it into the array
             //  that will be used for the texture
             for (size_t j = 0; j < cdf.size(); ++j) {
                 CDFEntry entry = cdf[j];
                 int32_t r_idx               = std::get<0>(entry);
                 int32_t intersection_idx    = std::get<1>(entry);
-                int32_t spectral_channel    = std::get<3>(entry);
                 ScalarFloat cdf_value       = std::get<4>(entry);
 
                 //  Compute the shell index
-                size_t row_idx = (intersection_idx == 0) ? (max_intersections / 2 - r_idx) : (max_intersections / 2 + r_idx - 1); 
-
+                size_t cdf_index = (intersection_idx == 0) ? (max_intersections / 2 - r_idx) : (max_intersections / 2 + r_idx - 1); 
+                
                 //  Compute the final index basedd on the spectral channel and the angle
                 //  to obtain a linearized 3D index
-                size_t index = i * max_intersections + row_idx;
+                size_t index = cdf_index + (i * max_intersections);
+
+                Log(Warn, "CDF Index = ", cdf_index, 
+                    ", r_idx = ", r_idx, 
+                    ", intersection_idx = ", intersection_idx, 
+                    ", cdf_value = ", cdf_value,
+                    ", index = ", index);
 
                 //  Store the CDF value in the data array
                 opt_thickness_data[index] = cdf_value;
@@ -266,15 +276,13 @@ public:
         MediumInteraction3f mei = dr::zeros<MediumInteraction3f>();
         ScalarUnpolarized cumulative = dr::zeros<ScalarUnpolarized>();
         std::vector<CDFEntry> opt_thickness_cdf(intersections.size() * SpectralSize);
-
+        
         for (size_t i = 0; i < intersections.size() - 1; i++) {
             auto primary = intersections[i];
             auto secondary = intersections[i + 1];
 
             ScalarPoint3f p1 = std::get<2>(primary);
             ScalarPoint3f p2 = std::get<2>(secondary);
-
-            //Log(Warn, "Segment from p1 = ", p1, " to p2 = ", p2);
             
             //  Get the metadata of the first intersection, for which we have
             //  to store the data in the CDF
@@ -299,7 +307,7 @@ public:
             //  Get the scattering coefficients at the sample point
             std::tie(mei.sigma_s, mei.sigma_n, mei.sigma_t) =
                 get_scattering_coefficients(mei, true);
-
+        
             //  Calculate the optical thickness per wavelength channel
             for (size_t k = 0; k < SpectralSize; ++k) {
                 if constexpr (dr::is_jit_v<UnpolarizedSpectrum>)
@@ -317,6 +325,7 @@ public:
         //  optical thickness of the last segment (no more medium after this, but is
         //  necessary for the CDF to be complete and to allow for correct sampling
         //  beyond the last intersection)
+        
         auto last_intersection = intersections.back();
         ScalarPoint3f p1 = std::get<2>(last_intersection);
         int32_t r_idx = std::get<0>(last_intersection);
@@ -380,6 +389,7 @@ public:
 private:
     ref<Volume> m_sigmat, m_albedo;
     int32_t m_angle_samples;
+    mutable FloatStorage m_angles;
 
     Float m_max_density;
     mutable Texture2f m_opt_thickness_cdf;
