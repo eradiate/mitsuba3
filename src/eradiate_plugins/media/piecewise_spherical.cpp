@@ -91,33 +91,43 @@ public:
     }
 
     std::vector<ScalarFloat> precompute_directions() const {
-        //  Compute angles based on a regularly spaced interval
-        int32_t sided_samples = (m_angle_samples != 0) ? m_angle_samples : 0;
-        int32_t extent = sided_samples * 2 + 1;
-        int32_t total_samples = extent;
+        //  Add one to account for NADIR sample (which is always included)
+        int32_t sided_samples = (m_angle_samples != 0) ? m_angle_samples + 1 : 0;
 
         //  Storage for the direction vectors
-        std::vector<ScalarFloat> angles(total_samples);
-    
-        //  Critical angle (define how?)
-        ScalarFloat critical_angle = 0.0f;
-        ScalarFloat step = 0.0f;
+        std::vector<ScalarFloat> angles;
 
-        if (total_samples != 1) {
-            critical_angle = 89.0f * (dr::Pi<ScalarFloat> / 180.0f);
-            step = critical_angle / sided_samples;
+        ScalarFloat PI_HALF = dr::Pi<ScalarFloat> / 2.0f;
+        ScalarFloat NADIR = -PI_HALF; // Nadir direction (downwards)
+
+        //  Always push NADIR
+        angles.push_back(NADIR + PI_HALF); // Convert to alpha angle
+
+        if (sided_samples != 0) {
+            ScalarFloat step = PI_HALF / sided_samples;
+
+            //  Compute angles theta for sampling
+            for (int32_t angle_idx = 1; angle_idx < sided_samples; angle_idx++) {
+                //  Based on step, compute angle
+                ScalarFloat theta_left = NADIR - (angle_idx * step);
+                ScalarFloat theta_right = NADIR + (angle_idx * step);
+                
+                //  Ensure that the angles are within valid range
+                if (theta_left < -2.0f * PI_HALF || theta_right > 0.0f)
+                    continue; // Skip angles outside the valid range
+
+                ScalarFloat alpha_left = theta_left + PI_HALF;
+                ScalarFloat alpha_right = theta_right + PI_HALF;
+
+                angles.push_back(alpha_left);
+                angles.push_back(alpha_right);
+            }
         }
 
-        //  Compute all angles theta for sampling
-        for (int32_t idx_x = -sided_samples; idx_x < sided_samples + 1; idx_x++) {
-            //  Based on step, compute angle
-            ScalarFloat theta = idx_x * step;
-            ScalarFloat alpha = theta + (dr::Pi<ScalarFloat> / 2.0f);
+        //  Sort angles in ascending order
+        std::sort(angles.begin(), angles.end());
 
-            angles[idx_x + sided_samples] = alpha;
-        }
-
-        m_angles = dr::load<FloatStorage>(angles.data(), total_samples);
+        m_angles = dr::load<FloatStorage>(angles.data(), angles.size());
 
         return angles;
     }
@@ -137,8 +147,10 @@ public:
     
         //  The maximum number of intersection is the resolution * the number of angles *
         //  the spectral size (if spectral data is used)
-        int32_t max_intersections = resolution.z() * 2 * SpectralSize;
+        int32_t max_intersections = resolution.z() * 2;
         std::vector<ScalarFloat> opt_thickness_data(angles.size() * max_intersections * SpectralSize);
+
+        ScalarFloat to_deg = 180.0f / dr::Pi<ScalarFloat>;
 
         //  Here we assume we start at the top shell
         for (int32_t i = 0; i < (int32_t) angles.size(); ++i) {
@@ -151,6 +163,9 @@ public:
             ScalarFloat tan_alpha = dr::tan(alpha);
 
             std::vector<ShellIntersection> intersections;        
+
+            //Log(Warn, "Angle = ", (alpha - (dr::Pi<ScalarFloat> / 2.0f)) * to_deg);
+
 
             //  TODO: Fix tangent calculation for alpha = (-) pi / 2
             if (alpha == dr::Pi<ScalarFloat> / 2.0f || alpha == -dr::Pi<ScalarFloat> / 2.0f) {                
@@ -175,13 +190,15 @@ public:
                 ScalarFloat a = dr::sqr(dr::sec(alpha));
 
                 //  Loop over all radii from largest to smallest to account for CDF indexing
-                for (int32_t r_idx = (int32_t) resolution.z(); r_idx > 1; --r_idx) { 
+                for (int32_t r_idx = (int32_t) resolution.z(); r_idx >= 1; --r_idx) { 
                     ScalarFloat r = r_idx * voxel_size.z();
 
                     //  Calculate the intersection point with the spherical shell 
                     ScalarFloat b = 2.0f * tan_alpha * r_max;
                     ScalarFloat c = (r_max * r_max) - (r * r);
                     ScalarFloat discriminant = (b * b) - (4 * a * c);
+
+                    //Log(Warn, "    Radius = ", r, ", discriminant = ", discriminant);
 
                     if (discriminant < 0) {
                         // No intersection with the spherical shell
@@ -238,7 +255,7 @@ public:
                         });
 
             std::vector<CDFEntry> cdf = compute_cdf(intersections);
-            
+
             //  Once we obtained the CDF, we can insert it into the array
             //  that will be used for the texture
             for (size_t j = 0; j < cdf.size(); ++j) {
@@ -254,11 +271,11 @@ public:
                 //  to obtain a linearized 3D index
                 size_t index = cdf_index + (i * max_intersections);
 
-                Log(Warn, "CDF Index = ", cdf_index, 
-                    ", r_idx = ", r_idx, 
-                    ", intersection_idx = ", intersection_idx, 
-                    ", cdf_value = ", cdf_value,
-                    ", index = ", index);
+                //Log(Warn, "CDF Index = ", cdf_index, 
+                //    ", r_idx = ", r_idx, 
+                //    ", intersection_idx = ", intersection_idx, 
+                //    ", cdf_value = ", cdf_value,
+                //    ", index = ", index);
 
                 //  Store the CDF value in the data array
                 opt_thickness_data[index] = cdf_value;
@@ -277,9 +294,14 @@ public:
         ScalarUnpolarized cumulative = dr::zeros<ScalarUnpolarized>();
         std::vector<CDFEntry> opt_thickness_cdf(intersections.size() * SpectralSize);
         
+        if (intersections.size() < 2) {
+            Log(Warn, "Not enough intersections to compute CDF");
+            return opt_thickness_cdf; // Not enough intersections to compute CDF
+        } 
+
         for (size_t i = 0; i < intersections.size() - 1; i++) {
-            auto primary = intersections[i];
-            auto secondary = intersections[i + 1];
+            ShellIntersection primary = intersections[i];
+            ShellIntersection secondary = intersections[i + 1];
 
             ScalarPoint3f p1 = std::get<2>(primary);
             ScalarPoint3f p2 = std::get<2>(secondary);
