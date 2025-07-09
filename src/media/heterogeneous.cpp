@@ -166,6 +166,10 @@ public:
         dr::set_attr(this, "has_spectral_extinction", m_has_spectral_extinction);
     }
 
+    void precompute() const override {
+        // No precomputation needed for this medium
+    }   
+
     void traverse(TraversalCallback *callback) override {
         callback->put_parameter("scale", m_scale,        +ParamFlags::NonDifferentiable);
         callback->put_object("albedo",   m_albedo.get(), +ParamFlags::Differentiable);

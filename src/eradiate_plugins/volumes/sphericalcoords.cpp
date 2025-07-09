@@ -113,6 +113,8 @@ public:
         Interaction3f it_spherical = it;
         it_spherical.p = p_spherical;
 
+        Log(Warn, "P = ", p, ", Sample Point = ", p_spherical);
+
         return dr::select(r < m_rmin,
             m_fillmin,
             dr::select(r > m_rmax,

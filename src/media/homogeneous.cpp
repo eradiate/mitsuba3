@@ -193,6 +193,10 @@ public:
         return oss.str();
     }
 
+    void precompute() const override {
+        // No precomputation needed for homogeneous medium
+    }
+
     MI_DECLARE_CLASS()
 private:
     ref<Volume> m_sigmat, m_albedo;

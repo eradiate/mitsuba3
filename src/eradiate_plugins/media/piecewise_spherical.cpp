@@ -36,7 +36,7 @@ public:
         m_is_homogeneous = false;
         m_albedo         = props.volume<Volume>("albedo", 0.75f);
         m_sigmat         = props.volume<Volume>("sigma_t", 1.f);
-        m_angle_samples  = props.get<int32_t>("samples", 0);
+        m_angle_samples  = props.get<int32_t>("angular_samples", 0);
 
         m_has_spectral_extinction =
             props.get<bool>("has_spectral_extinction", true);
@@ -87,7 +87,12 @@ public:
 
     void precompute() const override {
         std::vector<ScalarFloat> angles = precompute_directions();
+        
         precompute_optical_thickness(angles);
+    }
+
+    bool is_almost_zero(ScalarFloat value) const {
+        return dr::abs(value) < 1e-04f;
     }
 
     std::vector<ScalarFloat> precompute_directions() const {
@@ -98,45 +103,30 @@ public:
         std::vector<ScalarFloat> angles;
 
         ScalarFloat PI_HALF = dr::Pi<ScalarFloat> / 2.0f;
-        ScalarFloat NADIR = -PI_HALF; // Nadir direction (downwards)
-
-        //  Always push NADIR
-        angles.push_back(NADIR + PI_HALF); // Convert to alpha angle
 
         if (sided_samples != 0) {
             ScalarFloat step = PI_HALF / sided_samples;
 
             //  Compute angles theta for sampling
             for (int32_t angle_idx = 1; angle_idx < sided_samples; angle_idx++) {
-                //  Based on step, compute angle
-                ScalarFloat theta_left = NADIR - (angle_idx * step);
-                //ScalarFloat theta_right = NADIR + (angle_idx * step);
-                
-                //  Ensure that the angles are within valid range
-                //if (theta_left < -2.0f * PI_HALF || theta_right > 0.0f)
-                if (theta_left < -2.0f * PI_HALF)
-                    continue; // Skip angles outside the valid range
-
-                ScalarFloat alpha_left = theta_left + PI_HALF;
-                //ScalarFloat alpha_right = theta_right + PI_HALF;
+                //  Alpha is simply PI_HALF - (angle_idx * step)
+                ScalarFloat alpha_left = PI_HALF - (angle_idx * step);
+                ScalarFloat alpha_right = PI_HALF + (angle_idx * step);              
 
                 angles.push_back(alpha_left);
-                //angles.push_back(alpha_right);
+                angles.push_back(alpha_right);
             }
         }
+
+        //  Always push alpha for NADIR (= -PI_HALF)
+        angles.push_back(PI_HALF);
 
         //  Sort angles in ascending order
         std::sort(angles.begin(), angles.end());
 
-        ScalarFloat to_rad = dr::Pi<ScalarFloat> / 180.0f;
+        m_angles = dr::load<FloatStorage>(angles.data(), angles.size());
 
-        std::vector<ScalarFloat> test_angles;
-        test_angles.push_back(15.0f * to_rad); // Add 15 degrees for testing
-        test_angles.push_back(75.0f * to_rad); // Add 75 degrees for testing
-
-        m_angles = dr::load<FloatStorage>(test_angles.data(), test_angles.size()); //dr::load<FloatStorage>(angles.data(), angles.size());
-
-        return test_angles;
+        return angles;
     }
 
     void precompute_optical_thickness(const std::vector<ScalarFloat> angles) const {
@@ -144,12 +134,11 @@ public:
         // or more.
         const ScalarVector3i resolution = m_sigmat->resolution();
         const ScalarVector3f voxel_size = m_sigmat->voxel_size();
-        if (resolution.x() > 1 || resolution.y() > 1)
-            Throw("PiecewiseMedium: x or y resolution bigger than one, assumed "
-                  "shape is [1,1,n]");
 
         //  The interaction point from where we calculate directions
-        ScalarPoint3f p         = m_sigmat-> bbox().max;
+        ScalarPoint3f medium_max = m_sigmat->bbox().max;
+
+        ScalarPoint3f p{0.0f, 0.0f, medium_max.z()};
         ScalarFloat r_max       = p.z();
     
         //  The maximum number of intersection is the resolution * the number of angles *
@@ -157,6 +146,7 @@ public:
         int32_t max_intersections = resolution.z() * 2;
         std::vector<ScalarFloat> opt_thickness_data(angles.size() * max_intersections * SpectralSize);
 
+        ScalarFloat PI_HALF = dr::Pi<ScalarFloat> / 2.0f;
         ScalarFloat to_deg = 180.0f / dr::Pi<ScalarFloat>;
 
         //  Here we assume we start at the top shell
@@ -171,11 +161,7 @@ public:
 
             std::vector<ShellIntersection> intersections;        
 
-            ScalarFloat angle_deg = ((-dr::Pi<ScalarFloat> / 2.0f) - ((dr::Pi<ScalarFloat> / 2.0f) - alpha)) * to_deg;
-
-            Log(Warn, "Angle = ", angle_deg, ", (alpha = ", alpha, ")");
-
-            if (alpha == 0.0f) {                
+            if (alpha == PI_HALF) {                   
                 //  If alpha is 0, we have a vertical ray. The intersection
                 //  with the spherical shell is then given by y^2 = r^2
                 
@@ -184,8 +170,13 @@ public:
                     ScalarFloat r = r_idx * voxel_size.z();
                     ScalarFloat z = r;
 
+                    //Log(Warn, "r = ", r, ", z = ", z);
+
                     ScalarPoint3f p1{p.x(), p.y(), z};
                     ScalarPoint3f p2{p.x(), p.y(), -z};
+
+                    //Log(Warn, "I1 = ", p1);
+                    //Log(Warn, "I2 = ", p2);
 
                     //  Calculate the intersection points with the spherical shell
                     intersections.emplace_back(r_idx, 0, ScalarPoint3f{p.x(), p.y(), z});
@@ -205,28 +196,16 @@ public:
                     ScalarFloat c = (r_max * r_max) - (r * r);
                     ScalarFloat discriminant = (b * b) - (4 * a * c);
 
-                    if (discriminant < 0) {
-                        // No intersection with the spherical shell
-                        continue;   
-                    }
-
                     //  THIS IS PROBLEMATIC -> Store at 0 index for r_idx for now
-                    else if (discriminant == 0) {
+                    if (is_almost_zero(discriminant)) {
                         // One intersection point, calculate it
                         ScalarFloat t = -b / (2 * a);
-                        
-                        // Intersection behind the ray origin?
-                        if (t < 0) 
-                            continue; 
 
                         ScalarFloat x = t;
                         ScalarFloat z = r_max + x * tan_alpha;
                         
-                        // Add the intersection point to the list
                         intersections.emplace_back(r_idx, 0, ScalarPoint3f{x, p.y(), z});
-                    } 
-                    
-                    else {
+                    } else if (discriminant > 0) {
                         // Two intersection points, take the first one
                         ScalarFloat sqrt_discriminant = dr::sqrt(discriminant);
                         ScalarFloat t1 = (-b + sqrt_discriminant) / (2 * a);
@@ -241,9 +220,16 @@ public:
                         ScalarPoint3f p1{x_1, p.y(), z_1};
                         ScalarPoint3f p2{x_2, p.y(), z_2};
 
-                        //  Add the intersection points to the list
-                        intersections.emplace_back(r_idx, 0, ScalarPoint3f{x_1, p.y(), z_1});
-                        intersections.emplace_back(r_idx, 1, ScalarPoint3f{x_2, p.y(), z_2});       
+                        // Compute distances for r_idx assignment
+                        if (dr::norm(p1 - p) < dr::norm(p2 - p)) {
+                            //  p1 is closest
+                            intersections.emplace_back(r_idx, 0, p1);
+                            intersections.emplace_back(r_idx, 1, p2);
+                        } else {
+                            //  p2 is closest
+                            intersections.emplace_back(r_idx, 0, p2);
+                            intersections.emplace_back(r_idx, 1, p1);
+                        }
                     }
                 }
             }
@@ -286,7 +272,6 @@ public:
     }
 
     std::vector<CDFEntry> compute_cdf(const std::vector<ShellIntersection> intersections) const {
-        MediumInteraction3f mei = dr::zeros<MediumInteraction3f>();
         ScalarUnpolarized cumulative = dr::zeros<ScalarUnpolarized>();
         std::vector<CDFEntry> opt_thickness_cdf(intersections.size() * SpectralSize);
         
@@ -295,13 +280,26 @@ public:
             return opt_thickness_cdf; // Not enough intersections to compute CDF
         } 
 
-        for (size_t i = 0; i < intersections.size() - 1; i++) {
-            ShellIntersection primary = intersections[i];
-            ShellIntersection secondary = intersections[i + 1];
+        //  The first intersection is always the top shell, so we can use it to
+        //  initialize the CDF
+        ShellIntersection first_intersection = intersections[0];
+        ScalarPoint3f p1 = std::get<2>(first_intersection);
+        int32_t r_idx = std::get<0>(first_intersection);
+        int32_t intersection_idx = std::get<1>(first_intersection);
+
+        //  Initialize the CDF with the first intersection point
+        for (size_t k = 0; k < SpectralSize; ++k)
+            opt_thickness_cdf[k] = std::make_tuple(r_idx, intersection_idx, p1, k, ScalarFloat(0.0f));
+
+
+        for (size_t i = 1; i < intersections.size(); i++) {
+            MediumInteraction3f mei = dr::zeros<MediumInteraction3f>();
+            ShellIntersection primary = intersections[i - 1];
+            ShellIntersection secondary = intersections[i];
 
             ScalarPoint3f p1 = std::get<2>(primary);
             ScalarPoint3f p2 = std::get<2>(secondary);
-            
+
             //  Get the metadata of the first intersection, for which we have
             //  to store the data in the CDF
             int32_t r_idx = std::get<0>(primary);
@@ -312,12 +310,11 @@ public:
 
             //  Calculate the middle point to use as sample point 
             //  to get the medium interaction
-            ScalarPoint3f sample_point = (p1 + p2) * 0.5f;
+            ScalarPoint3f mid_point = (p1 + p2) * 0.5f;
 
-            //  Set the sample point z-coordinate to a POSITIVE value
-            //  to ensure we are sampling the "spherical shell" medium
-            //  (medium is not defined below the z-coordinate of the bounding box)
-            sample_point.z() = std::abs(sample_point.z());
+            //  Exploit the fact that the medium is spherical and sample a point
+            //  has only to be characterized by it's norm towards the origin
+            ScalarPoint3f sample_point{0.0f, 0.0f, dr::abs(dr::norm(mid_point)) + 1e-04f};
 
             //  Set the medium interaction point
             mei.p = sample_point;
@@ -325,32 +322,18 @@ public:
             //  Get the scattering coefficients at the sample point
             std::tie(mei.sigma_s, mei.sigma_n, mei.sigma_t) =
                 get_scattering_coefficients(mei, true);
-        
+
             //  Calculate the optical thickness per wavelength channel
             for (size_t k = 0; k < SpectralSize; ++k) {
                 if constexpr (dr::is_jit_v<UnpolarizedSpectrum>)
                     cumulative[k] += ScalarFloat(mei.sigma_t[k][0]) * segment_length;
-                else 
+                else
                     cumulative[k] += ScalarFloat(mei.sigma_t[k]) * segment_length;
 
                 opt_thickness_cdf[i * SpectralSize + k] = std::make_tuple(
                     r_idx, intersection_idx, p1, k, cumulative[k]
                 );
             }
-        }
-
-        //  At the last intersection, we need to add an element to the CDF with the
-        //  optical thickness of the last segment (no more medium after this, but is
-        //  necessary for the CDF to be complete and to allow for correct sampling
-        //  beyond the last intersection)
-        auto last_intersection = intersections.back();
-        ScalarPoint3f p1 = std::get<2>(last_intersection);
-        int32_t r_idx = std::get<0>(last_intersection);
-        int32_t intersection_idx = std::get<1>(last_intersection);
-
-        for (size_t k = 0; k < SpectralSize; ++k) {
-            opt_thickness_cdf[(intersections.size() - 1) * SpectralSize + k] = 
-                std::make_tuple(r_idx, intersection_idx, p1, k, cumulative[k]);
         }
 
         return opt_thickness_cdf;
@@ -407,6 +390,7 @@ private:
     ref<Volume> m_sigmat, m_albedo;
     int32_t m_angle_samples;
     mutable FloatStorage m_angles;
+    mutable FloatStorage m_radius_table;
 
     Float m_max_density;
     mutable Texture2f m_opt_thickness_cdf;
