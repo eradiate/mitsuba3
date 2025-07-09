@@ -33,3 +33,7 @@ __pycache__
 # Language Server
 .clangd
 .cache/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/*
