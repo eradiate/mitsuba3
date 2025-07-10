@@ -27,7 +27,7 @@ public:
     using FloatStorage      = DynamicBuffer<Float>;
     using index             = dr::uint32_array_t<Float>;
     using ShellIntersection = std::tuple<int32_t, int32_t, ScalarPoint3f>;
-    using CumulativeOTEntry = std::tuple<int32_t, int32_t, ScalarPoint3f, int32_t, ScalarFloat>;
+    using CumulativeOTEntry = std::tuple<int32_t, int32_t, int32_t, ScalarPoint3f, ScalarFloat>;
 
     static constexpr size_t SpectralSize = dr::array_size_v<UnpolarizedSpectrum>;
     using ScalarUnpolarized = dr::Array<dr::scalar_t<UnpolarizedSpectrum>, SpectralSize>;
@@ -244,21 +244,27 @@ public:
                 CumulativeOTEntry entry     = cum_ot[j];
                 int32_t r_idx               = std::get<0>(entry);
                 int32_t intersection_idx    = std::get<1>(entry);
-                ScalarFloat cdf_value       = std::get<4>(entry);
+                int32_t spectral_idx        = std::get<2>(entry);
+                ScalarFloat cum_ot_value    = std::get<4>(entry);
 
                 //  Compute the shell index
-                size_t shell_idx = (intersection_idx == 0) ? (max_intersections / 2 - r_idx) : (max_intersections / 2 + r_idx - 1); 
-                
-                //  Compute the final index based on the cdf index and the 
-                //  max number of intersections
-                size_t index = shell_idx + (i * max_intersections);
+                size_t shell_idx = (intersection_idx == 0) 
+                                    ? (max_intersections / 2 - r_idx) 
+                                    : (max_intersections / 2 + r_idx - 1); 
 
+                //  Compute the flat index based on the shell index, the 
+                //  max number of intersections, the angle index and 
+                //  the spectral index.
+                size_t index = spectral_idx * (angles.size() * max_intersections)
+                                + i * max_intersections
+                                + shell_idx;
+                
                 //  Store the cumulative OT value in the data array
-                opt_thickness_data[index] = cdf_value;
+                opt_thickness_data[index] = cum_ot_value;
             }
         }
 
-        size_t shape[3] = { angles.size(), static_cast<size_t>(max_intersections), 1 };
+        size_t shape[3] = { SpectralSize, angles.size(), static_cast<size_t>(max_intersections) };
 
         //  Store the cumulative OT as a texture
         m_cum_opt_thickness = Texture2f(TensorXf(opt_thickness_data.data(), 3, shape), true, 
@@ -267,14 +273,14 @@ public:
 
     std::vector<CumulativeOTEntry> compute_cumulative_ot(const std::vector<ShellIntersection> intersections) const {
         ScalarUnpolarized cumulative = dr::zeros<ScalarUnpolarized>();
-        std::vector<CumulativeOTEntry> cum_opt_thickness(intersections.size() * SpectralSize);
+        std::vector<CumulativeOTEntry> cum_ot(intersections.size() * SpectralSize);
         
-        // Not enough intersections to compute CDF -> Either at the edge of
-        // the outer shell (which should not happen given the sample origin)
+        // Not enough intersections to compute cumulative OT -> Either at the 
+        // edge of the outer shell (which should not happen given the sample origin)
         // or the ray is completely outside the medium (which should also
         // not happen in the precomputation scenario).
         if (intersections.size() < 2)
-            return cum_opt_thickness;
+            return cum_ot;
 
         //  The first intersection is always the top shell, 
         //  so we can use it to initialize the CDF
@@ -283,7 +289,7 @@ public:
         int32_t r_idx = std::get<0>(first_intersection);
         int32_t intersection_idx = std::get<1>(first_intersection);
         for (size_t k = 0; k < SpectralSize; ++k)
-            cum_opt_thickness[k] = std::make_tuple(r_idx, intersection_idx, p1, k, ScalarFloat(0.0f));
+            cum_ot[k] = std::make_tuple(r_idx, intersection_idx, k, p1, ScalarFloat(0.0f));
 
         //  Iterate over the intersections and calculate the optical thickness
         //  for each segment between two intersections.
@@ -326,13 +332,13 @@ public:
                 else
                     cumulative[k] += ScalarFloat(mei.sigma_t[k]) * segment_length;
 
-                cum_opt_thickness[i * SpectralSize + k] = std::make_tuple(
-                    r_idx, intersection_idx, p1, k, cumulative[k]
+                cum_ot[i * SpectralSize + k] = std::make_tuple(
+                    r_idx, intersection_idx, k, p1, cumulative[k]
                 );
             }
         }
 
-        return cum_opt_thickness;
+        return cum_ot;
     }
 
     UnpolarizedSpectrum get_majorant(const MediumInteraction3f &mi,
