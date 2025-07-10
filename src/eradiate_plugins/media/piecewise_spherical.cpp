@@ -27,7 +27,7 @@ public:
     using FloatStorage      = DynamicBuffer<Float>;
     using index             = dr::uint32_array_t<Float>;
     using ShellIntersection = std::tuple<int32_t, int32_t, ScalarPoint3f>;
-    using CDFEntry          = std::tuple<int32_t, int32_t, ScalarPoint3f, int32_t, ScalarFloat>;
+    using CumulativeOTEntry = std::tuple<int32_t, int32_t, ScalarPoint3f, int32_t, ScalarFloat>;
 
     static constexpr size_t SpectralSize = dr::array_size_v<UnpolarizedSpectrum>;
     using ScalarUnpolarized = dr::Array<dr::scalar_t<UnpolarizedSpectrum>, SpectralSize>;
@@ -74,7 +74,7 @@ public:
                              +ParamFlags::Differentiable);
         callback->put_object("sigma_t", m_sigmat.get(),
                              +ParamFlags::Differentiable);
-        callback->put_parameter("optical_thickness_cdf", m_opt_thickness_cdf.tensor(),
+        callback->put_parameter("cum_opt_thickness", m_cum_opt_thickness.tensor(),
                                 +ParamFlags::NonDifferentiable);
         callback->put_parameter("angles", m_angles,
                                 +ParamFlags::NonDifferentiable);
@@ -129,16 +129,18 @@ public:
     }
 
     void precompute_optical_thickness(const std::vector<ScalarFloat> angles) const {
-        // Check that the first two dimensions are equal to 1 and that z is one
-        // or more.
         const ScalarVector3i resolution = m_sigmat->resolution();
         const ScalarVector3f voxel_size = m_sigmat->voxel_size();
 
+        // Check that the first two dimensions are equal to 1.
+        if (resolution.x() > 1 || resolution.y() > 1)
+            Throw("PiecewiseMedium: x or y resolution bigger than one, assumed "
+                  "shape is [1,1,n]");
+
         //  The interaction point from where we calculate directions
         ScalarPoint3f medium_max = m_sigmat->bbox().max;
-
         ScalarPoint3f p{0.0f, 0.0f, medium_max.z()};
-        ScalarFloat r_max       = p.z();
+        ScalarFloat r_max = p.z();
     
         //  The maximum number of intersection is the resolution * the number of angles *
         //  the spectral size (if spectral data is used)
@@ -146,7 +148,6 @@ public:
         std::vector<ScalarFloat> opt_thickness_data(angles.size() * max_intersections * SpectralSize);
 
         ScalarFloat PI_HALF = dr::Pi<ScalarFloat> / 2.0f;
-        ScalarFloat to_deg = 180.0f / dr::Pi<ScalarFloat>;
 
         //  Here we assume we start at the top shell
         for (int32_t i = 0; i < (int32_t) angles.size(); ++i) {
@@ -155,8 +156,8 @@ public:
             //  using the equation of a circle (x^2 + y^2 = r^2) and of the line
             //  defining the directional through P (y = theta * x + r_max) where 
             //  r_max is defined by the z-coordinate of the max bounding box point.
-            ScalarFloat alpha = angles[i];
-            ScalarFloat tan_alpha = dr::tan(alpha);
+            ScalarFloat alpha       = angles[i];
+            ScalarFloat tan_alpha   = dr::tan(alpha);
 
             std::vector<ShellIntersection> intersections;        
 
@@ -235,45 +236,45 @@ public:
                             return p1.z() > p2.z();
                         });
 
-            //  Compute CDF from the intersection points
-            std::vector<CDFEntry> cdf = compute_cdf(intersections);
+            //  Compute cumulative OT from the intersection points
+            std::vector<CumulativeOTEntry> cum_ot = compute_cumulative_ot(intersections);
 
-            //  Process the CDF for proper texture indexing
-            for (size_t j = 0; j < cdf.size(); ++j) {
-                CDFEntry entry = cdf[j];
+            //  Process the cumulative OT for proper texture indexing
+            for (size_t j = 0; j < cum_ot.size(); ++j) {
+                CumulativeOTEntry entry     = cum_ot[j];
                 int32_t r_idx               = std::get<0>(entry);
                 int32_t intersection_idx    = std::get<1>(entry);
                 ScalarFloat cdf_value       = std::get<4>(entry);
 
                 //  Compute the shell index
-                size_t cdf_index = (intersection_idx == 0) ? (max_intersections / 2 - r_idx) : (max_intersections / 2 + r_idx - 1); 
+                size_t shell_idx = (intersection_idx == 0) ? (max_intersections / 2 - r_idx) : (max_intersections / 2 + r_idx - 1); 
                 
                 //  Compute the final index based on the cdf index and the 
                 //  max number of intersections
-                size_t index = cdf_index + (i * max_intersections);
+                size_t index = shell_idx + (i * max_intersections);
 
-                //  Store the CDF value in the data array
+                //  Store the cumulative OT value in the data array
                 opt_thickness_data[index] = cdf_value;
             }
         }
 
         size_t shape[3] = { angles.size(), static_cast<size_t>(max_intersections), 1 };
 
-        //  Store the optical thickness CDF as a texture
-        m_opt_thickness_cdf = Texture2f(TensorXf(opt_thickness_data.data(), 3, shape), true, 
+        //  Store the cumulative OT as a texture
+        m_cum_opt_thickness = Texture2f(TensorXf(opt_thickness_data.data(), 3, shape), true, 
             true, dr::FilterMode::Linear, dr::WrapMode::Clamp);
     }
 
-    std::vector<CDFEntry> compute_cdf(const std::vector<ShellIntersection> intersections) const {
+    std::vector<CumulativeOTEntry> compute_cumulative_ot(const std::vector<ShellIntersection> intersections) const {
         ScalarUnpolarized cumulative = dr::zeros<ScalarUnpolarized>();
-        std::vector<CDFEntry> opt_thickness_cdf(intersections.size() * SpectralSize);
+        std::vector<CumulativeOTEntry> cum_opt_thickness(intersections.size() * SpectralSize);
         
         // Not enough intersections to compute CDF -> Either at the edge of
         // the outer shell (which should not happen given the sample origin)
         // or the ray is completely outside the medium (which should also
         // not happen in the precomputation scenario).
         if (intersections.size() < 2)
-            return opt_thickness_cdf;
+            return cum_opt_thickness;
 
         //  The first intersection is always the top shell, 
         //  so we can use it to initialize the CDF
@@ -282,13 +283,13 @@ public:
         int32_t r_idx = std::get<0>(first_intersection);
         int32_t intersection_idx = std::get<1>(first_intersection);
         for (size_t k = 0; k < SpectralSize; ++k)
-            opt_thickness_cdf[k] = std::make_tuple(r_idx, intersection_idx, p1, k, ScalarFloat(0.0f));
+            cum_opt_thickness[k] = std::make_tuple(r_idx, intersection_idx, p1, k, ScalarFloat(0.0f));
 
         //  Iterate over the intersections and calculate the optical thickness
         //  for each segment between two intersections.
         MediumInteraction3f mei = dr::zeros<MediumInteraction3f>();
         for (size_t i = 1; i < intersections.size(); i++) {
-            ShellIntersection primary = intersections[i - 1];
+            ShellIntersection primary   = intersections[i - 1];
             ShellIntersection secondary = intersections[i];
 
             ScalarPoint3f p1 = std::get<2>(primary);
@@ -325,13 +326,13 @@ public:
                 else
                     cumulative[k] += ScalarFloat(mei.sigma_t[k]) * segment_length;
 
-                opt_thickness_cdf[i * SpectralSize + k] = std::make_tuple(
+                cum_opt_thickness[i * SpectralSize + k] = std::make_tuple(
                     r_idx, intersection_idx, p1, k, cumulative[k]
                 );
             }
         }
 
-        return opt_thickness_cdf;
+        return cum_opt_thickness;
     }
 
     UnpolarizedSpectrum get_majorant(const MediumInteraction3f &mi,
@@ -388,7 +389,7 @@ private:
     mutable FloatStorage m_radius_table;
 
     Float m_max_density;
-    mutable Texture2f m_opt_thickness_cdf;
+    mutable Texture2f m_cum_opt_thickness;
 };
 
 MI_IMPLEMENT_CLASS_VARIANT(PiecewiseSphericalMedium, Medium)
