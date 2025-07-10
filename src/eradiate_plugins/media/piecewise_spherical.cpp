@@ -22,14 +22,15 @@ public:
                    m_phase_function)
     MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume)
 
+    static constexpr size_t SpectralSize = dr::array_size_v<UnpolarizedSpectrum>;
+    static constexpr ScalarFloat PI_HALF = dr::Pi<ScalarFloat> / 2.0f;
+
     using ScalarIndex       = uint32_t;
     using ScalarSize        = uint32_t;
     using FloatStorage      = DynamicBuffer<Float>;
     using index             = dr::uint32_array_t<Float>;
     using ShellIntersection = std::tuple<int32_t, int32_t, ScalarPoint3f>;
     using CumulativeOTEntry = std::tuple<int32_t, int32_t, int32_t, ScalarPoint3f, ScalarFloat>;
-
-    static constexpr size_t SpectralSize = dr::array_size_v<UnpolarizedSpectrum>;
     using ScalarUnpolarized = dr::Array<dr::scalar_t<UnpolarizedSpectrum>, SpectralSize>;
 
     PiecewiseSphericalMedium(const Properties &props) : Base(props) {
@@ -101,8 +102,6 @@ public:
         //  Storage for the direction vectors
         std::vector<ScalarFloat> angles;
 
-        ScalarFloat PI_HALF = dr::Pi<ScalarFloat> / 2.0f;
-
         if (sided_samples != 0) {
             ScalarFloat step = PI_HALF / sided_samples;
 
@@ -146,8 +145,6 @@ public:
         //  the spectral size (if spectral data is used)
         int32_t max_intersections = resolution.z() * 2;
         std::vector<ScalarFloat> opt_thickness_data(angles.size() * max_intersections * SpectralSize);
-
-        ScalarFloat PI_HALF = dr::Pi<ScalarFloat> / 2.0f;
 
         //  Here we assume we start at the top shell
         for (int32_t i = 0; i < (int32_t) angles.size(); ++i) {
