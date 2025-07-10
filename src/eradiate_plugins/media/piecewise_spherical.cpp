@@ -1,4 +1,5 @@
 #include "drjit/array_router.h"
+#include <cstddef>
 #include <drjit/texture.h>
 #include <mitsuba/core/distr_1d.h>
 #include <mitsuba/core/frame.h>
@@ -38,16 +39,15 @@ public:
         m_albedo         = props.volume<Volume>("albedo", 0.75f);
         m_sigmat         = props.volume<Volume>("sigma_t", 1.f);
         m_angle_samples  = props.get<int32_t>("angular_samples", 0);
-
         m_has_spectral_extinction =
             props.get<bool>("has_spectral_extinction", true);
-
-        m_max_density = dr::opaque<Float>(m_sigmat->max());
-
-        precompute();
+        m_max_density    = dr::opaque<Float>(m_sigmat->max());
 
         dr::set_attr(this, "is_homogeneous", m_is_homogeneous);
         dr::set_attr(this, "has_spectral_extinction", m_has_spectral_extinction);
+
+        //  Precompute OT
+        precompute();
     }
 
     std::tuple<typename Medium<Float, Spectrum>::MediumInteraction3f, Float, Float>
@@ -62,6 +62,29 @@ public:
         active &= aabb_its;
         dr::masked(mint, !active) = 0.f;
         dr::masked(maxt, !active) = dr::Infinity<Float>;
+
+        mint = dr::maximum(0.f, mint);
+        maxt = dr::minimum(si.t, dr::minimum(ray.maxt, maxt));
+
+        Mask escaped = !active;
+        
+        // Initialize basic medium interaction fields
+        MediumInteraction3f mei = dr::zeros<MediumInteraction3f>();
+        mei.wi                  = -ray.d;
+        mei.sh_frame            = Frame3f(mei.wi);
+        mei.time                = ray.time;
+        mei.wavelengths         = ray.wavelengths;
+        mei.mint                = mint;
+        mei.t                   = mint;
+        mei.medium              = this;
+        
+        const ScalarVector3i res            = m_sigmat->resolution();
+        const ScalarVector3f voxel_size     = m_sigmat->voxel_size();
+        const ScalarVector3f inv_voxel_size = dr::rcp(voxel_size);
+        
+        Log(Warn, "resolution = ", res, ", voxel_size = ", voxel_size);
+
+        return { dr::zeros<MediumInteraction3f>(), dr::zeros<Float>(), dr::zeros<Float>() };
     }
 
     std::tuple<Float, Float, Mask>
@@ -83,19 +106,45 @@ public:
     }
 
     void parameters_changed(const std::vector<std::string> & /*keys*/ = {}) override {
+        precompute();
     }
 
     void precompute() const override {
-        std::vector<ScalarFloat> angles = precompute_directions();
-        
-        precompute_optical_thickness(angles);
+        //  Precompute the different radii of the spherical shells
+        precompute_radii();
+
+        //  Precompute the ray angles w.r.t. NADIR
+        precompute_directions();
+
+        //  Precompute the (cumulative) optical thickness
+        precompute_optical_thickness();
     }
 
     bool is_almost_zero(ScalarFloat value) const {
         return dr::abs(value) < 1e-04f;
     }
 
-    std::vector<ScalarFloat> precompute_directions() const {
+    void precompute_radii() const {
+        const ScalarVector3i resolution = m_sigmat->resolution();
+        const ScalarVector3f voxel_size = m_sigmat->voxel_size();
+
+        // Check that the first two dimensions are equal to 1.
+        if (resolution.x() > 1 || resolution.y() > 1)
+            Throw("PiecewiseMedium: x or y resolution bigger than one, assumed "
+                  "shape is [1,1,n]");
+
+        std::vector<ScalarFloat> radii;
+
+        //  Based on the resolution and voxel size, we compute the radii of the 
+        //  encompassing spherical shell geometry.
+        for (int32_t r_idx = 1; r_idx <= resolution.z(); ++r_idx)
+            radii.push_back(r_idx * voxel_size.z());
+
+        //  Save the radius table
+        m_radii = dr::load<FloatStorage>(radii.data(), radii.size());
+    }
+
+    void precompute_directions() const {
         //  Add one to account for NADIR sample (which is always included)
         int32_t sided_samples = (m_angle_samples != 0) ? m_angle_samples + 1 : 0;
 
@@ -106,7 +155,7 @@ public:
             ScalarFloat step = PI_HALF / sided_samples;
 
             //  Compute angles theta for sampling
-            for (int32_t angle_idx = 1; angle_idx < sided_samples; angle_idx++) {
+            for (int32_t angle_idx = 1; angle_idx < sided_samples; ++angle_idx) {
                 //  Alpha is simply PI_HALF - (angle_idx * step)
                 ScalarFloat alpha_left = PI_HALF - (angle_idx * step);
                 ScalarFloat alpha_right = PI_HALF + (angle_idx * step);              
@@ -123,149 +172,90 @@ public:
         std::sort(angles.begin(), angles.end());
 
         m_angles = dr::load<FloatStorage>(angles.data(), angles.size());
-
-        return angles;
     }
 
-    void precompute_optical_thickness(const std::vector<ScalarFloat> angles) const {
-        const ScalarVector3i resolution = m_sigmat->resolution();
-        const ScalarVector3f voxel_size = m_sigmat->voxel_size();
+    std::vector<ShellIntersection> compute_ray_sphere_intersection(ScalarPoint3f p, ScalarFloat alpha, int32_t r_idx) const {
+        std::vector<ShellIntersection> intersections;
+        ScalarFloat r_max   = m_radii[m_radii.size() - 1];  //  The maximum radius is the last element in the radii vector
+        ScalarFloat radius  = m_radii[r_idx];               //  The radius of the spherical shell we are currently processing
 
-        // Check that the first two dimensions are equal to 1.
-        if (resolution.x() > 1 || resolution.y() > 1)
-            Throw("PiecewiseMedium: x or y resolution bigger than one, assumed "
-                  "shape is [1,1,n]");
-
-        //  The interaction point from where we calculate directions
-        ScalarPoint3f medium_max = m_sigmat->bbox().max;
-        ScalarPoint3f p{0.0f, 0.0f, medium_max.z()};
-        ScalarFloat r_max = p.z();
-    
-        //  The maximum number of intersection is the resolution * the number of angles *
-        //  the spectral size (if spectral data is used)
-        int32_t max_intersections = resolution.z() * 2;
-        std::vector<ScalarFloat> opt_thickness_data(angles.size() * max_intersections * SpectralSize);
-
-        //  Here we assume we start at the top shell
-        for (int32_t i = 0; i < (int32_t) angles.size(); ++i) {
-            //  We assume that the voxel size is the radius of a spherical shell!
-            //  The intersection point with the shell from P can then be found by 
-            //  using the equation of a circle (x^2 + y^2 = r^2) and of the line
-            //  defining the directional through P (y = theta * x + r_max) where 
-            //  r_max is defined by the z-coordinate of the max bounding box point.
-            ScalarFloat alpha       = angles[i];
+        if (alpha == PI_HALF) {
+            //  Calculate the intersection points with the spherical shell
+            intersections.emplace_back(r_idx, 0, ScalarPoint3f{p.x(), p.y(), radius});
+            intersections.emplace_back(r_idx, 1, ScalarPoint3f{p.x(), p.y(), -radius});
+        } else {
             ScalarFloat tan_alpha   = dr::tan(alpha);
 
-            std::vector<ShellIntersection> intersections;        
+            //  Since coefficient a is constant for all radii, we can precompute it.
+            //  Also, geometric identity: 1 + tan^2(alpha) = sec^2(alpha)
+            ScalarFloat a = dr::sqr(dr::sec(alpha));
 
-            if (alpha == PI_HALF) {                   
-                //  If alpha is 0, we have a vertical ray. The intersection
-                //  with the spherical shell is then given by y^2 = r^2
-                
-                //  Loop over all radii from largest to smallest to account for CDF indexing
-                for (int32_t r_idx = (int32_t) resolution.z(); r_idx >= 1; --r_idx) {
-                    ScalarFloat r = r_idx * voxel_size.z();
-                    ScalarFloat z = r;
+            //  Calculate the intersection point with the spherical shell 
+            ScalarFloat b = 2.0f * tan_alpha * r_max;
+            ScalarFloat c = (r_max * r_max) - (radius * radius);
+            ScalarFloat discriminant = (b * b) - (4 * a * c);
 
-                    ScalarPoint3f p1{p.x(), p.y(), z};
-                    ScalarPoint3f p2{p.x(), p.y(), -z};
+            if (is_almost_zero(discriminant)) {
+                // One intersection point
+                ScalarFloat t = -b / (2 * a);
 
-                    //  Calculate the intersection points with the spherical shell
-                    intersections.emplace_back(r_idx, 0, ScalarPoint3f{p.x(), p.y(), z});
-                    intersections.emplace_back(r_idx, 1, ScalarPoint3f{p.x(), p.y(), -z});
+                ScalarFloat x = t;
+                ScalarFloat z = r_max + x * tan_alpha;
+
+                intersections.emplace_back(r_idx, 0, ScalarPoint3f{x, p.y(), z});
+            } else if (discriminant > 0) {
+                // Two intersection points
+                ScalarFloat sqrt_discriminant = dr::sqrt(discriminant);
+                ScalarFloat t1 = (-b + sqrt_discriminant) / (2 * a);
+                ScalarFloat t2 = (-b - sqrt_discriminant) / (2 * a);
+
+                ScalarFloat x_1 = std::min(t1, t2);
+                ScalarFloat z_1 = r_max + x_1 * tan_alpha;
+
+                ScalarFloat x_2 = std::max(t1, t2);
+                ScalarFloat z_2 = r_max + x_2 * tan_alpha;
+
+                ScalarPoint3f p1{x_1, p.y(), z_1};
+                ScalarPoint3f p2{x_2, p.y(), z_2};
+
+                // Compute distances for r_idx assignment
+                if (dr::norm(p1 - p) < dr::norm(p2 - p)) {
+                    //  p1 is closest
+                    intersections.emplace_back(r_idx, 0, p1);
+                    intersections.emplace_back(r_idx, 1, p2);
+                } else {
+                    //  p2 is closest
+                    intersections.emplace_back(r_idx, 0, p2);
+                    intersections.emplace_back(r_idx, 1, p1);
                 }
-            } else {
-                //  Since coefficient a is constant for all radii, we can precompute it.
-                //  Also, geometric identity: 1 + tan^2(alpha) = sec^2(alpha)
-                ScalarFloat a = dr::sqr(dr::sec(alpha));
-
-                //  Loop over all radii from largest to smallest to account for CDF indexing
-                for (int32_t r_idx = (int32_t) resolution.z(); r_idx >= 1; --r_idx) { 
-                    ScalarFloat r = r_idx * voxel_size.z();
-
-                    //  Calculate the intersection point with the spherical shell 
-                    ScalarFloat b = 2.0f * tan_alpha * r_max;
-                    ScalarFloat c = (r_max * r_max) - (r * r);
-                    ScalarFloat discriminant = (b * b) - (4 * a * c);
-
-                    if (is_almost_zero(discriminant)) {
-                        // One intersection point, calculate it
-                        ScalarFloat t = -b / (2 * a);
-
-                        ScalarFloat x = t;
-                        ScalarFloat z = r_max + x * tan_alpha;
-                        
-                        intersections.emplace_back(r_idx, 0, ScalarPoint3f{x, p.y(), z});
-                    } else if (discriminant > 0) {
-                        // Two intersection points, take the first one
-                        ScalarFloat sqrt_discriminant = dr::sqrt(discriminant);
-                        ScalarFloat t1 = (-b + sqrt_discriminant) / (2 * a);
-                        ScalarFloat t2 = (-b - sqrt_discriminant) / (2 * a);
-
-                        ScalarFloat x_1 = std::min(t1, t2);
-                        ScalarFloat z_1 = r_max + x_1 * tan_alpha;
-
-                        ScalarFloat x_2 = std::max(t1, t2);
-                        ScalarFloat z_2 = r_max + x_2 * tan_alpha;
-
-                        ScalarPoint3f p1{x_1, p.y(), z_1};
-                        ScalarPoint3f p2{x_2, p.y(), z_2};
-
-                        // Compute distances for r_idx assignment
-                        if (dr::norm(p1 - p) < dr::norm(p2 - p)) {
-                            //  p1 is closest
-                            intersections.emplace_back(r_idx, 0, p1);
-                            intersections.emplace_back(r_idx, 1, p2);
-                        } else {
-                            //  p2 is closest
-                            intersections.emplace_back(r_idx, 0, p2);
-                            intersections.emplace_back(r_idx, 1, p1);
-                        }
-                    }
-                }
-            }
-
-            //  Sort the intersection points by distance to the ray origin
-            std::sort(intersections.begin(), intersections.end(),
-                      [](const auto &a, const auto &b) {
-                            auto p1 = std::get<2>(a);
-                            auto p2 = std::get<2>(b);
-                            return p1.z() > p2.z();
-                        });
-
-            //  Compute cumulative OT from the intersection points
-            std::vector<CumulativeOTEntry> cum_ot = compute_cumulative_ot(intersections);
-
-            //  Process the cumulative OT for proper texture indexing
-            for (size_t j = 0; j < cum_ot.size(); ++j) {
-                CumulativeOTEntry entry     = cum_ot[j];
-                int32_t r_idx               = std::get<0>(entry);
-                int32_t intersection_idx    = std::get<1>(entry);
-                int32_t spectral_idx        = std::get<2>(entry);
-                ScalarFloat cum_ot_value    = std::get<4>(entry);
-
-                //  Compute the shell index
-                size_t shell_idx = (intersection_idx == 0) 
-                                    ? (max_intersections / 2 - r_idx) 
-                                    : (max_intersections / 2 + r_idx - 1); 
-
-                //  Compute the flat index based on the shell index, the 
-                //  max number of intersections, the angle index and 
-                //  the spectral index.
-                size_t index = spectral_idx * (angles.size() * max_intersections)
-                                + i * max_intersections
-                                + shell_idx;
-                
-                //  Store the cumulative OT value in the data array
-                opt_thickness_data[index] = cum_ot_value;
             }
         }
 
-        size_t shape[3] = { SpectralSize, angles.size(), static_cast<size_t>(max_intersections) };
+        return intersections;
+    }
 
-        //  Store the cumulative OT as a texture
-        m_cum_opt_thickness = Texture2f(TensorXf(opt_thickness_data.data(), 3, shape), true, 
-            true, dr::FilterMode::Linear, dr::WrapMode::Clamp);
+    std::vector<ShellIntersection> compute_ray_intersections(ScalarPoint3f p, ScalarFloat alpha) const {
+        std::vector<ShellIntersection> intersections;   
+        
+        for (int32_t r_idx = 0; r_idx < (int32_t) m_radii.size(); ++r_idx) {
+            //  Compute the intersection points with the spherical shell
+            std::vector<ShellIntersection> shell_intersections = compute_ray_sphere_intersection(p, alpha, r_idx);
+
+            //  Data movement
+            intersections.insert(intersections.end(), shell_intersections.begin(), shell_intersections.end());
+        }
+
+        return intersections;
+    }
+
+    void sort_intersections(std::vector<ShellIntersection> &intersections) const {
+        //  Sort the intersection points by distance to the ray origin
+        std::sort(intersections.begin(), intersections.end(),
+                  [](const auto &a, const auto &b) {
+                        auto p1 = std::get<2>(a);
+                        auto p2 = std::get<2>(b);
+                        return p1.z() > p2.z();
+                    });
     }
 
     std::vector<CumulativeOTEntry> compute_cumulative_ot(const std::vector<ShellIntersection> intersections) const {
@@ -282,26 +272,27 @@ public:
         //  The first intersection is always the top shell, 
         //  so we can use it to initialize the CDF
         ShellIntersection first_intersection = intersections[0];
-        ScalarPoint3f p1 = std::get<2>(first_intersection);
-        int32_t r_idx = std::get<0>(first_intersection);
-        int32_t intersection_idx = std::get<1>(first_intersection);
-        for (size_t k = 0; k < SpectralSize; ++k)
-            cum_ot[k] = std::make_tuple(r_idx, intersection_idx, k, p1, ScalarFloat(0.0f));
+        int32_t r_idx               = std::get<0>(first_intersection);
+        int32_t intersection_idx    = std::get<1>(first_intersection);
+        ScalarPoint3f p1            = std::get<2>(first_intersection);
+        
+        for (size_t k = 0; k < SpectralSize; ++k) 
+            cum_ot[k] = std::make_tuple(r_idx, intersection_idx, k, p1, 0.0f);
 
         //  Iterate over the intersections and calculate the optical thickness
         //  for each segment between two intersections.
         MediumInteraction3f mei = dr::zeros<MediumInteraction3f>();
-        for (size_t i = 1; i < intersections.size(); i++) {
+        for (size_t i = 1; i < intersections.size(); ++i) {
             ShellIntersection primary   = intersections[i - 1];
             ShellIntersection secondary = intersections[i];
 
             ScalarPoint3f p1 = std::get<2>(primary);
             ScalarPoint3f p2 = std::get<2>(secondary);
 
-            //  Get the metadata of the first intersection, for which we have
+            //  Get the metadata of the SECOND intersection, for which we have
             //  to store the data in the CDF
-            int32_t r_idx = std::get<0>(primary);
-            int32_t intersection_idx = std::get<1>(primary);
+            int32_t r_idx               = std::get<0>(secondary);
+            int32_t intersection_idx    = std::get<1>(secondary);
 
             //  Calculate the length of the segment
             ScalarFloat segment_length = dr::norm(p2 - p1);
@@ -336,6 +327,76 @@ public:
         }
 
         return cum_ot;
+    }
+
+    void precompute_optical_thickness() const {
+        const ScalarVector3i resolution = m_sigmat->resolution();
+        const ScalarVector3f voxel_size = m_sigmat->voxel_size();
+
+        // Check that the first two dimensions are equal to 1.
+        if (resolution.x() > 1 || resolution.y() > 1)
+            Throw("PiecewiseMedium: x or y resolution bigger than one, assumed "
+                  "shape is [1,1,n]");
+
+        //  The interaction point from where we calculate directions
+        ScalarPoint3f medium_max = m_sigmat->bbox().max;
+        ScalarPoint3f p{0.0f, 0.0f, medium_max.z()};
+        ScalarFloat r_max = p.z();
+    
+        //  The maximum number of intersection is the resolution * the number of angles *
+        //  the spectral size (if spectral data is used)
+        int32_t max_intersections = resolution.z() * 2;
+        std::vector<ScalarFloat> opt_thickness_data(m_angles.size() * max_intersections * SpectralSize);
+
+
+        //  Here we assume we start at the top shell
+        for (int32_t i = 0; i < (int32_t) m_angles.size(); ++i) {
+            //  We assume that the voxel size is the radius of a spherical shell!
+            //  The intersection point with the shell from P can then be found by 
+            //  using the equation of a circle (x^2 + y^2 = r^2) and of the line
+            //  defining the directional through P (y = theta * x + r_max) where 
+            //  r_max is defined by the z-coordinate of the max bounding box point.
+            ScalarFloat alpha       = m_angles[i];
+            ScalarFloat tan_alpha   = dr::tan(alpha);
+
+            std::vector<ShellIntersection> intersections = compute_ray_intersections(p, alpha);
+
+            //  Sort the intersection points by distance to the ray origin
+            sort_intersections(intersections);
+
+            //  Compute cumulative OT from the intersection points
+            std::vector<CumulativeOTEntry> cum_ot = compute_cumulative_ot(intersections);
+
+            //  Process the cumulative OT for proper texture indexing
+            for (size_t j = 0; j < cum_ot.size(); ++j) {
+                CumulativeOTEntry entry     = cum_ot[j];
+                int32_t r_idx               = std::get<0>(entry);
+                int32_t intersection_idx    = std::get<1>(entry);
+                int32_t spectral_idx        = std::get<2>(entry);
+                ScalarFloat cum_ot_value    = std::get<4>(entry);
+
+                //  Compute the shell index
+                size_t shell_idx = (intersection_idx == 0) 
+                                    ? (max_intersections / 2 - r_idx) 
+                                    : (max_intersections / 2 + r_idx - 1); 
+
+                //  Compute the flat index based on the shell index, the 
+                //  max number of intersections, the angle index and 
+                //  the spectral index.
+                size_t index = spectral_idx * (m_angles.size() * max_intersections)
+                                + i * max_intersections
+                                + shell_idx;
+                
+                //  Store the cumulative OT value in the data array
+                opt_thickness_data[index] = cum_ot_value;
+            }
+        }
+
+        size_t shape[3] = { SpectralSize, m_angles.size(), static_cast<size_t>(max_intersections) };
+
+        //  Store the cumulative OT as a texture
+        m_cum_opt_thickness = Texture2f(TensorXf(opt_thickness_data.data(), 3, shape), true, 
+            true, dr::FilterMode::Linear, dr::WrapMode::Clamp);
     }
 
     UnpolarizedSpectrum get_majorant(const MediumInteraction3f &mi,
@@ -388,8 +449,9 @@ public:
 private:
     ref<Volume> m_sigmat, m_albedo;
     int32_t m_angle_samples;
+
+    mutable FloatStorage m_radii;
     mutable FloatStorage m_angles;
-    mutable FloatStorage m_radius_table;
 
     Float m_max_density;
     mutable Texture2f m_cum_opt_thickness;
