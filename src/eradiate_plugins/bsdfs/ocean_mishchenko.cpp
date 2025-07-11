@@ -26,26 +26,27 @@ Oceanic reflection model (:monosp:`ocean-mishchenko`)
 
  * - wind_speed
    - |float|
-   - :math:`k \in [0, 37.54]` m/s.
-   - Specifies the wind speed at which to evaluate the oceanic reflectance
-     (Default: :monosp:`0.1 m/s`).
+   - Specifies the wind speed at which to evaluate the oceanic reflectance. Range: [0, 37.54] m/s. Default: 0.1 m/s
+   - |exposed|, |differentiable|
 
  * - eta, k
    - |spectrum| or |texture|
    - Real and imaginary components of the water's index of refraction.
-     (Default: :monosp:`1.33, 0.`)
-   - |exposed|, |differentiable|, |discontinuous|
+     Default: 1.33, 0.0
+   - |exposed|, |differentiable|
 
  * - ext_ior
    - |spectrum| or |texture|
    - Exterior index of refraction specified numerically or using a known
-     material name. Note that the complex component is assumed to be 0
-     (Default: 1.000277).
+     material name. Note that the complex component is assumed to be 0.
+     Default: 1.000277
+   - |exposed|, |differentiable|
 
  * - shadowing
    - |bool|
    - Indicates whether evaluation accounts for the shadowing-masking term.
-     (Default: :monosp:`true`).
+     Default: :monosp:`true`
+   - —
 
 This plugin implements the polarized oceanic reflection model originally
 implemented by :cite:`Mishchenko1997AerosolRetrievalPolarization`. This model
@@ -78,7 +79,7 @@ parameters:
         </bsdf>
 
 .. note:: This model only implements the sunglint reflection. See :ref:`ocean
-    legacy <plugin-bsdf-ocean_legacy>` for a bsdf that includes whitecap, sunglint,
+    legacy <plugin-bsdf-ocean_legacy>` for a BSDF that includes whitecap, sunglint,
     and underlight reflectance.
 
 */

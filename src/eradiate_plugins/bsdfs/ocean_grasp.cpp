@@ -22,45 +22,53 @@ NAMESPACE_BEGIN(mitsuba)
 -------------------------------------------------------------
 
 .. pluginparameters::
- :extra-rows: 8
 
  * - wavelength
    - |float|
-   - :math:`k \in [200, 4000]` nm.
-   - Specifies the wavelength at which to evaluate the oceanic reflectance.
+   - Specifies the wavelength at which to evaluate the oceanic
+     reflectance. Range: [200, 4000] nm. Required
+   - |exposed|
 
  * - wind_speed
    - |spectrum| or |texture|
-   - :math:`k \in [0, 37.54]` m/s.
-   - Specifies the wind speed at which to evaluate the oceanic reflectance
-     (Default: :monosp:`0.1 m/s`).
+   - Specifies the wind speed at which to evaluate the oceanic
+     reflectance. Range: [0, 37.54] m/s. Default: 0.1 m/s
+   - |exposed| |differentiable|
 
  * - eta, k
    - |spectrum| or |texture|
    - Real and imaginary components of the water's index of refraction.
-     (Default: :monosp:`1.33, 0.`)
+     Default: 1.33, 0.0
+   - |exposed| |differentiable|
 
  * - ext_ior
    - |spectrum| or |texture|
    - Exterior index of refraction specified numerically or using a known
-     material name. Note that the complex component is assumed to be 0
-     (Default: 1.000277).
+     material name. Note that the complex component is assumed to be 0.
+     Default: 1.000277
+   - |exposed| |differentiable|
 
  * - water_body_reflectance
    - |spectrum| or |texture|
    - Diffuse reflectance of radiations that entered and exited the water body.
      (Default: 0.).
+   - |exposed| |differentiable|
 
  * - component
    - |int|
    - Debug: specifies which component of the oceanic reflection model to evaluate.
-     Default: 0 Component 0 is used to evaluate the total oceanic reflectance.
-     Component 1 evaluates the whitecap reflectance. Component 2 evaluates the sun
-     glint reflectance. Component 3 evaluates the underlight reflectance.
-     Component 4 evaluates the whitecap and underlight reflectance together.
+     Default: 0.
+
+     * Component 0 is used to evaluate the total oceanic reflectance.
+     * Component 1 evaluates the whitecap reflectance.
+     * Component 2 evaluates the sun glint reflectance.
+     * Component 3 evaluates the underlight reflectance.
+     * Component 4 evaluates the whitecap and underlight reflectance together.
+
+   - —
 
 This plugin implements the oceanic reflection model originally detailed in
-cite:`Litvinov2024AerosolSurfaceCharacterization`. Note that this model
+:cite:`Litvinov2024AerosolSurfaceCharacterization`. Note that this model
 is monochromatic.
 
 For the fundamental formulae defining the oceanic reflectance model, please

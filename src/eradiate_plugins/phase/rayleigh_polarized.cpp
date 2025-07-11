@@ -17,7 +17,8 @@ Rayleigh phase function (:monosp:`rayleigh_polarized`)
  * - depolarization
    - |float|
    - Depolarization factor, the ratio of intensities parallel and perpendicular
-     to the plane of scattering for light scattered at 90 deg.
+     to the plane of scattering for light scattered at 90°.
+   - |exposed| |differentiable|
 
 
 Scattering by particles that are much smaller than the wavelength
@@ -87,7 +88,7 @@ public:
                                      const Vector3f &wo,
                                      Float cos_theta) const {
         Spectrum phase_val;
-        UnpolarizedSpectrum rho = m_depolarization->eval(mei); 
+        UnpolarizedSpectrum rho = m_depolarization->eval(mei);
 
         if constexpr (is_polarized_v<Spectrum>) {
             // We first evaluate the Rayleigh phase matrix

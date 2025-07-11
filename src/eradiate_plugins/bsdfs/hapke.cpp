@@ -16,7 +16,7 @@ NAMESPACE_BEGIN(mitsuba)
 Hapke surface model (:monosp:`hapke`)
 -------------------------------------
 
-The model uses 6 parameters:
+.. pluginparameters::
 
  * - w
    - |spectrum| or |texture|
@@ -48,7 +48,7 @@ The model uses 6 parameters:
    - :math:`0 \le w \le 1`.
    - |exposed| |differentiable|
 
-Implement the Hapke BSDF model as proposed by Bruce Hapke in 1984
+This plugin implements the Hapke BSDF model as proposed by Bruce Hapke in 1984
 (https://doi.org/10.1016/0019-1035(84)90054-X).
 
 All parameters are required.

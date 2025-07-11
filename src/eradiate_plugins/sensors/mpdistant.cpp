@@ -28,11 +28,13 @@ Multi-pixel distant radiancemeter sensor (:monosp:`mpdistant`)
  * - to_world
    - |transform|
    - Sensor-to-world transformation matrix.
+   - —
 
  * - direction
    - |vector|
    - Alternative (and exclusive) to ``to_world``. Direction orienting the
      sensor's reference hemisphere.
+   - —
 
  * - target
    - |point| or nested :paramtype:`shape` plugin
@@ -42,6 +44,7 @@ Multi-pixel distant radiancemeter sensor (:monosp:`mpdistant`)
      If a |point| is passed, rays will target it.
      If a shape plugin is passed, ray target points will be sampled from its
      surface.
+   - —
 
  * - target_radius
    - |float|
@@ -50,12 +53,14 @@ Multi-pixel distant radiancemeter sensor (:monosp:`mpdistant`)
      view defined as the cross section of a sphere of radius ``target_radius``
      and centered at ``target``. Otherwise, the single point ``target`` is
      targeted.
+   - —
 
  * - srf
    - |spectrum|
    - Sensor Response Function that defines the
      :ref:`spectral sensitivity <explanation_srf_sensor>` of the sensor
      (Default: :monosp:`none`)
+   - —
 
 This sensor plugin implements a distant directional sensor which records
 radiation leaving the scene in a given direction. It records the spectral
@@ -73,11 +78,23 @@ coordinates of the target shape.
 
 .. warning::
 
-   If this sensor is used with a targeting strategy leading to rays not hitting
-   the scene's geometry (*e.g.* default targeting strategy), it will pick up
-   ambient emitter radiance samples (or zero values if no ambient emitter is
-   defined). Therefore, it is almost always preferable to use a non-default
-   targeting strategy.
+   * While setting ``target`` using any shape plugin is possible, only specific
+     configurations will produce meaningful results. This is due to ray sampling
+     method: when ``target`` is a shape, a point is sampled at its  surface,
+     then shifted along the ``-direction`` vector by the diameter of the scene's
+     bounding sphere, effectively positioning the ray origin outside of the
+     geometry. The ray's weight is set to :math:`\frac{1}{A \, p}`, where
+     :math:`A` is the shape's surface area and :math:`p` is the shape's position
+     sampling PDF value. This weight definition is irrelevant when the sampled
+     origin may corresponds to multiple points on the shape, *i.e.* when the
+     sampled ray can intersect the target shape multiple times. From this
+     follows that only flat surfaces should be used to set the ``target``
+     parameter. Typically, one will use a ``rectangle`` or ``disk`` shape.
+   * If this sensor is used with a targeting strategy leading to rays not hitting
+     the scene's geometry (*e.g.* default targeting strategy), it will pick up
+     ambient emitter radiance samples (or zero values if no ambient emitter is
+     defined). Therefore, it is almost always preferable to use a non-default
+     targeting strategy.
 */
 
 template <typename Float, typename Spectrum>
