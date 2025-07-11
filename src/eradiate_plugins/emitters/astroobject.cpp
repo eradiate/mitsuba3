@@ -32,10 +32,12 @@ Distant astronomical object (:monosp:`astroobject`)
    - |vector|
    - Alternative (and exclusive) to `to_world`. Direction in which the emitter
      is visible in world coordinates.
+   - —
 
  * - angular_diameter
    - |float|
    - Angular diameter of the object in degrees. (Default: 0.5358)
+   - —
 
 This emitter plugin implements an environment light source simulating a
 distant astronomical object. It radiates a specified power per unit area within

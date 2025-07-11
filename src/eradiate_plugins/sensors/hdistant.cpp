@@ -160,8 +160,7 @@ radiance is averaged over the targeted geometry.
      origin may corresponds to multiple points on the shape, *i.e.* when the
      sampled ray can intersect the target shape multiple times. From this
      follows that only flat surfaces should be used to set the ``target``
-     parameter. Typically, one will rather use a ``rectangle`` or ``disk``
-     shape.
+     parameter. Typically, one will use a ``rectangle`` or ``disk`` shape.
    * If this sensor is used with a targeting strategy leading to rays not
      hitting the scene's geometry (*e.g.* default targeting strategy), it will
      pick up ambient emitter radiance samples (or zero values if no ambient

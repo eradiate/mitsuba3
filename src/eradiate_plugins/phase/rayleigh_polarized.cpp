@@ -17,7 +17,8 @@ Rayleigh phase function (:monosp:`rayleigh_polarized`)
  * - depolarization
    - |float|
    - Depolarization factor, the ratio of intensities parallel and perpendicular
-     to the plane of scattering for light scattered at 90 deg.
+     to the plane of scattering for light scattered at 90°.
+   - |exposed| |differentiable|
 
 
 Scattering by particles that are much smaller than the wavelength

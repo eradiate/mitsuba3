@@ -28,7 +28,7 @@ Tabulated phase function (irregular angular grid) (:monosp:`tabphase_irregular`)
    - |exposed|
 
 This plugin implements a generic phase function model for isotropic media
-parametrized by a lookup table giving values of the phase function as a
+parameterized by a lookup table giving values of the phase function as a
 function of the cosine of the scattering angle.
 
 This plugin is a variant of the ``tabphase`` plugin and behaves similarly but

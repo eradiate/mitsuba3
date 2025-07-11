@@ -22,18 +22,21 @@ Measured quasi-diffuse material (:monosp:`mqdiffuse`)
  * - filename
    - |string|
    - Filename of the volume to be loaded.
+   - —
 
  * - grid
    - :monosp:`VolumeGrid object`
    - When creating a grid volume at runtime, *e.g.* from Python or C++,
      an existing ``VolumeGrid`` instance can be passed directly rather than
      loading it from the filesystem with :paramtype:`filename`.
+   - —
 
  * - accel
    - |bool|
    - Hardware acceleration features can be used in CUDA mode. These features can
      cause small differences as hardware interpolation methods typically have a
      loss of precision (not exactly 32-bit arithmetic). (Default: true)
+   - —
 
 This plugin models the reflection of light by opaque materials with a behaviour
 close to diffuse, *i.e* with no strong scattering lobe. Assumptions are as

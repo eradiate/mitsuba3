@@ -26,40 +26,43 @@ NAMESPACE_BEGIN(mitsuba)
 -------------------------------------------------------------
 
 .. pluginparameters::
- :extra-rows: 8
+ :extra-rows: 7
 
  * - wavelength
    - |float|
-   - :math:`k \in [200, 4000]` nm.
    - Specifies the wavelength at which to evaluate the oceanic reflectance.
+     Range: [200, 4000] nm
+   - |exposed|
 
  * - wind_speed
-   - |float|
-   - :math:`k \in [0, 37.54]` m/s.
-   - Specifies the wind speed at which to evaluate the oceanic reflectance
-     (Default: :monosp:`0.1 m/s`).
+   - |spectrum| or |texture|
+   - Specifies the wind speed at which to evaluate the oceanic
+     reflectance. Range: [0, 37.54] m/s. Default: 0.1 m/s
+   - |exposed| |differentiable|
 
  * - wind_direction
    - |float|
-   - :math:`k \in [0, 360]` deg.
    - Specifies the wind direction at which to evaluate the oceanic reflectance
-     in North Left convention (Default: :monosp:`0. deg`).
+     in North Left convention. Range: [0, 360]. Default: 0.0°
+   - |exposed| |differentiable|
 
  * - chlorinity
    - |float|
    - Specifies the chlorinity of the water at which to evaluate the oceanic
-     reflectance (Default: :monosp:`19. g/kg`).
+     reflectance. Default: 19.0 g/kg
+   - |exposed| |differentiable|
 
  * - pigmentation
    - |float|
-   - :math:`k \in [0.3, \infty]`.
    - Specifies the pigmentation of the water at which to evaluate the oceanic
-     reflectance (Default: :monosp:`0.3 mg/m^3`).
+     reflectance. Range: [0.3, ∞[. Default: 0.3 mg/m^3
+   - |exposed| |differentiable|
 
  * - shadowing
    - |bool|
    - Indicates whether evaluation accounts for the shadowing-masking term.
      (Default: :monosp:`true`).
+   - |exposed|
 
  * - component
    - |int|
@@ -69,11 +72,13 @@ NAMESPACE_BEGIN(mitsuba)
      evaluates the sun glint reflectance. Component 3 evaluates the underlight
      reflectance. Component 4 evaluates the whitecap and underlight reflectance
      together.
+   - |exposed|
 
  * - coverage
    - |float|
    - Fraction of the surface occupied by whitecaps. Modifying this parameter has
      no effect: it is automatically computed from the wind speed.
+   - |exposed|
 
 This plugin implements the oceanic reflection model originally
 implemented in the 6S radiative transfer model. Note that this model
