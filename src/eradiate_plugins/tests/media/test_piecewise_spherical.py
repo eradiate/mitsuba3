@@ -43,7 +43,7 @@ def test01_sample_distances_all_layers(variant_scalar_mono_double):
     si = dr.zeros(mi.SurfaceInteraction3f)
 
     origin = mi.Point3f([0.0, 0.0, 100000.0])
-    direction = mi.Vector3f([0.0, 0.0, -1.0])
+    direction = mi.Vector3f([-1.0, 0.0, -1.0])
     ray = mi.Ray3f(origin, direction)
     mei, tr, pdf = medium.sample_interaction_real(ray, si, 0.0, 0, True)
 
