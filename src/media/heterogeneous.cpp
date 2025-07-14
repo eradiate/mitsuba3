@@ -163,6 +163,10 @@ public:
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
     }
 
+    void precompute() const override {
+        // No precomputation needed for this medium
+    }   
+
     void traverse(TraversalCallback *callback) override {
         callback->put_parameter("scale", m_scale,        +ParamFlags::NonDifferentiable);
         callback->put_object("albedo",   m_albedo.get(), +ParamFlags::Differentiable);

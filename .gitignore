@@ -28,3 +28,12 @@ __pycache__
 /docs/src/quickstart
 /docs/src/generated
 /docs/resources
+
+
+# Language Server
+.clangd
+.cache/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/*

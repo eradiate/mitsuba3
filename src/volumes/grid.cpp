@@ -264,6 +264,7 @@ public:
                     (size_t) res.x(),
                     4
                 };
+
                 m_texture = Texture3f(TensorXf(scaled_data.get(), 4, shape),
                                       m_accel, m_accel, filter_mode, wrap_mode);
             } else if (volume_grid) {

@@ -8,6 +8,7 @@
 #include <nanobind/stl/pair.h>
 #include <nanobind/stl/tuple.h>
 #include <drjit/python.h>
+#include <drjit/texture.h>
 
 /// Trampoline for derived types implemented in Python
 MI_VARIANT class PyMedium : public Medium<Float, Spectrum> {
@@ -39,7 +40,11 @@ public:
     }
 
     void parameters_changed(const std::vector<std::string> &keys) override {
-        NB_OVERRIDE(parameters_changed, keys);
+        PYBIND11_OVERRIDE(void, Medium, parameters_changed, keys);
+    }
+
+    void precompute() const override {
+        PYBIND11_OVERRIDE(void, Medium, precompute);
     }
 
     using Medium::m_sample_emitters;
@@ -91,7 +96,7 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
             "ray"_a, "si"_a, "sample"_a, "channel"_a, "active"_a,
             D(Medium, sample_interaction_real))
         .def("eval_transmittance_pdf_real",
-            [](Ptr ptr, const Ray3f &ray,  
+            [](Ptr ptr, const Ray3f &ray,
                 const SurfaceInteraction3f &si, UInt32 channel, Mask active) {
                 return ptr->eval_transmittance_pdf_real(ray, si, channel, active); },
             "ray"_a, "si"_a, "channel"_a, "active"_a,
@@ -100,7 +105,18 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
             [](Ptr ptr, const MediumInteraction3f &mi, Mask active = true) {
                 return ptr->get_scattering_coefficients(mi, active); },
             "mi"_a, "active"_a=true,
-            D(Medium, get_scattering_coefficients));
+            D(Medium, get_scattering_coefficients))
+        .def("precompute",
+            [](Ptr ptr) {
+                return ptr->precompute();
+            });
+        //.def("get_texture",
+        //    [](Ptr ptr) {
+        //        return ptr->get_texture();
+        //    });
+
+    if constexpr (dr::is_array_v<Ptr>)
+        bind_drjit_ptr_array(cls);
 }
 
 MI_PY_EXPORT(Medium) {

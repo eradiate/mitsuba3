@@ -4,7 +4,7 @@
 #include <mitsuba/core/spectrum.h>
 #include <mitsuba/core/traits.h>
 #include <mitsuba/render/fwd.h>
-#include <drjit/call.h>
+#include <drjit/vcall.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -31,6 +31,10 @@ public:
                        UnpolarizedSpectrum>
     get_scattering_coefficients(const MediumInteraction3f &mi,
                                 Mask active = true) const = 0;
+
+    virtual void precompute() const = 0;
+
+    //virtual const Texture2f* get_texture() const = 0;
 
     /**
      * \brief Sample a free-flight distance in the medium.
@@ -132,19 +136,19 @@ NAMESPACE_END(mitsuba)
 //! @{ \name Dr.Jit support for packets of Medium pointers
 // -----------------------------------------------------------------------
 
-MI_CALL_TEMPLATE_BEGIN(Medium)
-    DRJIT_CALL_GETTER(phase_function)
-    DRJIT_CALL_GETTER(use_emitter_sampling)
-    DRJIT_CALL_GETTER(is_homogeneous)
-    DRJIT_CALL_GETTER(has_spectral_extinction)
-    DRJIT_CALL_METHOD(get_majorant)
-    DRJIT_CALL_METHOD(intersect_aabb)
-    DRJIT_CALL_METHOD(sample_interaction)
-    DRJIT_CALL_METHOD(transmittance_eval_pdf)
-    DRJIT_CALL_METHOD(sample_interaction_real)
-    DRJIT_CALL_METHOD(eval_transmittance_pdf_real)
-    DRJIT_CALL_METHOD(get_scattering_coefficients)
-MI_CALL_TEMPLATE_END(Medium)
+DRJIT_VCALL_TEMPLATE_BEGIN(mitsuba::Medium)
+    DRJIT_VCALL_GETTER(phase_function, const typename Class::PhaseFunction*)
+    DRJIT_VCALL_GETTER(use_emitter_sampling, bool)
+    DRJIT_VCALL_GETTER(is_homogeneous, bool)
+    DRJIT_VCALL_GETTER(has_spectral_extinction, bool)
+    DRJIT_VCALL_METHOD(get_majorant)
+    DRJIT_VCALL_METHOD(intersect_aabb)
+    DRJIT_VCALL_METHOD(sample_interaction)
+    DRJIT_VCALL_METHOD(transmittance_eval_pdf)
+    DRJIT_VCALL_METHOD(sample_interaction_real)
+    DRJIT_VCALL_METHOD(eval_transmittance_pdf_real)
+    DRJIT_VCALL_METHOD(get_scattering_coefficients)
+DRJIT_VCALL_TEMPLATE_END(mitsuba::Medium)
 
 //! @}
 // -----------------------------------------------------------------------
