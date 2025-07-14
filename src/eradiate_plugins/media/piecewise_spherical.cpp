@@ -1,5 +1,6 @@
 #include <drjit/if_stmt.h>
 #include <drjit/texture.h>
+#include <drjit/array.h>
 #include <mitsuba/core/distr_1d.h>
 #include <mitsuba/core/frame.h>
 #include <mitsuba/core/properties.h>
@@ -24,12 +25,11 @@ public:
 
     static constexpr ScalarFloat PI_HALF    = dr::Pi<Float> / 2.0f;
 
-    using ScalarIndex       = uint32_t;
-    using ScalarSize        = uint32_t;
-    using FloatStorage      = DynamicBuffer<Float>;
-    using index             = dr::uint32_array_t<Float>;
-    using ShellIntersection = std::tuple<int32_t, int32_t, Point3f>;
-    using CumulativeOTEntry = std::tuple<int32_t, int32_t, int32_t, Point3f, Float>;
+    using ScalarIndex           = uint32_t;
+    using ScalarSize            = uint32_t;
+    using FloatStorage          = DynamicBuffer<Float>;
+    using ShellIntersection     = std::tuple<int32_t, int32_t, ScalarPoint3f>;
+    using CumulativeOTEntry     = std::tuple<int32_t, int32_t, int32_t, ScalarPoint3f, ScalarFloat>;
 
     PiecewiseSphericalMedium(const Properties &props) : Base(props) {
         m_is_homogeneous = false;
@@ -62,38 +62,6 @@ public:
         //  Compute the intersection points with the spherical shells
         //std::vector<ShellIntersection> intersections = compute_ray_intersections(ray.o, alpha);
 
-
-        /*
-        // Initial intersection with the medium
-        auto [aabb_its, mint, maxt] = intersect_aabb(ray);
-        aabb_its &= (dr::isfinite(mint) || dr::isfinite(maxt));
-        active &= aabb_its;
-        dr::masked(mint, !active) = 0.f;
-        dr::masked(maxt, !active) = dr::Infinity<Float>;
-
-        mint = dr::maximum(0.f, mint);
-        maxt = dr::minimum(si.t, dr::minimum(ray.maxt, maxt));
-
-        Mask escaped = !active;
-        
-        // Initialize basic medium interaction fields
-        MediumInteraction3f mei = dr::zeros<MediumInteraction3f>();
-        mei.wi                  = -ray.d;
-        mei.sh_frame            = Frame3f(mei.wi);
-        mei.time                = ray.time;
-        mei.wavelengths         = ray.wavelengths;
-        mei.mint                = mint;
-        mei.t                   = mint;
-        mei.medium              = this;
-        
-        const ScalarVector3i res            = m_sigmat->resolution();
-        const ScalarVector3f voxel_size     = m_sigmat->voxel_size();
-        const ScalarVector3f inv_voxel_size = dr::rcp(voxel_size);
-        
-        Log(Warn, "aabb_its = ", aabb_its.p, 
-            ", mint = ", mint, ", maxt = ", maxt);
-        */
-
         return { dr::zeros<MediumInteraction3f>(), dr::zeros<Float>(), dr::zeros<Float>() };
     }
 
@@ -124,15 +92,14 @@ public:
         precompute_radii();
 
         //  Precompute the ray angles w.r.t. NADIR
-        //precompute_directions();
+        precompute_directions();
 
         //  Precompute the (cumulative) optical thickness
-        //precompute_optical_thickness();
+        precompute_optical_thickness();
     }
 
-    
-    Float round_to_zero(Float value) const {
-        return dr::select(dr::abs(value) < 1e-04f, 0.0f, value); //dr::abs(value) < 1e-04f;
+    bool is_almost_zero(ScalarFloat value) const {
+        return dr::abs(value) < 1e-04f;
     }
 
     void precompute_radii() const {
@@ -144,18 +111,17 @@ public:
             Throw("PiecewiseMedium: x or y resolution bigger than one, assumed "
                   "shape is [1,1,n]");
 
-        std::vector<Float> radii;
+        std::vector<ScalarFloat> radii;
 
         //  Based on the resolution and voxel size, we compute the radii of the 
         //  encompassing spherical shell geometry.
         for (int32_t r_idx = 1; r_idx <= resolution.z(); ++r_idx)
-            radii.push_back(Float(r_idx * voxel_size.z()));
+            radii.push_back(r_idx * voxel_size.z());
 
         //  Save the radius table
         m_radii = dr::load<FloatStorage>(radii.data(), radii.size());
     }
 
-    /*
     void precompute_directions() const {
         //  Add one to account for NADIR sample (which is always included)
         int32_t sided_samples = (m_angle_samples != 0) ? m_angle_samples + 1 : 0;
@@ -186,70 +152,28 @@ public:
         m_angles = dr::load<FloatStorage>(angles.data(), angles.size());
     }
 
-    std::vector<ShellIntersection> compute_ray_sphere_intersection(Point3f p, Float alpha, int32_t r_idx) const {
+    std::vector<ShellIntersection> compute_ray_sphere_intersection(ScalarPoint3f p, ScalarFloat alpha, int32_t r_idx) const {
         std::vector<ShellIntersection> intersections;
-        Float r_max   = m_radii[m_radii.size() - 1];  //  The maximum radius is the last element in the radii vector
-        Float radius  = m_radii[r_idx];               //  The radius of the spherical shell we are currently processing
+        ScalarFloat r_max   = m_radii[m_radii.size() - 1];  //  The maximum radius is the last element in the radii vector
+        ScalarFloat radius  = m_radii[r_idx];               //  The radius of the spherical shell we are currently processing
 
         if (alpha == PI_HALF) {
             //  Calculate the intersection points with the spherical shell
-            intersections.emplace_back(r_idx, 0, Point3f{p.x(), p.y(), radius});
-            intersections.emplace_back(r_idx, 1, Point3f{p.x(), p.y(), -radius});
+            intersections.emplace_back(r_idx, 0, ScalarPoint3f{p.x(), p.y(), radius});
+            intersections.emplace_back(r_idx, 1, ScalarPoint3f{p.x(), p.y(), -radius});
         } else {
-            Float tan_alpha   = dr::tan(alpha);
+            ScalarFloat tan_alpha   = dr::tan(alpha);
 
             //  Since coefficient a is constant for all radii, we can precompute it.
             //  Also, geometric identity: 1 + tan^2(alpha) = sec^2(alpha)
-            Float a = dr::sqr(dr::sec(alpha));
+            ScalarFloat a = dr::square(dr::sec(alpha));
 
             //  Calculate the intersection point with the spherical shell 
-            Float b = 2.0f * tan_alpha * r_max;
-            Float c = (r_max * r_max) - (radius * radius);
-            Float discriminant = (b * b) - (4 * a * c);
+            ScalarFloat b = 2.0f * tan_alpha * r_max;
+            ScalarFloat c = (r_max * r_max) - (radius * radius);
+            ScalarFloat discriminant = (b * b) - (4 * a * c);
 
-            //  Local struct for readable lambda function args, since
-            //  DrJit expects the use of std::make_tuple
-            struct {
-                int32_t r_idx;
-                Float r_max;
-                Float tan_alpha;
-                Float a;
-                Float b;
-                Point3f p;
-            } args = { r_idx, r_max, tan_alpha, a, b, p };
-
-            std::vector<Point3f> intersections = dr::if_stmt(
-                //  'args' to pass to lambda true_fn and false_fn
-                std::make_tuple(args.r_idx, args.r_max, args.tan_alpha, args.a, args.b, args.p),
-                
-                //  conditional expression
-                round_to_zero(discriminant) > 0.0f,
-
-                //  true_fn
-                [](int32_t r_idx, Float r_max, Float tan_alpha, Float a, Float b, Point3f p) {
-                    // Two intersection points
-                    Float sqrt_discriminant = dr::sqrt(discriminant);
-                    Float t1 = (-b + sqrt_discriminant) / (2 * a);
-                    Float t2 = (-b - sqrt_discriminant) / (2 * a);
-
-                    Point3f p1{t1, p.y(), r_max + t1 * tan_alpha};
-                    Point3f p2{t2, p.y(), r_max + t2 * tan_alpha};
-
-                    return std::vector<Point3f>{p1, p2};
-                },
-
-                //  false_fn
-                [](int32_t r_idx, Float r_max, Float tan_alpha, Float a, Float b, Point3f p) {
-                    // One intersection point
-                    Float t = -b / (2 * a);
-                    Point3f p1{t, p.y(), r_max + t * tan_alpha};
-
-                    return std::vector<Point3f>{p1};
-                }
-            )
-
-            //  TODO: ALMOST ZERO
-            if (discriminant == 0.0f) {
+            if (is_almost_zero(discriminant)) {
                 // One intersection point
                 ScalarFloat t = -b / (2 * a);
 
@@ -283,13 +207,12 @@ public:
                     intersections.emplace_back(r_idx, 1, p1);
                 }
             }
-            
         }
 
         return intersections;
     }
 
-    std::vector<ShellIntersection> compute_ray_intersections(Point3f p, Float alpha) const {
+    std::vector<ShellIntersection> compute_ray_intersections(ScalarPoint3f p, ScalarFloat alpha) const {
         std::vector<ShellIntersection> intersections;   
         
         for (int32_t r_idx = 0; r_idx < (int32_t) m_radii.size(); ++r_idx) {
@@ -302,9 +225,7 @@ public:
 
         return intersections;
     }
-        */
 
-    /*
     void sort_intersections(std::vector<ShellIntersection> &intersections) const {
         //  Sort the intersection points by distance to the ray origin
         std::sort(intersections.begin(), intersections.end(),
@@ -314,10 +235,11 @@ public:
                         return p1.z() > p2.z();
                     });
     }
-    */
 
-    /*
     std::vector<CumulativeOTEntry> compute_cumulative_ot(const std::vector<ShellIntersection> intersections) const {
+        static constexpr size_t SpectralSize = dr::size_v<UnpolarizedSpectrum>;
+        using ScalarUnpolarized = dr::Array<dr::scalar_t<UnpolarizedSpectrum>, SpectralSize>;
+
         ScalarUnpolarized cumulative = dr::zeros<ScalarUnpolarized>();
         std::vector<CumulativeOTEntry> cum_ot(intersections.size() * SpectralSize);
         
@@ -387,12 +309,12 @@ public:
 
         return cum_ot;
     }
-    */
 
-    /*
     void precompute_optical_thickness() const {
+        static constexpr size_t SpectralSize = dr::size_v<UnpolarizedSpectrum>;
+        using ScalarUnpolarized = dr::Array<dr::scalar_t<UnpolarizedSpectrum>, SpectralSize>;
+
         const ScalarVector3i resolution = m_sigmat->resolution();
-        const ScalarVector3f voxel_size = m_sigmat->voxel_size();
 
         // Check that the first two dimensions are equal to 1.
         if (resolution.x() > 1 || resolution.y() > 1)
@@ -400,14 +322,13 @@ public:
                   "shape is [1,1,n]");
 
         //  The interaction point from where we calculate directions
-        Point3f medium_max = m_sigmat->bbox().max;
-        Point3f p{0.0f, 0.0f, medium_max.z()};
-        Float r_max = p.z();
+        ScalarPoint3f medium_max = m_sigmat->bbox().max;
+        ScalarPoint3f p{0.0f, 0.0f, medium_max.z()};
     
         //  The maximum number of intersection is the resolution * the number of angles *
         //  the spectral size (if spectral data is used)
         int32_t max_intersections = resolution.z() * 2;
-        std::vector<Float> opt_thickness_data(m_angles.size() * max_intersections * SpectralSize);
+        std::vector<ScalarFloat> opt_thickness_data(m_angles.size() * max_intersections * SpectralSize);
 
 
         //  Here we assume we start at the top shell
@@ -417,8 +338,7 @@ public:
             //  using the equation of a circle (x^2 + y^2 = r^2) and of the line
             //  defining the directional through P (y = theta * x + r_max) where 
             //  r_max is defined by the z-coordinate of the max bounding box point.
-            Float alpha       = m_angles[i];
-            Float tan_alpha   = dr::tan(alpha);
+            ScalarFloat alpha       = m_angles[i];
 
             std::vector<ShellIntersection> intersections = compute_ray_intersections(p, alpha);
 
@@ -453,15 +373,12 @@ public:
             }
         }
 
-        
-        //size_t shape[3] = { SpectralSize, m_angles.size(), static_cast<size_t>(max_intersections) };
+        size_t shape[3] = { SpectralSize, m_angles.size(), static_cast<size_t>(max_intersections) };
 
         //  Store the cumulative OT as a texture
-        //m_cum_opt_thickness = Texture2f(TensorXf(opt_thickness_data.data(), 3, shape), true, 
-        //    true, dr::FilterMode::Linear, dr::WrapMode::Clamp);
-        
+        m_cum_opt_thickness = Texture2f(TensorXf(opt_thickness_data.data(), 3, shape), true, 
+            true, dr::FilterMode::Linear, dr::WrapMode::Clamp);
     }
-    */
 
     UnpolarizedSpectrum get_majorant(const MediumInteraction3f &mi,
                                      Mask active) const override {

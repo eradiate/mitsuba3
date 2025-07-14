@@ -18,7 +18,7 @@ def create_medium():
     medium_height = 100000
     layers = 4
     angular_samples = 5
-    transform = mi.ScalarTransform4f.translate([-medium_height / 2, -medium_height / 2, -medium_height]).scale([medium_height, medium_height, 2 * medium_height])
+    transform = mi.ScalarTransform4f().translate([-medium_height / 2, -medium_height / 2, -medium_height]).scale([medium_height, medium_height, 2 * medium_height])
     grid = generate_spherical_volume_grid(medium_height, layers, 1, 8300)
     exp_volume_grid = mi.VolumeGrid(grid)
 
