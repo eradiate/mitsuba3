@@ -1,0 +1,104 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"ext/openexr/IlmBase/config/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 64,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 112,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 116,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "include/OpenEXR",
+			"paths" : 
+			[
+				"out/build/eradiate/ext/openexr/IlmBase/config/IlmBaseConfig.h"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 2,
+			"component" : "Unspecified",
+			"destination" : "lib/cmake/IlmBase",
+			"paths" : 
+			[
+				"out/build/eradiate/ext/openexr/IlmBase/config/IlmBaseConfig.cmake",
+				"out/build/eradiate/ext/openexr/IlmBase/config/IlmBaseConfigVersion.cmake"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 3,
+			"component" : "Unspecified",
+			"destination" : "lib/cmake/IlmBase",
+			"exportName" : "IlmBase",
+			"exportTargets" : 
+			[
+				{
+					"id" : "IlmBaseConfig::@b7d706959002b511087d",
+					"index" : 0
+				},
+				{
+					"id" : "Half::@4a7ae0dea943a56d8a66",
+					"index" : 0
+				},
+				{
+					"id" : "Iex::@6fd788319ac26029346c",
+					"index" : 1
+				},
+				{
+					"id" : "IexMath::@fc750b9da3a58bd2fac8",
+					"index" : 2
+				},
+				{
+					"id" : "Imath::@0291210b44218159d33e",
+					"index" : 6
+				},
+				{
+					"id" : "IlmThread::@278aebe4a71d44f9a80e",
+					"index" : 5
+				}
+			],
+			"paths" : 
+			[
+				"ext/openexr/IlmBase/config/CMakeFiles/Export/lib/cmake/IlmBase/IlmBaseTargets.cmake"
+			],
+			"type" : "export"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "ext/openexr/IlmBase/config",
+		"source" : "ext/openexr/IlmBase/config"
+	}
+}

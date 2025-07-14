@@ -1,0 +1,77 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"add_plugin"
+		],
+		"files" : 
+		[
+			"CMakeLists.txt",
+			"src/eradiate_plugins/media/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 3,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 425,
+				"parent" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 4,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 425,
+				"parent" : 3
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 2,
+			"component" : "Unspecified",
+			"destination" : "bin/plugins",
+			"paths" : 
+			[
+				"plugins/piecewise.so"
+			],
+			"targetId" : "piecewise::@02bb851dff13b3bebb43",
+			"targetIndex" : 130,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 4,
+			"component" : "Unspecified",
+			"destination" : "bin/plugins",
+			"paths" : 
+			[
+				"plugins/piecewise_spherical.so"
+			],
+			"targetId" : "piecewise_spherical::@02bb851dff13b3bebb43",
+			"targetIndex" : 131,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "src/eradiate_plugins/media",
+		"source" : "src/eradiate_plugins/media"
+	}
+}

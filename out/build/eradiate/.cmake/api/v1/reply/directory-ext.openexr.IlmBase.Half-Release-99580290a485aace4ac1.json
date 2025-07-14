@@ -1,0 +1,66 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"ilmbase_define_library"
+		],
+		"files" : 
+		[
+			"ext/openexr/IlmBase/config/LibraryDefine.cmake",
+			"ext/openexr/IlmBase/Half/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 4,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 92,
+				"parent" : 1
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 2,
+			"component" : "Unspecified",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"libHalf-mitsuba.so"
+			],
+			"targetId" : "Half::@4a7ae0dea943a56d8a66",
+			"targetIndex" : 0,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 2,
+			"component" : "Unspecified",
+			"destination" : "include/OpenEXR",
+			"paths" : 
+			[
+				"ext/openexr/IlmBase/Half/half.h",
+				"ext/openexr/IlmBase/Half/halfFunction.h",
+				"ext/openexr/IlmBase/Half/halfExport.h",
+				"ext/openexr/IlmBase/Half/halfLimits.h"
+			],
+			"type" : "file"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "ext/openexr/IlmBase/Half",
+		"source" : "ext/openexr/IlmBase/Half"
+	}
+}

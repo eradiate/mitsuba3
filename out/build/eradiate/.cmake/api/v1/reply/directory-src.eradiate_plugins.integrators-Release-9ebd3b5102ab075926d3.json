@@ -1,0 +1,53 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"add_plugin"
+		],
+		"files" : 
+		[
+			"CMakeLists.txt",
+			"src/eradiate_plugins/integrators/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 3,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 425,
+				"parent" : 1
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 2,
+			"component" : "Unspecified",
+			"destination" : "bin/plugins",
+			"paths" : 
+			[
+				"plugins/piecewise_volpath.so"
+			],
+			"targetId" : "piecewise_volpath::@75fe754ec104f98dd437",
+			"targetIndex" : 132,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "src/eradiate_plugins/integrators",
+		"source" : "src/eradiate_plugins/integrators"
+	}
+}

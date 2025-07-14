@@ -1,0 +1,249 @@
+{
+	"backtrace" : 1,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_custom_target"
+		],
+		"files" : 
+		[
+			"src/python/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 280,
+				"parent" : 0
+			}
+		]
+	},
+	"dependencies" : 
+	[
+		{
+			"id" : "scalar_mono::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "scalar_mono_double::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "scalar_mono_polarized::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "scalar_mono_polarized_double::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "scalar_rgb::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "scalar_spectral::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "llvm_ad_rgb::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "llvm_ad_spectral_polarized::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "mitsuba_ext::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "mitsuba_alias::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "mitsuba-copy-python-src::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "mitsuba-stub::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "mitsuba-stub-math::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "mitsuba-stub-quad::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "mitsuba-stub-spline::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "mitsuba-stub-mueller::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "mitsuba-stub-warp::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "mitsuba-stub-misc::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "mitsuba-stub-detail::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "mitsuba-stub-filesystem::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "mitsuba-stub-python.ad::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "mitsuba-stub-python.chi2::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "mitsuba-stub-python.math_py::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "mitsuba-stub-python.util::@ab362f55af289f26d4ad"
+		},
+		{
+			"id" : "mitsuba-stub-python.xml::@ab362f55af289f26d4ad"
+		}
+	],
+	"id" : "mitsuba-stubs::@ab362f55af289f26d4ad",
+	"name" : "mitsuba-stubs",
+	"paths" : 
+	{
+		"build" : "src/python",
+		"source" : "src/python"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "",
+			"sourceIndexes" : 
+			[
+				0
+			]
+		},
+		{
+			"name" : "CMake Rules",
+			"sourceIndexes" : 
+			[
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8,
+				9,
+				10,
+				11,
+				12,
+				13,
+				14,
+				15,
+				16
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 1,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/python/CMakeFiles/mitsuba-stubs",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/python/CMakeFiles/mitsuba-stubs.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/python/mitsuba/__init__.pyi.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/python/mitsuba/detail.pyi.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/python/mitsuba/filesystem.pyi.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/python/mitsuba/math.pyi.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/python/mitsuba/misc.pyi.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/python/mitsuba/mueller.pyi.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/python/mitsuba/py.typed.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/python/mitsuba/python/ad.pyi.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/python/mitsuba/python/chi2.pyi.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/python/mitsuba/python/math_py.pyi.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/python/mitsuba/python/util.pyi.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/python/mitsuba/python/xml.pyi.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/python/mitsuba/quad.pyi.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/python/mitsuba/spline.pyi.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/python/mitsuba/warp.pyi.rule",
+			"sourceGroupIndex" : 1
+		}
+	],
+	"type" : "UTILITY"
+}

@@ -1,0 +1,95 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"ilmbase_define_library"
+		],
+		"files" : 
+		[
+			"ext/openexr/IlmBase/config/LibraryDefine.cmake",
+			"ext/openexr/IlmBase/Imath/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 4,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 92,
+				"parent" : 1
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 2,
+			"component" : "Unspecified",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"libImath-mitsuba.so"
+			],
+			"targetId" : "Imath::@0291210b44218159d33e",
+			"targetIndex" : 6,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 2,
+			"component" : "Unspecified",
+			"destination" : "include/OpenEXR",
+			"paths" : 
+			[
+				"ext/openexr/IlmBase/Imath/ImathBoxAlgo.h",
+				"ext/openexr/IlmBase/Imath/ImathBox.h",
+				"ext/openexr/IlmBase/Imath/ImathColorAlgo.h",
+				"ext/openexr/IlmBase/Imath/ImathColor.h",
+				"ext/openexr/IlmBase/Imath/ImathEuler.h",
+				"ext/openexr/IlmBase/Imath/ImathExc.h",
+				"ext/openexr/IlmBase/Imath/ImathExport.h",
+				"ext/openexr/IlmBase/Imath/ImathForward.h",
+				"ext/openexr/IlmBase/Imath/ImathFrame.h",
+				"ext/openexr/IlmBase/Imath/ImathFrustum.h",
+				"ext/openexr/IlmBase/Imath/ImathFrustumTest.h",
+				"ext/openexr/IlmBase/Imath/ImathFun.h",
+				"ext/openexr/IlmBase/Imath/ImathGL.h",
+				"ext/openexr/IlmBase/Imath/ImathGLU.h",
+				"ext/openexr/IlmBase/Imath/ImathHalfLimits.h",
+				"ext/openexr/IlmBase/Imath/ImathInt64.h",
+				"ext/openexr/IlmBase/Imath/ImathInterval.h",
+				"ext/openexr/IlmBase/Imath/ImathLimits.h",
+				"ext/openexr/IlmBase/Imath/ImathLineAlgo.h",
+				"ext/openexr/IlmBase/Imath/ImathLine.h",
+				"ext/openexr/IlmBase/Imath/ImathMath.h",
+				"ext/openexr/IlmBase/Imath/ImathMatrixAlgo.h",
+				"ext/openexr/IlmBase/Imath/ImathMatrix.h",
+				"ext/openexr/IlmBase/Imath/ImathNamespace.h",
+				"ext/openexr/IlmBase/Imath/ImathPlane.h",
+				"ext/openexr/IlmBase/Imath/ImathPlatform.h",
+				"ext/openexr/IlmBase/Imath/ImathQuat.h",
+				"ext/openexr/IlmBase/Imath/ImathRandom.h",
+				"ext/openexr/IlmBase/Imath/ImathRoots.h",
+				"ext/openexr/IlmBase/Imath/ImathShear.h",
+				"ext/openexr/IlmBase/Imath/ImathSphere.h",
+				"ext/openexr/IlmBase/Imath/ImathVecAlgo.h",
+				"ext/openexr/IlmBase/Imath/ImathVec.h"
+			],
+			"type" : "file"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "ext/openexr/IlmBase/Imath",
+		"source" : "ext/openexr/IlmBase/Imath"
+	}
+}

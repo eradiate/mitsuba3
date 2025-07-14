@@ -1,0 +1,702 @@
+{
+	"artifacts" : 
+	[
+		{
+			"path" : "libmitsuba.so"
+		}
+	],
+	"backtrace" : 1,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_library",
+			"install",
+			"target_link_libraries",
+			"add_compile_options",
+			"include",
+			"add_definitions",
+			"include_directories"
+		],
+		"files" : 
+		[
+			"src/CMakeLists.txt",
+			"CMakeLists.txt",
+			"ext/drjit/ext/drjit-core/ext/nanothread/ext/cmake-defaults/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 8,
+				"parent" : 0
+			},
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 562,
+				"parent" : 2
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 9,
+				"parent" : 0
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 10,
+				"parent" : 0
+			},
+			{
+				"command" : 4,
+				"file" : 1,
+				"line" : 83,
+				"parent" : 2
+			},
+			{
+				"file" : 2,
+				"parent" : 6
+			},
+			{
+				"command" : 3,
+				"file" : 2,
+				"line" : 158,
+				"parent" : 7
+			},
+			{
+				"command" : 3,
+				"file" : 2,
+				"line" : 219,
+				"parent" : 7
+			},
+			{
+				"command" : 3,
+				"file" : 2,
+				"line" : 220,
+				"parent" : 7
+			},
+			{
+				"command" : 3,
+				"file" : 2,
+				"line" : 221,
+				"parent" : 7
+			},
+			{
+				"command" : 3,
+				"file" : 2,
+				"line" : 243,
+				"parent" : 7
+			},
+			{
+				"command" : 3,
+				"file" : 2,
+				"line" : 244,
+				"parent" : 7
+			},
+			{
+				"command" : 3,
+				"file" : 2,
+				"line" : 245,
+				"parent" : 7
+			},
+			{
+				"command" : 5,
+				"file" : 1,
+				"line" : 393,
+				"parent" : 2
+			},
+			{
+				"command" : 5,
+				"file" : 1,
+				"line" : 334,
+				"parent" : 2
+			},
+			{
+				"command" : 5,
+				"file" : 1,
+				"line" : 313,
+				"parent" : 2
+			},
+			{
+				"command" : 6,
+				"file" : 1,
+				"line" : 301,
+				"parent" : 2
+			}
+		]
+	},
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 4,
+			"id" : "pugixml::@a9f99adfd9f636cea434"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "drjit-core::@5b9a3dded2238b5e144f"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "nanothread::@06ff9ba2dfdc4e7a81bf"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "drjit-extra::@eb75b61d00d58a806b71"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "Half::@4a7ae0dea943a56d8a66"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "Iex::@6fd788319ac26029346c"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "IexMath::@fc750b9da3a58bd2fac8"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "Imath::@0291210b44218159d33e"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "IlmThread::@278aebe4a71d44f9a80e"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "IlmImf::@f32ba8242b8a9b800c71"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "png::@2fba0b78d25f2193a53c"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "jpeg::@f79ce0f69b2b60d010e4"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "asmjit::@e695f9df9e4caa51c123"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "rgb2spec::@e469e67664a75ea66964"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "mitsuba-core::@0618756b1ff51bca1a0e"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "mitsuba-render::@e50e1ac4f031f1d89846"
+		}
+	],
+	"id" : "mitsuba::@145eef247bfb46b6828c",
+	"install" : 
+	{
+		"destinations" : 
+		[
+			{
+				"backtrace" : 3,
+				"path" : "lib"
+			},
+			{
+				"backtrace" : 3,
+				"path" : "lib"
+			}
+		],
+		"prefix" : 
+		{
+			"path" : "/usr/local"
+		}
+	},
+	"link" : 
+	{
+		"commandFragments" : 
+		[
+			{
+				"fragment" : "-stdlib=libc++",
+				"role" : "flags"
+			},
+			{
+				"fragment" : "-Wl,-rpath,/home/matt/rayference/eradiate/ext/mitsuba/out/build/eradiate:",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "libpng-mitsuba.so",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "-lm",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "/usr/lib/x86_64-linux-gnu/libz.so",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "libpugixml.so",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "libjpeg-mitsuba.so",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "libIlmImf-mitsuba.so",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "libImath-mitsuba.so",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "libHalf-mitsuba.so",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "libIexMath-mitsuba.so",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "libIlmThread-mitsuba.so",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "libIex-mitsuba.so",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "/usr/lib/x86_64-linux-gnu/libz.so",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "libasmjit-mitsuba.so",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "-ldl",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "libdrjit-extra.so",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "libdrjit-core.so",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "libnanothread.so",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "ext/rgb2spec/librgb2spec.a",
+				"role" : "libraries"
+			}
+		],
+		"language" : "CXX",
+		"lto" : true
+	},
+	"name" : "mitsuba",
+	"nameOnDisk" : "libmitsuba.so",
+	"paths" : 
+	{
+		"build" : "src",
+		"source" : "src"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "Object Libraries",
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8,
+				9,
+				10,
+				11,
+				12,
+				13,
+				14,
+				15,
+				16,
+				17,
+				18,
+				19,
+				20,
+				21,
+				22,
+				23,
+				24,
+				25,
+				26,
+				27,
+				28,
+				29,
+				30,
+				31,
+				32,
+				33,
+				34,
+				35,
+				36,
+				37,
+				38,
+				39,
+				40,
+				41,
+				42,
+				43,
+				44,
+				45,
+				46,
+				47,
+				48,
+				49,
+				50,
+				51,
+				52
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/string.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/appender.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/argparser.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/bitmap.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/class.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/dstream.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/filesystem.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/formatter.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/fresolver.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/fstream.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/jit.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/logger.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/mmap.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/tensor.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/mstream.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/object.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/plugin.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/profiler.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/progress.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/properties.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/qmc.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/rfilter.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/spectrum.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/stream.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/struct.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/thread.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/transform.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/util.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/xml.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/zstream.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/core/CMakeFiles/mitsuba-core.dir/dither-matrix256.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/bsdf.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/emitter.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/endpoint.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/film.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/imageblock.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/integrator.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/medium.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/mesh.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/microfacet.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/phase.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/sampler.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/scene.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/sensor.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/shape.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/texture.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/spiral.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/srgb.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/optix_api.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/shapegroup.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/volume.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/volumegrid.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "out/build/eradiate/src/render/CMakeFiles/mitsuba-render.dir/kdtree.cpp.o",
+			"sourceGroupIndex" : 0
+		}
+	],
+	"type" : "SHARED_LIBRARY"
+}

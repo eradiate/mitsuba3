@@ -1,0 +1,703 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"src/python/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 58,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 58,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 58,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 58,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 58,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 58,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 58,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 58,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 74,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 109,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 124,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 146,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 286,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "mitsuba",
+			"paths" : 
+			[
+				"python/mitsuba/scalar_mono.cpython-312-x86_64-linux-gnu.so"
+			],
+			"targetId" : "scalar_mono::@ab362f55af289f26d4ad",
+			"targetIndex" : 158,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 2,
+			"component" : "Unspecified",
+			"destination" : "mitsuba",
+			"paths" : 
+			[
+				"python/mitsuba/scalar_mono_double.cpython-312-x86_64-linux-gnu.so"
+			],
+			"targetId" : "scalar_mono_double::@ab362f55af289f26d4ad",
+			"targetIndex" : 159,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 3,
+			"component" : "Unspecified",
+			"destination" : "mitsuba",
+			"paths" : 
+			[
+				"python/mitsuba/scalar_mono_polarized.cpython-312-x86_64-linux-gnu.so"
+			],
+			"targetId" : "scalar_mono_polarized::@ab362f55af289f26d4ad",
+			"targetIndex" : 160,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 4,
+			"component" : "Unspecified",
+			"destination" : "mitsuba",
+			"paths" : 
+			[
+				"python/mitsuba/scalar_mono_polarized_double.cpython-312-x86_64-linux-gnu.so"
+			],
+			"targetId" : "scalar_mono_polarized_double::@ab362f55af289f26d4ad",
+			"targetIndex" : 161,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 5,
+			"component" : "Unspecified",
+			"destination" : "mitsuba",
+			"paths" : 
+			[
+				"python/mitsuba/scalar_rgb.cpython-312-x86_64-linux-gnu.so"
+			],
+			"targetId" : "scalar_rgb::@ab362f55af289f26d4ad",
+			"targetIndex" : 162,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 6,
+			"component" : "Unspecified",
+			"destination" : "mitsuba",
+			"paths" : 
+			[
+				"python/mitsuba/scalar_spectral.cpython-312-x86_64-linux-gnu.so"
+			],
+			"targetId" : "scalar_spectral::@ab362f55af289f26d4ad",
+			"targetIndex" : 163,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 7,
+			"component" : "Unspecified",
+			"destination" : "mitsuba",
+			"paths" : 
+			[
+				"python/mitsuba/llvm_ad_rgb.cpython-312-x86_64-linux-gnu.so"
+			],
+			"targetId" : "llvm_ad_rgb::@ab362f55af289f26d4ad",
+			"targetIndex" : 79,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 8,
+			"component" : "Unspecified",
+			"destination" : "mitsuba",
+			"paths" : 
+			[
+				"python/mitsuba/llvm_ad_spectral_polarized.cpython-312-x86_64-linux-gnu.so"
+			],
+			"targetId" : "llvm_ad_spectral_polarized::@ab362f55af289f26d4ad",
+			"targetIndex" : 80,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 9,
+			"component" : "Unspecified",
+			"destination" : "mitsuba",
+			"paths" : 
+			[
+				"python/mitsuba/libnanobind-drjit.so"
+			],
+			"targetId" : "nanobind-drjit::@ab362f55af289f26d4ad",
+			"targetIndex" : 117,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 10,
+			"component" : "Unspecified",
+			"destination" : "mitsuba",
+			"paths" : 
+			[
+				"python/mitsuba/mitsuba_ext.cpython-312-x86_64-linux-gnu.so"
+			],
+			"targetId" : "mitsuba_ext::@ab362f55af289f26d4ad",
+			"targetIndex" : 109,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 11,
+			"component" : "Unspecified",
+			"destination" : "mitsuba",
+			"paths" : 
+			[
+				"python/mitsuba/mitsuba_alias.cpython-312-x86_64-linux-gnu.so"
+			],
+			"targetId" : "mitsuba_alias::@ab362f55af289f26d4ad",
+			"targetIndex" : 108,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 12,
+			"component" : "Unspecified",
+			"destination" : "mitsuba",
+			"paths" : 
+			[
+				"src/python/__init__.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 13,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/mitsuba_stubs",
+			"paths" : 
+			[
+				"src/python/mitsuba_stubs/__init__.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 14,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python",
+			"paths" : 
+			[
+				"src/python/python/__init__.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 15,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python/ad",
+			"paths" : 
+			[
+				"src/python/python/ad/__init__.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 16,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python/ad",
+			"paths" : 
+			[
+				"src/python/python/ad/guiding.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 17,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python/ad/integrators",
+			"paths" : 
+			[
+				"src/python/python/ad/integrators/__init__.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 18,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python/ad/integrators",
+			"paths" : 
+			[
+				"src/python/python/ad/integrators/common.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 19,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python/ad/integrators",
+			"paths" : 
+			[
+				"src/python/python/ad/integrators/direct_projective.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 20,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python/ad/integrators",
+			"paths" : 
+			[
+				"src/python/python/ad/integrators/prb.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 21,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python/ad/integrators",
+			"paths" : 
+			[
+				"src/python/python/ad/integrators/prb_basic.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 22,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python/ad/integrators",
+			"paths" : 
+			[
+				"src/python/python/ad/integrators/prb_projective.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 23,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python/ad/integrators",
+			"paths" : 
+			[
+				"src/python/python/ad/integrators/prbvolpath.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 24,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python/ad",
+			"paths" : 
+			[
+				"src/python/python/ad/largesteps.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 25,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python/ad",
+			"paths" : 
+			[
+				"src/python/python/ad/optimizers.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 26,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python/ad",
+			"paths" : 
+			[
+				"src/python/python/ad/projective.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 27,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python",
+			"paths" : 
+			[
+				"src/python/python/chi2.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 28,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python",
+			"paths" : 
+			[
+				"src/python/python/cli.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 29,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python",
+			"paths" : 
+			[
+				"src/python/python/math_py.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 30,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python",
+			"paths" : 
+			[
+				"src/python/python/polvis.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 31,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python",
+			"paths" : 
+			[
+				"src/python/python/sys_info.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 32,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python/test",
+			"paths" : 
+			[
+				"src/python/python/test/__init__.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 33,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python/test",
+			"paths" : 
+			[
+				"src/python/python/test/util.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 34,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python/tests",
+			"paths" : 
+			[
+				"src/python/python/tests/test_largesteps.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 35,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python/tests",
+			"paths" : 
+			[
+				"src/python/python/tests/test_util.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 36,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python",
+			"paths" : 
+			[
+				"src/python/python/tonemap.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 37,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python",
+			"paths" : 
+			[
+				"src/python/python/util.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 38,
+			"component" : "Unspecified",
+			"destination" : "mitsuba/python",
+			"paths" : 
+			[
+				"src/python/python/xml.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 39,
+			"component" : "Unspecified",
+			"destination" : "mitsuba",
+			"paths" : 
+			[
+				"out/build/eradiate/src/python/../../python/mitsuba/config.py"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 40,
+			"component" : "Unspecified",
+			"destination" : "mitsuba",
+			"paths" : 
+			[
+				"out/build/eradiate/python/mitsuba/__init__.pyi",
+				"out/build/eradiate/python/mitsuba/py.typed",
+				"out/build/eradiate/python/mitsuba/math.pyi",
+				"out/build/eradiate/python/mitsuba/quad.pyi",
+				"out/build/eradiate/python/mitsuba/spline.pyi",
+				"out/build/eradiate/python/mitsuba/mueller.pyi",
+				"out/build/eradiate/python/mitsuba/warp.pyi",
+				"out/build/eradiate/python/mitsuba/misc.pyi",
+				"out/build/eradiate/python/mitsuba/detail.pyi",
+				"out/build/eradiate/python/mitsuba/filesystem.pyi",
+				"out/build/eradiate/python/mitsuba/python/ad.pyi",
+				"out/build/eradiate/python/mitsuba/python/chi2.pyi",
+				"out/build/eradiate/python/mitsuba/python/math_py.pyi",
+				"out/build/eradiate/python/mitsuba/python/util.pyi",
+				"out/build/eradiate/python/mitsuba/python/xml.pyi"
+			],
+			"type" : "file"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "src/python",
+		"source" : "src/python"
+	}
+}
