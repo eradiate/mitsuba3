@@ -141,6 +141,8 @@ public:
                     intersection_points[i] = icts_point;
                 }
 
+                Log(Warn, "OT Search Space: %s", ot_search_space);
+
                 //  Step 3 - Binary search to find between which two intersection points
                 //           the sample falls.
                 uint32_t start_idx   = 0;
@@ -175,10 +177,9 @@ public:
                     ScalarFloat cum_ot = ot_search_space[index - 1] ;
 
                     //  Step 4 - Calculate distance through shell!
-                    //  Distance already traveled = e^(-cum_ot), accounting
-                    //  for the edge case where the cumulative OT is 0 (and thus
-                    //  traveled distance should also be 0).
-                    ScalarFloat min_dist = (cum_ot == 0.0f) ? 0.0f : dr::exp(-cum_ot);
+                    //  The minimal distance traveled is easily given by the distance
+                    //  from the ray origin to the index - 1 intersection
+                    ScalarFloat min_dist = dr::norm(intersection_points[index - 1] - ray_o);
 
                     //  Obtain current medium scattering coefficients
                     MediumInteraction3f mei = dr::zeros<MediumInteraction3f>();
@@ -374,6 +375,9 @@ public:
             intersections.insert(intersections.end(), shell_intersections.begin(), shell_intersections.end());
         }
 
+        //  Sort the intersection points by distance to the ray origin
+        sort_intersections(intersections);
+
         return intersections;
     }
 
@@ -491,9 +495,6 @@ public:
             ScalarFloat alpha = m_angles[i];
 
             std::vector<ShellIntersection> intersections = compute_ray_intersections(p, alpha);
-
-            //  Sort the intersection points by distance to the ray origin
-            sort_intersections(intersections);
 
             //  Compute cumulative OT from the intersection points
             std::vector<CumulativeOTEntry> cum_ot = compute_cumulative_ot(intersections);
