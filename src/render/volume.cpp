@@ -66,6 +66,7 @@ Volume<Float, Spectrum>::voxel_size() const {
         dr::norm(to_world.matrix.y()),
         dr::norm(to_world.matrix.z())
     );
+
     return dr::rcp(ScalarVector3f(resolution())) * scale;
 }
 // #RAY_CHANGE_END

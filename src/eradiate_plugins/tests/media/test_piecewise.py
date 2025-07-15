@@ -26,6 +26,8 @@ def create_medium_dict():
         [-100000 / 2, -100000 / 2, 0.0]
     ).scale([100000.0, 100000.0, 100000.0])
 
+    print(f'Medium transform: {medium_transform}')
+
     return mi.load_dict(
         {
             "type": "piecewise",

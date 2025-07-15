@@ -40,6 +40,15 @@ public:
             props.get<bool>("has_spectral_extinction", true);
         m_max_density    = dr::opaque<Float>(m_sigmat->max());
 
+        //Log(Warn, "sigma_t bbox: %s",
+        //    m_sigmat->bbox());
+
+        //Log(Warn, "sigma_t res: %s", 
+        //    m_sigmat->resolution());
+
+        //Log(Warn, "sigma_t voxel size: %s",
+        //    m_sigmat->voxel_size());
+
         //  Precompute OT
         precompute();
     }
@@ -50,17 +59,29 @@ public:
                             Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumSample, active);
 
-        Float two_pi = Float(2.0f) * dr::Pi<ScalarFloat>;
+        ScalarFloat two_pi = 2.0f * dr::Pi<Float>;
 
-        //  Custom ray/angle intersection, since we can not rely on the 
-        //  medium bounding box for spherical media.
-        Vector3f ray_dir = dr::normalize(ray.d);
-        Float theta = dr::atan2(ray_dir.x(), ray_dir.z()) + two_pi;
-        dr::select(theta > two_pi, theta -= two_pi, theta);
-        Float alpha = theta + dr::Pi<ScalarFloat>;
+        // For now, run everything in scalar mode
+        for (size_t i = 0; i < dr::width(sample); ++i) {
+            ScalarVector3f ray_o = dr::slice(ray.o, i);
+            ScalarVector3f ray_dir = dr::normalize(dr::slice(ray.d, i));
+            
+            // Custom ray/angle intersection, since we can not rely on the 
+            // medium bounding box for spherical media.
+            ScalarFloat theta = dr::atan2(ray_dir.x(), ray_dir.z()) + two_pi;
+            ScalarFloat alpha = (theta > two_pi ? theta - two_pi : theta) - dr::Pi<ScalarFloat>;
 
-        //  Compute the intersection points with the spherical shells
-        //std::vector<ShellIntersection> intersections = compute_ray_intersections(ray.o, alpha);
+            std::vector<ShellIntersection> intersections = compute_ray_intersections(ray_o, alpha);
+        
+            //Log(Warn, "Origin = %f", ray_o);
+            //Log(Warn, "Alpha = %f", alpha * 180.0f / dr::Pi<ScalarFloat>);
+
+            for (uint32_t j = 0; j < intersections.size(); j++) {}
+                //Log(Warn, "Intersection %d: r_idx = %d, intersection_idx = %d, p = (%f, %f, %f)",
+                //    j, std::get<0>(intersections[j]), std::get<1>(intersections[j]),
+                //    std::get<2>(intersections[j]).x(), std::get<2>(intersections[j]).y(),
+                //    std::get<2>(intersections[j]).z());
+        }
 
         return { dr::zeros<MediumInteraction3f>(), dr::zeros<Float>(), dr::zeros<Float>() };
     }
@@ -104,7 +125,11 @@ public:
 
     void precompute_radii() const {
         const ScalarVector3i resolution = m_sigmat->resolution();
-        const ScalarVector3f voxel_size = m_sigmat->voxel_size();
+        //const ScalarVector3f voxel_size = m_sigmat->voxel_size();
+
+        //  Temporary workaround till Nicolae is back
+        const ScalarVector3f voxel_size = m_sigmat->bbox().max / 
+            ScalarVector3f(resolution.x(), resolution.y(), resolution.z());
 
         // Check that the first two dimensions are equal to 1.
         if (resolution.x() > 1 || resolution.y() > 1)
@@ -157,6 +182,9 @@ public:
         ScalarFloat r_max   = m_radii[m_radii.size() - 1];  //  The maximum radius is the last element in the radii vector
         ScalarFloat radius  = m_radii[r_idx];               //  The radius of the spherical shell we are currently processing
 
+        //Log(Warn, "Computing intersection for point %f with alpha %f and radius %f",
+        //    p, alpha * 180.0f / dr::Pi<ScalarFloat>, radius);
+
         if (alpha == PI_HALF) {
             //  Calculate the intersection points with the spherical shell
             intersections.emplace_back(r_idx, 0, ScalarPoint3f{p.x(), p.y(), radius});
@@ -166,7 +194,7 @@ public:
 
             //  Since coefficient a is constant for all radii, we can precompute it.
             //  Also, geometric identity: 1 + tan^2(alpha) = sec^2(alpha)
-            ScalarFloat a = dr::square(dr::sec(alpha));
+            ScalarFloat a = 1 + dr::square(tan_alpha);
 
             //  Calculate the intersection point with the spherical shell 
             ScalarFloat b = 2.0f * tan_alpha * r_max;
@@ -330,7 +358,6 @@ public:
         int32_t max_intersections = resolution.z() * 2;
         std::vector<ScalarFloat> opt_thickness_data(m_angles.size() * max_intersections * SpectralSize);
 
-
         //  Here we assume we start at the top shell
         for (int32_t i = 0; i < (int32_t) m_angles.size(); ++i) {
             //  We assume that the voxel size is the radius of a spherical shell!
@@ -338,7 +365,7 @@ public:
             //  using the equation of a circle (x^2 + y^2 = r^2) and of the line
             //  defining the directional through P (y = theta * x + r_max) where 
             //  r_max is defined by the z-coordinate of the max bounding box point.
-            ScalarFloat alpha       = m_angles[i];
+            ScalarFloat alpha = m_angles[i];
 
             std::vector<ShellIntersection> intersections = compute_ray_intersections(p, alpha);
 
