@@ -1,3 +1,4 @@
+#include "mitsuba/core/logger.h"
 #include <drjit/if_stmt.h>
 #include <drjit/texture.h>
 #include <drjit/array.h>
@@ -30,6 +31,7 @@ public:
     using FloatStorage          = DynamicBuffer<Float>;
     using ShellIntersection     = std::tuple<int32_t, int32_t, ScalarPoint3f>;
     using CumulativeOTEntry     = std::tuple<int32_t, int32_t, int32_t, ScalarPoint3f, ScalarFloat>;
+    using Index                 = dr::uint32_array_t<Float>;
 
     PiecewiseSphericalMedium(const Properties &props) : Base(props) {
         m_is_homogeneous = false;
@@ -40,14 +42,8 @@ public:
             props.get<bool>("has_spectral_extinction", true);
         m_max_density    = dr::opaque<Float>(m_sigmat->max());
 
-        //Log(Warn, "sigma_t bbox: %s",
-        //    m_sigmat->bbox());
-
-        //Log(Warn, "sigma_t res: %s", 
-        //    m_sigmat->resolution());
-
-        //Log(Warn, "sigma_t voxel size: %s",
-        //    m_sigmat->voxel_size());
+        m_max_intersections = m_sigmat->resolution().z() * 2;
+        m_medium_radius = m_sigmat->bbox().max.z();
 
         //  Precompute OT
         precompute();
@@ -59,28 +55,155 @@ public:
                             Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumSample, active);
 
+        static constexpr size_t SpectralSize = dr::size_v<UnpolarizedSpectrum>;
+        using ScalarUnpolarized = dr::Array<dr::scalar_t<UnpolarizedSpectrum>, SpectralSize>;
+
         ScalarFloat two_pi = 2.0f * dr::Pi<Float>;
 
-        // For now, run everything in scalar mode
+        //  For now, run everything in scalar mode
         for (size_t i = 0; i < dr::width(sample); ++i) {
-            ScalarVector3f ray_o = dr::slice(ray.o, i);
-            ScalarVector3f ray_dir = dr::normalize(dr::slice(ray.d, i));
+            ScalarFloat ksi         = 1.0f - dr::slice(sample, i);
+            ScalarFloat log_ksi     = -dr::log(ksi);
+
+            ScalarVector3f ray_o    = dr::slice(ray.o, i);
+            ScalarVector3f ray_dir  = dr::normalize(dr::slice(ray.d, i));
             
-            // Custom ray/angle intersection, since we can not rely on the 
-            // medium bounding box for spherical media.
-            ScalarFloat theta = dr::atan2(ray_dir.x(), ray_dir.z()) + two_pi;
-            ScalarFloat alpha = (theta > two_pi ? theta - two_pi : theta) - dr::Pi<ScalarFloat>;
+            //  Custom ray/angle intersection, since we can not rely on the 
+            //  medium bounding box for spherical media.
+            ScalarFloat theta = dr::atan2(ray_dir.z(), ray_dir.x());
+            ScalarFloat alpha = (theta > two_pi ? theta - two_pi : theta) + dr::Pi<ScalarFloat>;
+
+            Log(Warn, "Ray angle: %f, alpha: %f", theta * 180.0f / dr::Pi<ScalarFloat>, alpha * 180.0f / dr::Pi<ScalarFloat>);
 
             std::vector<ShellIntersection> intersections = compute_ray_intersections(ray_o, alpha);
-        
-            //Log(Warn, "Origin = %f", ray_o);
-            //Log(Warn, "Alpha = %f", alpha * 180.0f / dr::Pi<ScalarFloat>);
 
-            for (uint32_t j = 0; j < intersections.size(); j++) {}
-                //Log(Warn, "Intersection %d: r_idx = %d, intersection_idx = %d, p = (%f, %f, %f)",
-                //    j, std::get<0>(intersections[j]), std::get<1>(intersections[j]),
-                //    std::get<2>(intersections[j]).x(), std::get<2>(intersections[j]).y(),
-                //    std::get<2>(intersections[j]).z());
+            uint32_t angle_start_idx    = 0;
+            uint32_t angle_end_idx      = m_angles.size() - 1;
+            
+            //  Find the angle greater than the sample. Based on the binary search,
+            //  we will always obtain the index of the angle that is greater than 
+            // the sample. 
+            uint32_t angle_idx = dr::binary_search<uint32_t>(angle_start_idx, angle_end_idx, 
+                [&](int32_t idx) {
+                    ScalarFloat angle_cmp = m_angles[idx];
+                    return angle_cmp < alpha;
+                }
+            );
+
+            //  Edge case EXACT
+            if (dr::abs(m_angles[angle_idx] - alpha) < 1e-04f) {
+                Log(Warn, "EDGE CASE EXACT");
+            }
+
+            //  Edge case LEFT -> Interpolate against first angle and 0
+            else if (angle_idx == 0 && m_angles[angle_idx] > alpha) {
+                Log(Warn, "EDGE CASE LEFT");
+            }
+
+            //  Edge case RIGHT -> Interpolate against last angle and 0
+            else if (angle_idx == m_angles.size() - 1 && m_angles[angle_idx] < alpha) {
+                Log(Warn, "EDGE CASE RIGHT");
+            }
+
+            //  Interpolation
+            else {
+                //  Step 1 - Find the two angles that are closest to the ray angle
+                int32_t right_angle_idx = angle_idx;
+                int32_t left_angle_idx = angle_idx - 1;
+                ScalarFloat lerp_t = 
+                    dr::clip((alpha - m_angles[left_angle_idx]) /
+                              (m_angles[right_angle_idx] - m_angles[left_angle_idx]), 0.f, 1.f);
+
+                //  The angle coordinate is the normalized coordinate for texture lookup
+                //  in the angle dimension.
+                ScalarFloat angle_coord = (left_angle_idx + lerp_t) / ScalarFloat(m_angles.size());
+                
+                //  Step 2 - Based on the intersections, find the cumulative OT values
+                std::vector<ScalarFloat> ot_search_space(intersections.size());
+                std::vector<ScalarPoint3f> intersection_points(intersections.size());
+
+                for (size_t i = 0; i < intersections.size(); ++i) {
+                    ShellIntersection& intersection = intersections[i];
+
+                    int32_t r_idx               = std::get<0>(intersection);
+                    int32_t intersection_idx    = std::get<1>(intersection);
+                    ScalarPoint3f icts_point    = std::get<2>(intersection);
+
+                    int32_t shell_idx = (intersection_idx == 0) 
+                                    ? (m_max_intersections / 2 - r_idx - 1) 
+                                    : (m_max_intersections / 2 + r_idx);
+                    ScalarFloat shell_coord = ScalarFloat(shell_idx) / ScalarFloat(m_max_intersections - 1);
+                    Point3f pos{shell_coord, angle_coord, 1.0f};
+                    Float ot_value;
+
+                    m_cum_opt_thickness.template eval<Float>(pos, &ot_value); 
+                    ot_search_space[i] = dr::slice(ot_value, 0);
+                    intersection_points[i] = icts_point;
+                }
+
+                //  Step 3 - Binary search to find between which two intersection points
+                //           the sample falls.
+                uint32_t start_idx   = 0;
+                uint32_t end_idx     = ot_search_space.size() - 1;
+                
+                uint32_t index = dr::binary_search<uint32_t>(start_idx, end_idx,
+                    [&](uint32_t idx) {
+                        ScalarFloat ot_value = ot_search_space[idx];
+                        return ot_value < log_ksi;
+                    });
+
+                Log(Warn, "Log sample: %f, index: %d, ot_value: %f",
+                    log_ksi, index, ot_search_space[index]);
+
+                //  Edge case - if the index is the last one and the cumulative OT at this 
+                //  intersection is less than the log sample, we escape the medium!
+                if (index == end_idx && ot_search_space[index] < log_ksi) {
+                    //  Sampled distance is infinity
+                    Log(Warn, "Edge case: escaping medium at index %d with value %f",
+                        index, ot_search_space[index]);
+                    continue;
+                }
+
+                //  Edge case - if the index is the first one, we return 0 (should NOT happen in practice)
+                else if (index == 0 && ot_search_space[index] > log_ksi) {
+                    Log(Warn, "Edge case: returning 0 at index %d with value %f",
+                        index, ot_search_space[index]);
+                    continue;
+                }
+
+                else {
+                    ScalarFloat cum_ot = ot_search_space[index - 1] ;
+
+                    //  Step 4 - Calculate distance through shell!
+                    //  Distance already traveled = e^(-cum_ot), accounting
+                    //  for the edge case where the cumulative OT is 0 (and thus
+                    //  traveled distance should also be 0).
+                    ScalarFloat min_dist = (cum_ot == 0.0f) ? 0.0f : dr::exp(-cum_ot);
+
+                    //  Obtain current medium scattering coefficients
+                    MediumInteraction3f mei = dr::zeros<MediumInteraction3f>();
+                    ScalarPoint3f p_1       = intersection_points[index - 1];
+                    ScalarPoint3f p_2       = intersection_points[index]; 
+
+                    ScalarPoint3f mid_point = (p_1 + p_2) * 0.5f;
+
+                    //  Exploit the fact that the medium is spherical and sample a point
+                    //  has only to be characterized by it's norm towards the origin.
+                    //  We add a small epsilon to avoid hitting shell boundaries exactly.
+                    ScalarPoint3f sample_point{0.0f, 0.0f, 2.0f * (dr::abs(dr::norm(mid_point))) - m_medium_radius + 1e-04f};
+
+                    mei.p = sample_point;
+                    std::tie(mei.sigma_s, mei.sigma_n, mei.sigma_t) =
+                        get_scattering_coefficients(mei, active);
+                    ScalarFloat extinction = dr::slice(Float(mei.sigma_t[0]), 0);                
+
+                    //  Compute the distance traveled through the shell
+                    ScalarFloat t = min_dist + (log_ksi - cum_ot) / extinction;
+
+                    Log(Warn, "Sampled distance: %f, min_dist: %s, cum_ot: %s, extinction: %s",
+                        t, min_dist, cum_ot, extinction);
+                }
+            }
         }
 
         return { dr::zeros<MediumInteraction3f>(), dr::zeros<Float>(), dr::zeros<Float>() };
@@ -295,8 +418,8 @@ public:
             ShellIntersection primary   = intersections[i - 1];
             ShellIntersection secondary = intersections[i];
 
-            ScalarPoint3f p1 = std::get<2>(primary);
-            ScalarPoint3f p2 = std::get<2>(secondary);
+            ScalarPoint3f p_1 = std::get<2>(primary);
+            ScalarPoint3f p_2 = std::get<2>(secondary);
 
             //  Get the metadata of the SECOND intersection, for which we have
             //  to store the data in the CDF
@@ -304,16 +427,16 @@ public:
             int32_t intersection_idx    = std::get<1>(secondary);
 
             //  Calculate the length of the segment
-            ScalarFloat segment_length = dr::norm(p2 - p1);
+            ScalarFloat segment_length = dr::norm(p_2 - p_1);
 
             //  Calculate the middle point to use as sample point 
             //  to get the medium interaction
-            ScalarPoint3f mid_point = (p1 + p2) * 0.5f;
+            ScalarPoint3f mid_point = (p_1 + p_2) * 0.5f;
 
             //  Exploit the fact that the medium is spherical and sample a point
             //  has only to be characterized by it's norm towards the origin.
             //  We add a small epsilon to avoid hitting shell boundaries exactly.
-            ScalarPoint3f sample_point{0.0f, 0.0f, dr::abs(dr::norm(mid_point)) + 1e-04f};
+            ScalarPoint3f sample_point{0.0f, 0.0f, 2.0f * (dr::abs(dr::norm(mid_point))) - m_medium_radius + 1e-04f};
 
             //  Set the medium interaction point
             mei.p = sample_point;
@@ -383,27 +506,27 @@ public:
                 int32_t spectral_idx        = std::get<2>(entry);
                 ScalarFloat cum_ot_value    = std::get<4>(entry);
 
-                //  Compute the shell index
-                size_t shell_idx = (intersection_idx == 0) 
-                                    ? (max_intersections / 2 - r_idx) 
-                                    : (max_intersections / 2 + r_idx - 1); 
+                //  Compute the intersection index (i.e. intersection number of max intersections)
+                size_t icts_idx = (intersection_idx == 0) 
+                                ? (max_intersections / 2 - r_idx - 1) 
+                                : (max_intersections / 2 + r_idx); 
 
-                //  Compute the flat index based on the shell index, the 
-                //  max number of intersections, the angle index and 
+                //  Compute the flat index based on the intersection index, 
+                //  the max number of intersections, the angle index and 
                 //  the spectral index.
                 size_t index = spectral_idx * (m_angles.size() * max_intersections)
                                 + i * max_intersections
-                                + shell_idx;
+                                + icts_idx;
                 
                 //  Store the cumulative OT value in the data array
                 opt_thickness_data[index] = cum_ot_value;
             }
         }
 
-        size_t shape[3] = { SpectralSize, m_angles.size(), static_cast<size_t>(max_intersections) };
+        size_t shape[4] = { SpectralSize, m_angles.size(), static_cast<size_t>(max_intersections), 1 };
 
         //  Store the cumulative OT as a texture
-        m_cum_opt_thickness = Texture2f(TensorXf(opt_thickness_data.data(), 3, shape), true, 
+        m_cum_opt_thickness = Texture3f(TensorXf(opt_thickness_data.data(), 4, shape), true,
             true, dr::FilterMode::Linear, dr::WrapMode::Clamp);
     }
 
@@ -455,14 +578,16 @@ public:
     MI_DECLARE_CLASS()
 
 private:
-    ref<Volume> m_sigmat, m_albedo;
-    int32_t m_angle_samples;
+    ref<Volume>     m_sigmat, m_albedo;
+    int32_t         m_angle_samples;
+    int32_t         m_max_intersections;
+    ScalarFloat     m_medium_radius;
 
     mutable FloatStorage m_radii;
     mutable FloatStorage m_angles;
 
     Float m_max_density;
-    mutable Texture2f m_cum_opt_thickness;
+    mutable Texture3f m_cum_opt_thickness;
 };
 
 MI_IMPLEMENT_CLASS_VARIANT(PiecewiseSphericalMedium, Medium)

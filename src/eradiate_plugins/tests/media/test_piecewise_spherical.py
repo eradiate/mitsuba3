@@ -32,7 +32,7 @@ def create_medium():
                 "grid": exp_volume_grid,
                 "use_grid_bbox": True,
                 "filter_type": "nearest",
-                "to_world": mi.ScalarTransform4f().translate([-medium_height / 2, -medium_height / 2, -medium_height]),
+                "to_world": transform,
             },
             "angular_samples": angular_samples,
         }
@@ -44,9 +44,9 @@ def test01_sample_distances_all_layers(variant_scalar_mono_double):
     si = dr.zeros(mi.SurfaceInteraction3f)
 
     origin = mi.Point3f([0.0, 0.0, 100000.0])
-    direction = mi.Vector3f([-1.0, 0.0, -1.0])
+    direction = mi.Vector3f([-0.1, 0.0, -1.0])
     ray = mi.Ray3f(origin, direction)
-    mei, tr, pdf = medium.sample_interaction_real(ray, si, 0.0, 0, True)
+    mei, tr, pdf = medium.sample_interaction_real(ray, si, .01, 0, True)
 
     '''
     gt_dists = [0.0, 74578.93910366, 82117.51365975, 88515.28423884, 98460.51859237]
