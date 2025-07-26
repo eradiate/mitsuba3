@@ -62,7 +62,7 @@ defined.
 
 .. only:: not latex
 
-   .. figure:: /fig/data/plugins/sensors/hdistant/sensor_hdistant_illumination_optimized.svg
+   .. figure:: /_images/data/plugins/sensors/hdistant/sensor_hdistant_illumination_optimized.svg
       :width: 320px
 
       Example scene illumination setup.
@@ -114,22 +114,22 @@ left.
 
 .. only:: not latex
 
-   .. figure:: /fig/data/plugins/sensors/hdistant/sensor_hdistant_film_default_optimized.svg
+   .. figure:: /_images/data/plugins/sensors/hdistant/sensor_hdistant_film_default_optimized.svg
       :width: 320px
 
       Default film orientation.
 
-   .. figure:: /fig/data/plugins/sensors/hdistant/sensor_hdistant_default.svg
+   .. figure:: /_images/data/plugins/sensors/hdistant/sensor_hdistant_default.svg
       :width: 512px
 
       Exitant radiance with default film orientation.
 
-   .. figure:: /fig/data/plugins/sensors/hdistant/sensor_hdistant_film_rotated_optimized.svg
+   .. figure:: /_images/data/plugins/sensors/hdistant/sensor_hdistant_film_rotated_optimized.svg
       :width: 320px
 
       Rotated film.
 
-   .. figure:: /fig/data/plugins/sensors/hdistant/sensor_hdistant_rotated.svg
+   .. figure:: /_images/data/plugins/sensors/hdistant/sensor_hdistant_rotated.svg
       :width: 512px
 
       Exitant radiance with a rotated film.
