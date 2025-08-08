@@ -16,11 +16,11 @@ def create_medium():
     '''
     # Parameters
     medium_height = 100000
-    layers = 2
-    angular_samples = 1
+    layers = 100
+    angular_samples = 1000
     transform = mi.ScalarTransform4f().translate([-medium_height / 2, -medium_height / 2, -medium_height]).scale([medium_height, medium_height, 2 * medium_height])
 
-    grid = generate_spherical_volume_grid(medium_height, layers, 1, 8300)
+    grid = generate_spherical_volume_grid(medium_height, layers, 1, 40000)
     exp_volume_grid = mi.VolumeGrid(grid)
 
     return mi.load_dict(
@@ -44,9 +44,14 @@ def test01_sample_distances_all_layers(variant_scalar_mono_double):
     si = dr.zeros(mi.SurfaceInteraction3f)
 
     origin = mi.Point3f([0.0, 0.0, 100000.0])
-    direction = mi.Vector3f([-0.1, 0.0, -1.0])
+    direction = mi.Vector3f([-0.1515151515151515, 0.0, -1.0])
     ray = mi.Ray3f(origin, direction)
-    mei, tr, pdf = medium.sample_interaction_real(ray, si, .01, 0, True)
+
+    sample_res = 20
+    samples = np.linspace(0, 1, 1 * sample_res)
+    for i in range(len(samples)):
+        mei, tr, pdf = medium.sample_interaction_real(ray, si, samples[i], 0, True)
+        print("\n")
 
     '''
     gt_dists = [0.0, 74578.93910366, 82117.51365975, 88515.28423884, 98460.51859237]
