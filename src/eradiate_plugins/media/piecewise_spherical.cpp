@@ -510,7 +510,7 @@ public:
         return intersections;
     }
 
-    std::vector<ShellIntersection> compute_ray_intersections(ScalarPoint3f p, ScalarFloat alpha, bool by_distance) const {
+    std::vector<ShellIntersection> compute_ray_intersections(ScalarPoint3f p, ScalarFloat alpha) const {
         std::vector<ShellIntersection> intersections;   
         
         for (int32_t r_idx = 0; r_idx < (int32_t) m_radii.size(); ++r_idx) {
@@ -522,22 +522,9 @@ public:
         }
 
         //  Sort the intersection points by distance to the ray origin
-        if (by_distance)
-            sort_intersections_by_distance(intersections, p);
-        else
-            sort_intersections(intersections);
+        sort_intersections_by_distance(intersections, p);
 
         return intersections;
-    }
-
-    void sort_intersections(std::vector<ShellIntersection> &intersections) const {
-        //  Sort the intersection points by distance to the ray origin
-        std::sort(intersections.begin(), intersections.end(),
-                  [](const ShellIntersection &a, const ShellIntersection &b) {
-                        ScalarPoint3f p1 = std::get<2>(a);
-                        ScalarPoint3f p2 = std::get<2>(b);
-                        return p1.z() > p2.z();
-                    });
     }
 
     void sort_intersections_by_distance(std::vector<ShellIntersection> &intersections, ScalarPoint3f p) const {
@@ -547,7 +534,10 @@ public:
                         ScalarPoint3f p1 = std::get<2>(a);
                         ScalarPoint3f p2 = std::get<2>(b);
 
-                        return dr::norm(p1 - p) < dr::norm(p2 - p);
+                        ScalarFloat d1 = dr::dot(p1 - p, p1 - p);
+                        ScalarFloat d2 = dr::dot(p2 - p, p2 - p);
+
+                        return (d1 < d2);
                     });
     }
 
@@ -671,7 +661,7 @@ public:
             //  r_max is defined by the z-coordinate of the max bounding box point.
             ScalarFloat alpha = m_angles[i];
 
-            std::vector<ShellIntersection> intersections = compute_ray_intersections(p, alpha, false);
+            std::vector<ShellIntersection> intersections = compute_ray_intersections(p, alpha);
 
             //  Add number of intersections per angle
             number_of_intersections[i] = intersections.size();
@@ -707,9 +697,6 @@ public:
 
             //  Save midpoint cumulative optical thickness
             midpoint_cot[i] = mid_cot;
-
-            //Log(Warn, "Angle: %s", m_angles[i]);
-            //Log(Warn, "Midpoint COT: %s", mid_cot);
 
             //  At indices that would be zero in the current angle, we store the 
             //  interpolated midpoint cot value.
