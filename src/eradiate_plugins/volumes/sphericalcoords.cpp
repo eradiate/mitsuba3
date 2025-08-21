@@ -154,6 +154,10 @@ public:
     void traverse(TraversalCallback *callback) override {
         callback->put_object("volume", m_volume.get(),
                              +ParamFlags::NonDifferentiable);
+        callback->put_parameter("rmin", m_rmin,
+                             +ParamFlags::NonDifferentiable);
+        callback->put_parameter("rmax", m_rmax,
+                             +ParamFlags::NonDifferentiable);                             
         Base::traverse(callback);
     }
 
