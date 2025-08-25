@@ -54,7 +54,10 @@ struct AttributeCallback : public TraversalCallback {
 };
 
 
-/* Map the shell index to the lower and higher cot map index. */
+/* 
+ * Map the shell index to the lower and higher cot map index.
+ * Corresponds to the intersections with th outer radius of the shell.
+ */
 template <typename Type>
 std::tuple<Type, Type> shell_to_cot_idx(Type shell_index, Type shell_resolution) {
     Type lower_index = (shell_resolution-1) - shell_index;
@@ -74,8 +77,11 @@ std::tuple<Type, Type> cot_to_shell_idx(Type cot_idx, Type cot_size, Type shell_
     outer_idx = dr::select(cot_idx < lower_midpoint_idx, 
                            shell_resolution - cot_idx,
                            cot_idx - (shell_resolution + 1));
+    // dr::masked(inner_idx, inner_idx==Type(-1)) = 0;
+    // dr::masked(outer_idx, inner_idx==Type(-1)) = 0;
+    // inner_idx = dr::minimum(inner_idx, shell_resolution-1);
+    outer_idx = dr::minimum(outer_idx, shell_resolution-1);
 
-    dr::masked(outer_idx, outer_idx == shell_resolution) = -1;
     return {inner_idx, outer_idx};
 }
 
@@ -109,8 +115,10 @@ public:
 
         // angular resolution
         ScalarIndex angle_samples  = props.get<int32_t>("angular_samples", 2);
-        m_angle_size  = angle_samples + 1; // account for nadir direction
-        m_angle_step  = UPPER_BOUND / ScalarFloat(angle_samples);
+        m_angle_size   = angle_samples + 1; // account for nadir direction
+        m_angle_step   = UPPER_BOUND / ScalarFloat(m_angle_size); // not sure if this should be m_angle_size or angle_samples
+        m_s_angle_step = dr::sin(m_angle_step);
+        Log(Info, "UPPER_BOUND : %f , m_angle_step: %f, m_angle_samples: %f", UPPER_BOUND, m_angle_step, m_angle_size);
 
         // retrieve rmin and rmax from the volume
         AttributeCallback<ScalarFloat> cb;
@@ -161,7 +169,7 @@ public:
 
         // Initial intersection with the medium
         Point3f center = m_sigmat->bbox().center();
-        Float radius = m_sigmat->bbox().extents().z();
+        Float radius = m_sigmat->bbox().extents().z() * 0.5f;
         BoundingSphere3f bsphere(center, radius);
         auto [aabb_its, mint, maxt] = bsphere.ray_intersect(ray);
         aabb_its &= (dr::isfinite(mint) || dr::isfinite(maxt));
@@ -171,11 +179,13 @@ public:
 
         // Point where ray enters the sphere 
         Point3f entry_point;
-        dr::masked(entry_point, active) = ray.o + ray.d*mint;
-
+        Float entry_t;
+        dr::masked(entry_t, active) = mint; // can be negative
+        dr::masked(entry_point, active) = ray.o + ray.d*entry_t;
         mint = dr::maximum(0.f, mint);
         maxt = dr::minimum(si.t, dr::minimum(ray.maxt, maxt));
 
+        // Mask no_intersection = false;
         Mask escaped = !active;
 
         // Initialize basic medium interaction fields
@@ -188,70 +198,355 @@ public:
         mei.t                   = mint;
         mei.medium              = this;
 
-        // get angle for interpolation
-        Vector3f nadir = dr::normalize(center - entry_point);
-        Float cos_alpha = dr::dot(nadir, ray.d);
-        Float sin_alpha = dr::sqrt(1.f - cos_alpha*cos_alpha);
-        Float alpha = dr::acos(cos_alpha);
-        alpha = dr::clip(alpha, 0.f, UPPER_BOUND);
+        Float sampled_t     = dr::Infinity<Float>;
+        Float tr            = dr::zeros<Float>();
+        Float pdf           = dr::zeros<Float>();
+        Float sigma_t       = dr::zeros<Float>();
 
-        // get midpoint in relative coordinates
-        Point2f o(sin_alpha, cos_alpha);
-        Point2f d(0.f, -1.f);
-        Vector2f midpoint = o + d*cos_alpha;
+        Float neg_log_ksi = -dr::log(1.0f - sample);
+
+        // Get current ray angle to the nadir from the point of entry.
+        Vector3f nadir  = dr::normalize(center - entry_point);
+        Mask ray_is_vertical = dr::norm(nadir) < math::RayEpsilon<Float>;
+        dr::masked(nadir, ray_is_vertical) = ray.d;
+
+        Float cos_alpha = dr::clip(dr::dot(nadir, ray.d), 0.f, 1.f-dr::Epsilon<Float>);
+        Float sin_alpha = dr::sqrt(1.f - cos_alpha*cos_alpha);
+        Float alpha     = dr::acos(cos_alpha);
+        alpha           = dr::clip(alpha, 0.f, UPPER_BOUND);
+        Index angle_idx = dr::floor2int<Index>(alpha * dr::rcp(m_angle_step));
+        
+        Float d_alpha   = alpha - angle_idx*m_angle_step;
+        Float sin_d_alpha    = dr::sin(d_alpha);
+        Float sin_step_alpha = dr::sin(m_angle_step - d_alpha);
+
+        // convert angle to texture coordinate
+        Float angle_coord = m_texture_cell_angle_offset + alpha * dr::rcp(UPPER_BOUND);
+        Log(Debug, "entry_point: %f, entry_t: %f, mint: %f", entry_point, entry_t, mint);
+        Log(Debug, "nadir: %f, ray.d: %f, cos_alpha: %f", nadir, ray.d, cos_alpha);
+        Log(Debug, "log_sample: %f, alpha: %f, angle_coord: %f", neg_log_ksi, alpha, angle_coord );
+        Log(Debug, "d_alpha: %f, angle_idx: %f, angle_step: %f, interp: %f", d_alpha, angle_idx, m_angle_step, m_texture_cell_angle_offset + m_angle_step * angle_idx );
+        
+        if (dr::any_or<false>(cos_alpha < 0.f)) {
+            Log(Warn, "Ray traversing in negative direction; ray.d: %f, cos_alpha: %f", ray.d, cos_alpha);
+        }
+
+        // Calculate the midpoint coordinate in local coordinates
+        Point2f d(sin_alpha, cos_alpha);
+        Point2f o(0.f, -1.f);
         Float midpoint_dist_to_center = sin_alpha;
+        Float midpoint_dist = cos_alpha*m_medium_radius;
         auto [mid_shell_idx, lower_radius, higher_radius] = shell_info<Index, Float>(midpoint_dist_to_center);
         auto [l_mid_idx, h_mid_idx] = shell_to_cot_idx(mid_shell_idx, Index(m_shell_resolution));
         l_mid_idx++;
         h_mid_idx--;
-        // intersections[l_mid_idx] = {true, cos_alpha - dr::Epsilon<ScalarFloat>};
-        // intersections[h_mid_idx] = {true, cos_alpha + dr::Epsilon<ScalarFloat>};
         
         Log(Debug, "entry_point: %f, center: %f, nadir: %f", entry_point, center, nadir );
+
+        // Calculate the start extra cot
+        Float cot_offset = dr::zeros<Float>();
+        Index start_cot_idx = dr::zeros<Index>();
+        {
+            Float dist = mint;
+            // Get point's distance to medium center, need to convert to local coordinate
+            Point3f pos = ray(dist);
+            Float dist_to_center = dr::norm(pos - center) * dr::rcp(m_medium_radius);
+            auto [shell_idx, i_radius, o_radius] = shell_info<Index, Float>(dist_to_center);
+
+            // Get the cot index that comes before the query point. 
+            // Depends on the where the query point is relative to the midpoint. 
+            auto [cot_idx_1, cot_idx_2] = shell_to_cot_idx(shell_idx, Index(m_shell_resolution));
+            Mask past_midpoint = (dist - entry_t) > midpoint_dist;
+            start_cot_idx = dr::select(past_midpoint, cot_idx_2 - 1, cot_idx_1);
+            
+            // Get the cot and cot dist at the corresponding cot_idx.
+            Float shell_coord = m_texture_cell_shell_offset + start_cot_idx * m_texture_cell_shell_step;
+            auto [cot, shell_dist] = interpolate(angle_idx, start_cot_idx, shell_coord, sin_d_alpha, sin_step_alpha, channel, m_cot, active);
+            // Here dist is relative to the entry point so we need to adjust this 
+            shell_dist += entry_t;
+
+            // if(dr::any_or<false>(dist < shell_dist && !is_tangent)){
+                // shell_idx = shell_idx + dr::select(past_midpoint, -1, +1);
+                // dr::masked(shell_idx, shell_idx == Index(-1)) = 0;
+                // shell_idx = dr::minimum(m_shell_resolution-1, shell_idx);
+                // Log(Warn, "dist < shell_dist; dist: %f, shell_dist: %f, angle: %f", dist, shell_dist, alpha);
+            // }
+            
+            // TODO add logic for the case where dist < shell_dist
+            Float sigma_t = dr::gather<Float>(m_extinctions, 
+                        shell_idx * Index(SpectralSize) + channel,
+                        active);
+
+            Float extra_cot = sigma_t * (dist - shell_dist); // this is to remove from cot
+            
+            Log(Debug, "pos: %f, dist_to_center: %f, shell_coord: %f, past_midpoint: %f", pos, dist_to_center, shell_coord, past_midpoint);
+            Log(Debug, "shell_idx: %f, cot_idx_1: %f, cot_idx_2: %f, cot_idx: %f", shell_idx, cot_idx_1, cot_idx_2, start_cot_idx);
+            
+            cot_offset = cot+extra_cot;
+
+            Log(Debug, "cot_offset: %f", cot_offset);
+        }
+
+        // Perform binary search on the COT texture to sample the shell.
+        // @TODO: currently assuming that we are starting from 0, add start from 0. 
+        Index start_idx   = 0;
+        Index end_idx     = m_cot_size -1;
+        Index cot_idx = dr::binary_search<Index>(
+            start_idx, end_idx,
+            [&](Index idx) DRJIT_INLINE_LAMBDA {
+                // Calculate the shell coordinate and use the angle coordinate
+                // to automatically interpolate the result.
+                Float shell_coord = m_texture_cell_shell_offset + idx * m_texture_cell_shell_step;
+                // Point2f p(shell_coord, angle_coord);
+                
+                // UnpolarizedSpectrum cot;
+                // m_cot.template eval<Float>(p, cot.data());
+                // Float cot_value = radius * extract_channel(cot, channel);
+                // Log(Debug, "cot_value debug: %f, p: %f", cot_value_debug, p);
+                // auto [cot_value, dist] = interpolate(angle_idx, idx, shell_coord, sin_d_alpha, sin_step_alpha, channel, m_cot, active);
+
+                // ============================
+                Float l_dist = dr::gather<Float>(m_distances, angle_idx*m_cot_size + idx, active);
+                Float r_dist = dr::gather<Float>(m_distances, (angle_idx+1)*m_cot_size + idx, active);
+
+                Float left_angle_coord = m_texture_cell_angle_offset + m_texture_cell_angle_step * angle_idx;
+                Float right_angle_coord = left_angle_coord + m_texture_cell_angle_step;
+
+                Float denom = (l_dist*sin_d_alpha+r_dist*sin_step_alpha);
+                Float u = (l_dist*sin_d_alpha)/denom;
+                // Float t = m_medium_radius*(dists.x()*dists.y()*m_s_angle_step)/denom;
+
+                UnpolarizedSpectrum left_cot, right_cot;
+                Point2f p1(shell_coord, left_angle_coord), p2(shell_coord, right_angle_coord); 
+                m_cot.template eval<Float>(p1, left_cot.data());
+                m_cot.template eval<Float>(p2, right_cot.data());
+                UnpolarizedSpectrum cot = left_cot * (1.f-u) + right_cot * u;
+                // UnpolarizedSpectrum cot =1.f;
+                // UnpolarizedSpectrum cot = left_cot  + right_cot;
+                Float cot_value = m_medium_radius * extract_channel(cot, channel);
+                // ============================
+
+                Log(Debug, "binary search; idx: %f, shell_coord: %f cot: %f", idx, shell_coord, cot_value );
+                return (cot_value - cot_offset) < neg_log_ksi;
+                // return left_angle_coord>right_angle_coord;
+            });
+
+        // Handle samples that escaped the medium
+        // @TODO: change to interpolate method..
+        UnpolarizedSpectrum max_cot_data;
+        m_cot.template eval<Float>(Point2f(1.f, angle_coord), max_cot_data.data());
+        Float max_cot = radius * extract_channel(max_cot_data, channel) - cot_offset;
+
+        escaped |= neg_log_ksi > max_cot;
+        active &= !escaped;
+        Log(Debug, "escaped: %f, max_cot: %f", escaped, max_cot);
+
+        // Binary search returns the upper bound COT, use the lower bound instead.
+        cot_idx -= 1;
+        dr::masked(cot_idx, cot_idx == Index(-1)) = 0;
+        Log(Debug, "neg_log_ksi: %f, b.s. index: %f, shell_resolution: %f", neg_log_ksi, cot_idx, m_cot_size );
+
+        Mask at_midpoint   = active && (cot_idx > l_mid_idx && cot_idx <= h_mid_idx);
+        Mask past_midpoint = !at_midpoint && cot_idx > m_cot_size/2;
+
+        dr::masked(cot_idx, at_midpoint) = l_mid_idx;
+        Log(Debug, "at_midpoint: %f, past_midpoint: %f", at_midpoint, past_midpoint );
+
+        // Intersect the shell's boundary to get the intersection distance.
+        // Use the outer bound radius of the innner shell
+        auto [inner_s_idx, outer_s_idx]   = cot_to_shell_idx(cot_idx, Index(m_cot_size), Index(m_shell_resolution));
+        auto [inner_radius, outer_radius] = shell_bounds<Index, Float>(inner_s_idx);
+        Mask valid = !(at_midpoint && outer_radius > midpoint_dist_to_center + dr::Epsilon<Float>);
+
+        // auto [valid, x0, x1] = math::solve_quadratic(
+        //     dr::squared_norm(d),
+        //     2.f * dr::dot(o, d),
+        //     dr::squared_norm(o) - dr::square(outer_radius)
+        // );
+
+        valid &= inner_s_idx != Index(-1);
+        // valid &= !is_almost_zero(dr::abs(x0 - x1)); // check for tangent points
+
+        Log(Debug, "inner_s_idx: %f, outer_s_idx: %f, inner_r : %f, outer_r: %f", inner_s_idx, outer_s_idx, inner_radius, outer_radius);
+        // Log(Debug, "valid: %f, x0: %f, x1 : %f", valid, x0, x1);
+
+        // Handle midpoint's case. 
+        if (dr::any_or<true>(active && !valid)) {
+            // if intersection is not valid, the interpolated ray is between 
+            // two rays that have different numbers of intersection and 
+            // finds itself on the side that is outside of the inner shell.
+            // in this case we update the index and radius and calculate the 
+            // intersection again. 
+            dr::masked(inner_s_idx, active && !valid) +=  1;
+            dr::masked(outer_s_idx, active && !valid) +=  1;
+            dr::masked(cot_idx, active && !valid)     -=  1;
+            auto [inner_radius, outer_radius] = shell_bounds<Index, Float>(inner_s_idx);
+            // std::tie(valid, x0, x1) = math::solve_quadratic(
+            //     dr::squared_norm(d),
+            //     2.f * dr::dot(o, d),
+            //     dr::squared_norm(o) - dr::square(outer_radius)
+            // );
+            // this check is optional at this point...
+            valid = outer_radius > midpoint_dist_to_center + dr::Epsilon<Float>;
+            Log(Debug, "No intersection, trying with the one above");
+            Log(Debug, "inner_s_idx: %d, outer_s_idx: %d, cot_idx: %d", inner_s_idx, outer_s_idx, cot_idx );
+            // Log(Debug, "outer_radius: %d, x0: %d, x1: %d", outer_radius, x0, x1);
+            // This should have an intersection otherwise we have a problem.
+            if(dr::any(!valid)){
+                Log(Warn, "Did not find intersection: idx: %f, outer_radius; %f", inner_s_idx-1, outer_radius);
+            }
+        }
+
+        // Retrieve the extinction coefficient of the shell the ray is entering.
+        Index shell_idx = dr::select(past_midpoint, outer_s_idx, inner_s_idx);
+        shell_idx = dr::clip(shell_idx, 0, m_shell_resolution-1);
+        
+        // mint = dr::select(past_midpoint, x1, x0)*radius;
+        sigma_t = dr::gather<Float>(m_extinctions, 
+                        shell_idx * Index(SpectralSize) + channel,
+                        active);
+        Log(Debug, "shell_idx : %f, sigma_t : %f, mint: %f", shell_idx * Index(SpectralSize) + channel, sigma_t, mint);
+
+        // Extract the cot for the given interaction.                        
+        Float shell_coord = m_texture_cell_shell_offset + cot_idx * m_texture_cell_shell_step;
+        // Point2f p(shell_coord, angle_coord);
+        // UnpolarizedSpectrum cot;
+        // m_cot.template eval<Float>(p, cot.data());
+        // Float cot_value = radius * extract_channel(cot, channel);
+        // Log(Debug, "cot_value debug: %f, p: %f", cot_value_debug, p);
+        auto [cot_value, dist] = interpolate(angle_idx, cot_idx, shell_coord, sin_d_alpha, sin_step_alpha, channel, m_cot, active);
+        cot_value -= cot_offset;
+        mint = dist + entry_t;
+
+        // Compute the distance traveled through the shell
+        Float residual_t = (1.0f / sigma_t) * (neg_log_ksi - cot_value);
+        sampled_t              = residual_t + mint;
+        Log(Debug, "residual_t : %f, cot_value: %f", residual_t, cot_value);
+
+        // Populate the medium interaction
+        mei.t = sampled_t;
+        mei.p = ray(mei.t);
+
+        // Compute transmittance and pdf
+        dr::masked(tr, active) = dr::exp(-cot_value - sigma_t * residual_t);
+        
+        dr::masked(mei.t, escaped) = dr::Infinity<Float>;
+        dr::masked(tr, escaped) = dr::exp(-max_cot);
+
+        pdf = dr::select(escaped, tr, sigma_t * tr);
+        Log(Debug, "mei.t : %f, tr : %f, pdf: %f", mei.t, tr, pdf);
+
+        return { mei, tr, pdf };
+    }
+
+    std::tuple<Float, Float, Mask>
+    eval_transmittance_pdf_real(const Ray3f &ray,
+                                const SurfaceInteraction3f &si, UInt32 channel,
+                                Mask active) const override {
+        
+        // Initial intersection with the medium
+        Point3f center = m_sigmat->bbox().center();
+        Float radius = m_sigmat->bbox().extents().z() * 0.5f;
+        BoundingSphere3f bsphere(center, radius);
+        auto [aabb_its, mint, maxt] = bsphere.ray_intersect(ray);
+        aabb_its &= (dr::isfinite(mint) || dr::isfinite(maxt));
+        active &= aabb_its;
+        Mask is_tangent = is_almost_zero(maxt-mint);
+        Mask escaped = active && ((maxt >= ray.maxt) || (maxt >= si.t) || is_tangent);
+        
+        Float entry_t = mint; // can be negative
+        mint = dr::maximum(0.f, mint);
+        maxt =
+            dr::select(active, dr::minimum(ray.maxt, dr::minimum(maxt, si.t)),
+                       dr::Infinity<Float>);
+        maxt = dr::maximum(0.f, maxt);
+
+        // Point where ray enters the sphere 
+        Point3f entry_point = dr::zeros<Point3f>();
+        dr::masked(entry_point, active) = ray.o + ray.d*entry_t;
+
+        // Get current ray angle to the nadir from the point of entry.
+        Vector3f nadir  = dr::normalize(center - entry_point);
+        Mask ray_is_vertical = dr::norm(nadir) < math::RayEpsilon<Float>;
+        dr::masked(nadir, ray_is_vertical) = ray.d;
+
+        Float cos_alpha = dr::clip(dr::dot(nadir, ray.d), 0.f, 1.f-dr::Epsilon<Float>);
+        Float alpha     = dr::acos(cos_alpha);
+        alpha           = dr::clip(alpha, 0.f, UPPER_BOUND);
+        Index angle_idx = dr::floor2int<Index>(alpha * dr::rcp(m_angle_step));
+
+        Float d_alpha        = alpha - angle_idx * m_angle_step;
+        Float sin_d_alpha    = dr::sin(d_alpha);
+        Float sin_step_alpha = dr::sin(m_angle_step - d_alpha); // TODO, convert to the cos sin - cos sin formulation.
 
         if (dr::any_or<false>(cos_alpha < 0.f)) {
             Log(Warn, "Ray traversing in negative direction; ray.d: %f, cos_alpha: %f", ray.d, cos_alpha);
         }
 
-        // Float cum_opt_thick = dr::zeros<Float>();
-        // Float sampled_t     = dr::Infinity<Float>;
-        // Float tr            = dr::zeros<Float>();
-        // Float pdf           = dr::zeros<Float>();
+        // Calculate the midpoint dist relative to the entry point
+        Float midpoint_dist = cos_alpha*m_medium_radius;
+
+        Log(Debug, "mint: %f, maxt: %f, entry_t: %f, mindpoint_t: %f", mint, maxt, entry_t, midpoint_dist);
+        Log(Debug, "center: %f, nadir: %f, alpha: %f", center, nadir, alpha);
+
+        auto compute_shell_cot = [&](Float dist)-> std::tuple<Float, Float, Float> {
+            // Get point's distance to medium center, need to convert to local coordinate
+            Point3f pos = ray(dist);
+            Float dist_to_center = dr::norm(pos - center) * dr::rcp(m_medium_radius);
+            auto [shell_idx, i_radius, o_radius] = shell_info<Index, Float>(dist_to_center);
+
+            // Get the cot index that comes before the query point. 
+            // Depends on the where the query point is relative to the midpoint. 
+            auto [cot_idx_1, cot_idx_2] = shell_to_cot_idx(shell_idx, Index(m_shell_resolution));
+            Mask past_midpoint = (dist - entry_t) > midpoint_dist;
+            Index cot_idx = dr::select(past_midpoint, cot_idx_2 - 1, cot_idx_1);
+            
+            // Get the cot and cot dist at the corresponding cot_idx.
+            Float shell_coord = m_texture_cell_shell_offset + cot_idx * m_texture_cell_shell_step;
+            auto [cot, shell_dist] = interpolate(angle_idx, cot_idx, shell_coord, sin_d_alpha, sin_step_alpha, channel, m_cot, active);
+            // Here dist is relative to the entry point so we need to adjust this 
+            shell_dist += entry_t;
+
+            if(dr::any_or<false>(dist < shell_dist && !is_tangent)){
+                // shell_idx = shell_idx + dr::select(past_midpoint, -1, +1);
+                // dr::masked(shell_idx, shell_idx == Index(-1)) = 0;
+                // shell_idx = dr::minimum(m_shell_resolution-1, shell_idx);
+                Log(Warn, "dist < shell_dist; dist: %f, shell_dist: %f, angle: %f", dist, shell_dist, alpha);
+            }
+            
+            // TODO add logic for the case where dist < shell_dist
+            Float sigma_t = dr::gather<Float>(m_extinctions, 
+                        shell_idx * Index(SpectralSize) + channel,
+                        active);
+
+            Float extra_cot = sigma_t * (dist - shell_dist); // this is to remove from cot
+            
+            Log(Debug, "pos: %f, dist_to_center: %f, shell_coord: %f, past_midpoint: %f", pos, dist_to_center, shell_coord, past_midpoint);
+            Log(Debug, "shell_idx: %f, cot_idx_1: %f, cot_idx_2: %f, cot_idx: %f", shell_idx, cot_idx_1, cot_idx_2, cot_idx);
+
+            return {extra_cot, cot, sigma_t};
+        };
         
-        Float neg_log_ksi = -dr::log(1.0f - sample);
+        Log(Debug, "start");
+        auto [s_extra_cot, s_cot, s_sigma_t] = compute_shell_cot(mint + dr::Epsilon<Float>);
+        Log(Debug, "end");
+        auto [e_residual_cot, e_cot, e_sigma_t] = compute_shell_cot(maxt - dr::Epsilon<Float>);
+        
+        Log(Debug, "s_extra_cot: %f, s_cot: %f, s_sigma_t: %f", s_extra_cot, s_cot, s_sigma_t);
+        Log(Debug, "e_extra_cot: %f, e_cot: %f, e_sigma_t: %f", e_residual_cot, e_cot, e_sigma_t);
 
-        // convert angle to texture coordinate
-        Float angle_coord = m_texture_cell_angle_offset + alpha * dr::rcp(UPPER_BOUND);
-        Log(Debug, "log_sample: %f, alpha: %f, angle_coord: %f", neg_log_ksi, alpha, angle_coord );
+        // deduct the start cot from the end cot to get the actual cot.
+        Float cot = (e_cot + e_residual_cot) - (s_cot + s_extra_cot);
+        
+        Float tr            = dr::zeros<Float>();
+        Float pdf           = dr::zeros<Float>();
+        tr = dr::select(is_tangent, 1.f, dr::exp(-cot));
+        dr::masked(pdf, active) =
+            dr::select(escaped, tr, tr * e_sigma_t);
+        
+        Log(Debug, "tr: %f, pdf: %f, escaped: %f", tr, pdf, escaped);
 
-        Index start_idx   = 0;
-        Index end_idx     = m_cot_size -1;
-        Index index = dr::binary_search<Index>(
-            start_idx, end_idx,
-            [&](Index idx) DRJIT_INLINE_LAMBDA {
-                // Texture Sampling
-                Float shell_coord = m_texture_cell_shell_offset + idx * m_texture_cell_shell_step;
-                Point2f p(shell_coord, angle_coord);
-                
-                UnpolarizedSpectrum cot;
-                m_cot.template eval<Float>(p, cot.data());
-                Float cot_value = extract_channel(cot, channel);
-
-                Log(Debug, "binary search; idx: %f, shell_coord: %f cot: %f", idx, shell_coord, cot );
-                return cot_value < neg_log_ksi;
-            });
-
-        Log(Debug, "neg_log_ksi: %f, index: %f", neg_log_ksi, index );
-        auto [inner_s_idx, outer_s_idx] = cot_to_shell_idx(index, Index(m_cot_size), Index(m_shell_resolution));
-
-        return {dr::zeros<MediumInteraction3f>(), 0.f, 0.f};
-    }
-
-    std::tuple<Float, Float, Mask>
-    eval_transmittance_pdf_real(const Ray3f &/*ray*/,
-                                const SurfaceInteraction3f &/*si*/, UInt32 /*channel*/,
-                                Mask /*active*/) const override {
-        return {0.f, 0.f, true};
+        return {tr, pdf, escaped};
     }
 
     void traverse(TraversalCallback *callback) override {
@@ -260,6 +555,8 @@ public:
         callback->put_object("sigma_t", m_sigmat.get(),
                              +ParamFlags::Differentiable);
         callback->put_parameter("cum_opt_thickness", m_cot.tensor(),
+                                +ParamFlags::NonDifferentiable);
+        callback->put_parameter("intersections", m_distances,
                                 +ParamFlags::NonDifferentiable);
         // callback->put_parameter("angles", m_angles,
         //                         +ParamFlags::NonDifferentiable);
@@ -273,12 +570,19 @@ public:
 
         std::vector<ScalarUnpolarized> extinctions;
         precompute_extinctions(extinctions);
+        m_extinctions = dr::load<FloatStorage>(extinctions.data(), extinctions.size()*SpectralSize);
+        for (uint32_t i =0; i< extinctions.size()*SpectralSize; ++i){
+            Float sigma_t = dr::gather<ScalarFloat>(m_extinctions, i, true);
+            Log(Debug, "m_excitions idx: %d, sigma_t: %f, spectralsize: %f", i, sigma_t, SpectralSize);
+        }
+        
 
         Log(Debug, "=================");
         Log(Debug, "Intersections");
         Log(Debug, "=================");
 
         std::vector<ScalarUnpolarized> cot_data(m_angle_size * m_cot_size);
+        std::vector<ScalarFloat> distances(m_angle_size * m_cot_size, 0.f);
 
         auto write_to_cot_buffer = [&](ScalarUnpolarized data, ScalarIndex angle_idx, ScalarIndex cot_idx) {
             ScalarIndex index = angle_idx * m_cot_size + cot_idx;
@@ -312,8 +616,8 @@ public:
             auto [l_mid_idx, h_mid_idx] = shell_to_cot_idx(mid_shell_idx, m_shell_resolution);
             l_mid_idx++;
             h_mid_idx--;
-            intersections[l_mid_idx] = {true, cos_alpha - dr::Epsilon<ScalarFloat>};
-            intersections[h_mid_idx] = {true, cos_alpha + dr::Epsilon<ScalarFloat>};
+            intersections[l_mid_idx] = {true, cos_alpha}; // - dr::Epsilon<ScalarFloat>};
+            intersections[h_mid_idx] = {true, cos_alpha}; // + dr::Epsilon<ScalarFloat>};
             Log(Debug, "l_mid_idx: %d, h_mid_idx", l_mid_idx, h_mid_idx);
             
             // 03 - Calculate intersections with shell boundaries
@@ -343,9 +647,11 @@ public:
             ScalarUnpolarized cot = 0.f;
             // cots[0] = cot; // first entry is always 0.
             write_to_cot_buffer(ScalarUnpolarized(0.f), angle_idx, 0);
+            distances[angle_idx * m_cot_size] = 0.f;
 
             for (ScalarIndex cot_idx = 1; cot_idx < m_cot_size; ++cot_idx ){
                 auto [valid, distance]  = intersections[cot_idx];
+                distances[angle_idx * m_cot_size + cot_idx] = distance;
                 
                 if (!valid) {
                     Log(Debug,"No intersections at cot_idx %d, continue", cot_idx);
@@ -375,9 +681,7 @@ public:
                 //  Compute the flat index based on the intersection index, 
                 //  the max number of intersections, the angle index and 
                 //  the spectral index.
-                
                 write_to_cot_buffer(cot, angle_idx, cot_idx);
-                // cots[cot_idx] = cot;
 
                 Log(Debug, "cot: %f, dist: %f, sigma_t: %f", cot, (distance - prev_distance), extinctions[shell_idx]);
                 prev_distance = distance;
@@ -388,20 +692,17 @@ public:
             ScalarUnpolarized midpoint_cot = cot_data[angle_idx * m_cot_size + h_mid_idx];
             for (ScalarIndex cot_idx = h_mid_idx; cot_idx > l_mid_idx; --cot_idx) {
                 write_to_cot_buffer(midpoint_cot, angle_idx, cot_idx);
-                // cots[cot_idx] = midpoint_cot;
+                distances[angle_idx * m_cot_size + cot_idx] = cos_alpha;
                 Log(Debug, "cot_idx: %d, midpoint_cot: %f", cot_idx, midpoint_cot);
-            }
-
-            for (ScalarIndex cot_idx = 0; cot_idx < m_cot_size; ++cot_idx) {
-                Log(Debug, "cot_idx: %d, cot: %f", cot_idx, cot_data[angle_idx*m_cot_size+cot_idx]);
             }
         }
 
         //  Store the cumulative OT as a texture
         size_t shape[] = { m_angle_size, m_cot_size, SpectralSize };
-
         m_cot = Texture2f(TensorXf(cot_data.data(), 3, shape), true,
             true, dr::FilterMode::Linear, dr::WrapMode::Clamp);
+
+        m_distances = dr::load<FloatStorage>(distances.data(), m_angle_size*m_cot_size);
     }
 
     
@@ -455,6 +756,9 @@ public:
     template<typename _Index, typename _Float>
     std::tuple<_Index, _Float, _Float>
     shell_info(_Float dist) const {
+        // Required for this function to work in the constructor (scalar) and 
+        // sampling function (vectorized), whilst having access to the member 
+        // variables.
         _Float rmin = _Float(m_rmin);
         _Float rmax = _Float(m_rmax);
         _Float shell_size = _Float(m_shell_size);
@@ -480,6 +784,7 @@ public:
         return {i, lower_bound, higher_bound};
     }
 
+
     /* 
     * Return shell bounds for a given shell index. 
     * Returns (shell_idx, lower_bound, higher_bound)
@@ -487,6 +792,9 @@ public:
    template<typename _Index, typename _Float>
     std::tuple<_Float, _Float>
     shell_bounds(_Index shell_index) const {
+        // Required for this function to work in the constructor (scalar) and 
+        // sampling function (vectorized), whilst having access to the member 
+        // variables.
         dr::mask_t<_Index> min_shell = dr::mask_t<_Index>(m_min_shell);
         dr::mask_t<_Index> max_shell = dr::mask_t<_Index>(m_max_shell);
         _Index shell_resolution = _Index(m_shell_resolution);
@@ -508,8 +816,78 @@ public:
         return {lower_bound, higher_bound};
     }
 
-    bool is_almost_zero(ScalarFloat value) const {
-        return dr::abs(value) < 1e-08f;
+    // std::tuple<Float, Float, Float> 
+    // compute_shell_cot(Float dist, Ray3f ray, Point3f center, Float midpoint_dist) {
+    //         // Get point's distance to medium center, need to convert to local coordinate
+    //         Point3f pos = ray(dist);
+    //         Float dist_to_center = dr::norm(pos - center) * dr::rcp(m_medium_radius);
+    //         auto [shell_idx, i_radius, o_radius] = shell_info<Index, Float>(dist_to_center);
+    //         // Get the cot index that comes before the query point. 
+    //         // Depends on the where the query point is relative to the midpoint. 
+    //         auto [cot_idx_1, cot_idx_2] = shell_to_cot_idx(shell_idx, m_shell_resolution);
+    //         Mask past_midpoint = (dist - entry_t) - midpoint_dist;
+    //         Index cot_idx = dr::select(past_midpoint, cot_idx_2 - 1, cot_idx_1);
+    //         // Get the cot and cot dist at the corresponding cot_idx.
+    //         Float shell_coord = m_texture_cell_shell_offset + cot_idx * m_texture_cell_shell_step;
+    //         auto [cot, shell_dist] = interpolate(angle_idx, cot_idx, shell_coord, sin_d_alpha, sin_step_alpha, channel, m_cot, active);
+    //         // Here dist is relative to the entry point so we need to adjust this 
+    //         shell_dist -= entry_point;
+    //         if(dr::any_or<false>(dist < shell_dist)){
+    //             Log(Warn, "dist < shell_dist, can happen because of inerpolation; dist: %f, dist: %f", dist, dist);
+    //         }
+    //         // TODO add logic for the case where dist < shell_dist
+    //         Float sigma_t = extract_channel(m_extinctions[shell_idx], channel);
+    //         Float extra_cot = sigma_t * (dist - shell_dist); // this is to remove from cot
+    //         return {extra_cot, cot, sigma_t};
+    // }
+
+    /* 
+    * Return shell bounds for a given shell index. 
+    * Returns (shell_idx, lower_bound, higher_bound)
+    * */
+    std::tuple<Float, Float> interpolate(Index angle_idx, Index cot_idx,
+                                         Float shell_coord, Float sin_theta, 
+                                         Float sin_step_theta, UInt32 channel,
+                                         const Texture2f& cot_tex, 
+                                         Mask active) const {
+
+        Float l_dist = dr::gather<Float>(m_distances, angle_idx*m_cot_size + cot_idx, active);
+        Float r_dist = dr::gather<Float>(m_distances, (angle_idx+1)*m_cot_size + cot_idx, active);
+
+        Float left_angle_coord = m_texture_cell_angle_offset + m_texture_cell_angle_step * angle_idx;
+        Float right_angle_coord = left_angle_coord + m_texture_cell_angle_step;
+
+        Float u = dr::zeros<Float>();
+        Float t = dr::zeros<Float>();
+        Float denom = (l_dist*sin_theta+r_dist*sin_step_theta);
+        dr::masked(u, denom != 0.f) = (l_dist*sin_theta)/denom;
+        dr::masked(t, denom != 0.f) = m_medium_radius*(l_dist*r_dist*m_s_angle_step)/denom;
+
+        UnpolarizedSpectrum left_cot, right_cot;
+        Point2f p1(shell_coord, left_angle_coord), p2(shell_coord, right_angle_coord); 
+        cot_tex.template eval<Float>(p1, left_cot.data());
+        cot_tex.template eval<Float>(p2, right_cot.data());
+        UnpolarizedSpectrum cot = left_cot * (1.f-u) + right_cot * u;
+        // UnpolarizedSpectrum cot = left_cot  + right_cot ;
+        
+        // Float angle_coord = 
+        //     m_texture_cell_angle_offset 
+        //     + m_angle_step * angle_idx
+        //     + u*m_angle_step;
+        // Point2f p(angle_coord, shell_coord);
+        // UnpolarizedSpectrum cot;
+        // m_cot.template eval<Float>(p, cot.data());
+
+        Float cot_value = m_medium_radius * extract_channel(cot, channel);
+        // Log(Debug, "la_coord: %f, p1: %f, left_cot: %f", left_angle_coord, p1, left_cot);
+        // Log(Debug, "ra_coord: %f, p2: %f, right_cot: %f", right_angle_coord, p2, right_cot);
+        // Log(Debug, "cot: %f, u: %f, dists: %f, t: %f", cot_value, u, dists, t);
+        return {cot_value, t};
+        // return {1.f, 1.f};
+    }
+
+    Mask is_almost_zero(Float value) const {
+        return dr::abs(value) < 1e-8f;
     }
 
  
@@ -563,14 +941,17 @@ public:
 
 private:
     ref<Volume>     m_sigmat, m_albedo;
-    Float m_max_density;
-    
+    Float           m_max_density;
+    FloatStorage    m_extinctions;
+    FloatStorage    m_distances;
+
     ScalarSize      m_angle_size;
     ScalarSize      m_cot_size;
     ScalarSize      m_shell_resolution;
     ScalarFloat     m_shell_size;
 
     ScalarFloat     m_angle_step;
+    ScalarFloat     m_s_angle_step;
     ScalarFloat     m_rmin, m_rmax;
     bool            m_min_shell = false, m_max_shell = false;
     ScalarIndex     m_additional_shells = 0.f;
