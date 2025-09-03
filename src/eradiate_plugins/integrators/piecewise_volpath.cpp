@@ -242,11 +242,12 @@ public:
                     Float tr_pdf = index_spectrum(pdf, channel);
                     dr::masked(throughput, is_spectral) *=
                         dr::select(tr_pdf > 0.f, tr / tr_pdf, 0.f);
+                    Log(Debug, "update throuput post sample: %f", throughput);
                 }
 
                 escaped_medium = active_medium && !mei.is_valid();
                 active_medium &= mei.is_valid();
-
+                Log(Debug, "active_medium: %f", active_medium);
                 act_medium_scatter |= !act_null_scatter && active_medium;
 
                 dr::masked(depth, act_medium_scatter) += 1;
@@ -267,7 +268,7 @@ public:
                     dr::masked(throughput,
                                not_spectral && act_medium_scatter) *=
                         mei.sigma_s / mei.sigma_t;
-
+                Log(Debug, "update throuput post scatter: %f, sigma_t:%f, sigma_s:%f", throughput, mei.sigma_t, mei.sigma_s);
                 PhaseFunctionContext phase_ctx(sampler);
                 auto phase = mei.medium->phase_function();
 
@@ -287,6 +288,7 @@ public:
                         throughput * phase_val * emitted *
                         mis_weight(ds.pdf,
                                    dr::select(ds.delta, 0.f, phase_pdf));
+                    Log(Debug, "post sample emitter throughput: %f, phase_val: %f, emitted: %f, result: %f", throughput, phase_val, emitted, result);
                 }
 
                 // ------------------ Phase function sampling -----------------
@@ -392,6 +394,7 @@ public:
                 Mask has_medium_trans = active_surface && si.is_medium_transition();
                 dr::masked(medium, has_medium_trans) = si.target_medium(ray.d);
             }
+            Log(Debug, "end of loop throughput: %f, ls.result: %f", throughput, result);
             active &= (active_surface | active_medium);
         },
         "Picewise volpath integrator");
@@ -494,7 +497,7 @@ public:
                                                             active_medium);
                     dr::masked(transmittance, is_spectral) *= tr; // exact estimation
                 }
-
+                Log(Debug,"post eval transmittance: %f", transmittance);
                 active_medium &= !escaped_medium;
             }
 
@@ -522,7 +525,7 @@ public:
             }
         },
         "Piecewise volpath integrator emitter sampling");
-
+        Log(Debug,"end sample emitter transmittance: %f emitter_val: %f", ls.transmittance, emitter_val);
         return { ls.transmittance * emitter_val, dir_sample };
     }
 

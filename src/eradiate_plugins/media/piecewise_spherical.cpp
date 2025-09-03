@@ -51,6 +51,7 @@ public:
 
         m_max_intersections = m_sigmat->resolution().z() * 2;
         m_medium_radius = m_sigmat->bbox().max.z();
+        Log(Debug, "medium_radius: %f", m_medium_radius);
 
         m_texture_cell_angle_step   = 1.0f / (m_angle_samples * 2 + 1);
         m_texture_cell_shell_step   = 1.0f / m_max_intersections;
