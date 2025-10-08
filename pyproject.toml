@@ -10,10 +10,10 @@ build-backend = "scikit_build_core.build"
 
 
 [project]
-name = "Mitsuba"
+# name = "Mitsuba"
+name = "eradiate-mitsuba"
 dynamic = ["version", "readme"]
 description = "Mitsuba 3: A Retargetable Forward and Inverse Renderer"
-readme = "README.md"
 dependencies = [
   "typing_extensions>=4.12;python_version<\"3.11\"",
   "drjit==1.0.5",
@@ -44,6 +44,7 @@ build-dir = "build/{wheel_tag}"
 metadata.readme.provider = "scikit_build_core.metadata.fancy_pypi_readme"
 
 cmake.verbose = true
+cmake.args = ["--preset=eradiate"]
 logging.level = "INFO"
 
 
@@ -79,9 +80,9 @@ norecursedirs = [ "ext" ]
 provider = "scikit_build_core.metadata.regex"
 input = "include/mitsuba/mitsuba.h"
 regex = '''(?sx)
-\#define \s+ MI_VERSION_MAJOR \s+ (?P<major>\d+) .*?
-\#define \s+ MI_VERSION_MINOR \s+ (?P<minor>\d+) .*?
-\#define \s+ MI_VERSION_PATCH \s+ (?P<patch>\d+) .*?
+\#define \s+ ERD_MI_VERSION_MAJOR \s+ (?P<major>\d+) .*?
+\#define \s+ ERD_MI_VERSION_MINOR \s+ (?P<minor>\d+) .*?
+\#define \s+ ERD_MI_VERSION_PATCH \s+ (?P<patch>\d+) .*?
 '''
 result = "{major}.{minor}.{patch}"
 
