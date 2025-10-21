@@ -85,7 +85,7 @@ public:
     using VolumeType = Volume<Float, Spectrum>;
 
     SphericalCoordsVolume(const Properties &props) : Base(props) {
-        m_volume = props.volume<VolumeType>("volume", 1.f);
+        m_volume = props.get_volume<VolumeType>("volume", 1.f);
 
         m_rmin = props.get<ScalarFloat>("rmin", 0.f);
         m_rmax = props.get<ScalarFloat>("rmax", 1.f);
@@ -95,7 +95,7 @@ public:
         m_fillmin = props.get<ScalarFloat>("fillmin", 0.f);
         m_fillmax = props.get<ScalarFloat>("fillmax", 0.f);
 
-        m_to_local = props.get<ScalarTransform4f>("to_world", ScalarTransform4f()).inverse();
+        m_to_local = props.get<ScalarAffineTransform4f>("to_world", ScalarAffineTransform4f()).inverse();
         update_bbox_sphere();
     }
 
@@ -151,10 +151,9 @@ public:
 
     ScalarVector3i resolution() const override { return m_volume->resolution(); };
 
-    void traverse(TraversalCallback *callback) override {
-        callback->put_object("volume", m_volume.get(),
-                             +ParamFlags::NonDifferentiable);
-        Base::traverse(callback);
+    void traverse(TraversalCallback *cb) override {
+        cb->put("volume", m_volume.get(), ParamFlags::NonDifferentiable);
+        Base::traverse(cb);
     }
 
     std::string to_string() const override {
@@ -169,19 +168,20 @@ public:
 
     MI_DECLARE_CLASS()
 
-protected:
+private:
     ScalarFloat m_rmin, m_rmax, m_fillmin, m_fillmax;
     ref<VolumeType> m_volume;
 
     void update_bbox_sphere() {
-        ScalarTransform4f to_world = m_to_local.inverse();
+        ScalarAffineTransform4f to_world = m_to_local.inverse();
         ScalarPoint3f a = to_world * ScalarPoint3f(-1.f, -1.f, -1.f);
         ScalarPoint3f b = to_world * ScalarPoint3f(1.f, 1.f, 1.f);
         m_bbox = ScalarBoundingBox3f(a, b);
     }
+
+    MI_TRAVERSE_CB(Base, m_volume)
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(SphericalCoordsVolume, Volume)
-MI_EXPORT_PLUGIN(SphericalCoordsVolume, "SphericalCoordsVolume texture")
+MI_EXPORT_PLUGIN(SphericalCoordsVolume)
 
 NAMESPACE_END(mitsuba)

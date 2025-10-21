@@ -124,13 +124,13 @@ public:
     GRASPOceanBSDF(const Properties &props) : Base(props) {
         // Retrieve parameters
         m_wavelength = props.get<ScalarFloat>("wavelength");
-        m_eta        = props.texture<Texture>("eta", 1.33f);
-        m_k          = props.texture<Texture>("k", 0.f);
-        m_ext_ior    = props.texture<Texture>("ext_ior", 1.000277f);
-        m_wind_speed = props.texture<Texture>("wind_speed", 0.1f);
+        m_eta        = props.get_texture<Texture>("eta", 1.33f);
+        m_k          = props.get_texture<Texture>("k", 0.f);
+        m_ext_ior    = props.get_texture<Texture>("ext_ior", 1.000277f);
+        m_wind_speed = props.get_texture<Texture>("wind_speed", 0.1f);
         m_component  = props.get<ScalarInt32>("component", 0);
         m_water_body_reflectance =
-            props.texture<Texture>("water_body_reflectance", 0.f);
+            props.get_texture<Texture>("water_body_reflectance", 0.f);
 
         // Set the BSDF flags
         // => Whitecap and underlight reflectance is "diffuse"
@@ -149,17 +149,17 @@ public:
     }
 
     void traverse(TraversalCallback *callback) override {
-        callback->put_parameter("wavelength", m_wavelength,
-                                +ParamFlags::NonDifferentiable);
-        callback->put_object("wind_speed", m_wind_speed.get(),
-                                +ParamFlags::Differentiable);
-        callback->put_object("eta", m_eta.get(), +ParamFlags::Differentiable);
-        callback->put_object("k", m_k.get(), +ParamFlags::Differentiable);
-        callback->put_object("ext_ior", m_ext_ior.get(),
-                                +ParamFlags::Differentiable);
-        callback->put_object("water_body_reflectance",
+        callback->put("wavelength", m_wavelength,
+ ParamFlags::NonDifferentiable);
+        callback->put("wind_speed", m_wind_speed.get(),
+ ParamFlags::Differentiable);
+        callback->put("eta", m_eta.get(), ParamFlags::Differentiable);
+        callback->put("k", m_k.get(), ParamFlags::Differentiable);
+        callback->put("ext_ior", m_ext_ior.get(),
+ ParamFlags::Differentiable);
+        callback->put("water_body_reflectance",
                                 m_water_body_reflectance.get(),
-                                +ParamFlags::Differentiable);
+ ParamFlags::Differentiable);
     }
 
     void parameters_changed(
@@ -620,6 +620,5 @@ private:
     Float m_internal_reflectance;
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(GRASPOceanBSDF, BSDF)
-MI_EXPORT_PLUGIN(GRASPOceanBSDF, "GRASP Ocean material")
+MI_EXPORT_PLUGIN(GRASPOceanBSDF)
 NAMESPACE_END(mitsuba)

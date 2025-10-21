@@ -91,7 +91,7 @@ public:
                    m_needs_sample_3)
     MI_IMPORT_TYPES(Scene, Shape)
 
-    using Matrix = dr::Matrix<Float, Transform4f::Size>;
+    using Matrix = dr::Matrix<Float, AffineTransform4f::Size>;
     using Index = dr::int32_array_t<Float>;
 
     MultiDistantSensor(const Properties &props) : Base(props) {
@@ -102,7 +102,7 @@ public:
         }
 
         std::vector<std::string> directions_str =
-            string::tokenize(props.string("directions"), " ,");
+            string::tokenize(props.get<std::string>("directions"), " ,");
 
         if (directions_str.size() % 3 != 0)
             Throw("Invalid specification! Number of parameters %s, is not a "
@@ -124,9 +124,9 @@ public:
 
             ScalarVector3f up;
             std::tie(up, std::ignore) = coordinate_system(direction);
-            ScalarTransform4f transform =
-                ScalarTransform4f::look_at(ScalarPoint3f{ 0.f, 0.f, 0.f },
-                                           ScalarPoint3f(direction), up)
+            ScalarAffineTransform4f transform =
+                ScalarAffineTransform4f::look_at(ScalarPoint3f{ 0.f, 0.f, 0.f },
+                                                 ScalarPoint3f(direction), up)
                     .matrix;
             memcpy(&buffer[i * 16], &transform, sizeof(ScalarFloat) * 16);
         }
@@ -153,13 +153,13 @@ public:
 
         // Set ray target if relevant
         if (props.has_property("target")) {
-            if (props.type("target") == Properties::Type::Array3f) {
+            if (props.type("target") == Properties::Type::Vector) {
                 m_target_type = RayTargetType::Point;
                 m_target_point = props.get<ScalarPoint3f>("target");
             } else if (props.type("target") == Properties::Type::Object) {
                 // We assume it's a shape
                 m_target_type = RayTargetType::Shape;
-                auto obj = props.object("target");
+                auto obj = props.get<ref<Object>>("target");
                 m_target_shape = dynamic_cast<Shape *>(obj.get());
 
                 if (!m_target_shape)
@@ -208,10 +208,10 @@ public:
         Index index(sensor_index);
 
         Matrix coefficients = dr::gather<Matrix>(m_transforms.array(), index);
-        Transform4f trafo(coefficients);
+        AffineTransform4f trafo(coefficients);
 
         // Set ray direction
-        ray.d = trafo.transform_affine(Vector3f{ 0.f, 0.f, 1.f });
+        ray.d = trafo * Vector3f{ 0.f, 0.f, 1.f };
 
         // Sample target point and position ray origin
         Spectrum ray_weight = 0.f;
@@ -230,7 +230,7 @@ public:
             Point2f offset =
                 warp::square_to_uniform_disk_concentric(aperture_sample);
             Vector3f perp_offset =
-                trafo.transform_affine(Vector3f{ offset.x(), offset.y(), 0.f });
+                trafo * Vector3f{ offset.x(), offset.y(), 0.f };
             ray.o = m_bsphere.center + perp_offset * m_bsphere.radius -
                     ray.d * m_ray_offset;
             ray_weight = wav_weight;
@@ -297,6 +297,5 @@ protected:
     ScalarFloat m_ray_offset;
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(MultiDistantSensor, Sensor)
-MI_EXPORT_PLUGIN(MultiDistantSensor, "MultiDistantSensor")
+MI_EXPORT_PLUGIN(MultiDistantSensor)
 NAMESPACE_END(mitsuba)

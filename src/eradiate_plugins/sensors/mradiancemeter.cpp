@@ -71,7 +71,7 @@ public:
                     m_needs_sample_3)
     MI_IMPORT_TYPES()
 
-    using Matrix = dr::Matrix<Float, Transform4f::Size>;
+    using Matrix = dr::Matrix<Float, AffineTransform4f::Size>;
     using Index  = dr::uint32_array_t<Float>;
 
     MultiRadianceMeter(const Properties &props) : Base(props) {
@@ -82,9 +82,9 @@ public:
         }
 
         std::vector<std::string> origins_str =
-            string::tokenize(props.string("origins"), " ,");
+            string::tokenize(props.get<std::string>("origins"), " ,");
         std::vector<std::string> directions_str =
-            string::tokenize(props.string("directions"), " ,");
+            string::tokenize(props.get<std::string>("directions"), " ,");
 
         if (origins_str.size() % 3 != 0)
             Throw("Invalid specification! Number of parameters %s, is not a "
@@ -116,8 +116,8 @@ public:
 
             ScalarPoint3f target = origin + direction;
             auto [up, _]         = coordinate_system(direction);
-            ScalarTransform4f transform =
-                ScalarTransform4f::look_at(origin, target, up).matrix;
+            ScalarAffineTransform4f transform =
+                ScalarAffineTransform4f::look_at(origin, target, up).matrix;
             memcpy(&buffer[i * 16], &transform, sizeof(ScalarFloat) * 16);
         }
 
@@ -159,40 +159,12 @@ public:
 
         Matrix coefficients =
             dr::gather<Matrix>(m_transforms.array(), index, active);
-        Transform4f trafo(coefficients);
-        ray.o = trafo.transform_affine(Point3f{ 0.f, 0.f, 0.f });
-        ray.d = trafo.transform_affine(Vector3f{ 0.f, 0.f, 1.f });
+        AffineTransform4f trafo(coefficients);
+        ray.o = trafo * Point3f{ 0.f, 0.f, 0.f };
+        ray.d = trafo * Vector3f{ 0.f, 0.f, 1.f };
 
         return { ray, wav_weight };
     }
-
-    // std::pair<RayDifferential3f, Spectrum> sample_ray_differential(
-    //     Float time, Float wavelength_sample, const Point2f &position_sample,
-    //     const Point2f & /*aperture_sample*/, Mask active) const override {
-    //     MI_MASKED_FUNCTION(ProfilerPhase::EndpointSampleRay, active);
-    //     RayDifferential3f ray;
-    //     ray.time = time;
-
-    //     // 1. Sample spectrum
-    //     auto [wavelengths, wav_weight] =
-    //         sample_wavelength<Float, Spectrum>(wavelength_sample);
-    //     ray.wavelengths = wavelengths;
-
-    //     // 2. Set ray origin and direction
-    //     Int32 sensor_index(position_sample.x() * m_sensor_count);
-    //     Index index(sensor_index);
-
-    //     Matrix coefficients = dr::gather<Matrix>(m_transforms, index);
-    //     Transform4f trafo(coefficients);
-    //     ray.o = trafo.transform_affine(Point3f{ 0.f, 0.f, 0.f });
-    //     ray.d = trafo.transform_affine(Vector3f{ 0.f, 0.f, 1.f });
-
-    //     // 3. Set differentials; since we treat the pixels as individual
-    //     // sensors, we don't have differentials
-    //     ray.has_differentials = false;
-
-    //     return std::make_pair(ray, wav_weight);
-    // }
 
     ScalarBoundingBox3f bbox() const override {
         // Return an invalid bounding box
@@ -214,7 +186,6 @@ private:
     size_t m_sensor_count;
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(MultiRadianceMeter, Sensor)
-MI_EXPORT_PLUGIN(MultiRadianceMeter, "MultiRadianceMeter");
+MI_EXPORT_PLUGIN(MultiRadianceMeter)
 
 NAMESPACE_END(mitsuba)

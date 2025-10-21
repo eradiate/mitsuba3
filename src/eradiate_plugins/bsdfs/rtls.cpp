@@ -65,9 +65,9 @@ public:
     MI_IMPORT_TYPES(Texture)
 
     RTLSBSDF(const Properties &props) : Base(props) {
-        m_f_iso = props.texture<Texture>("f_iso", 0.209741f);
-        m_f_vol = props.texture<Texture>("f_vol", 0.081384f);
-        m_f_geo = props.texture<Texture>("f_geo", 0.004140f);
+        m_f_iso = props.get_texture<Texture>("f_iso", 0.209741f);
+        m_f_vol = props.get_texture<Texture>("f_vol", 0.081384f);
+        m_f_geo = props.get_texture<Texture>("f_geo", 0.004140f);
 
         /*
          * Values from: "MODIS BRDF/Albedo Product:
@@ -82,12 +82,12 @@ public:
     }
 
     void traverse(TraversalCallback *callback) override {
-        callback->put_object("f_iso", m_f_iso.get(),
-                             +ParamFlags::Differentiable);
-        callback->put_object("f_vol", m_f_vol.get(),
-                             +ParamFlags::Differentiable);
-        callback->put_object("f_geo", m_f_geo.get(),
-                             +ParamFlags::Differentiable);
+        callback->put("f_iso", m_f_iso.get(),
+ ParamFlags::Differentiable);
+        callback->put("f_vol", m_f_vol.get(),
+ ParamFlags::Differentiable);
+        callback->put("f_geo", m_f_geo.get(),
+ ParamFlags::Differentiable);
     }
 
     std::pair<BSDFSample3f, Spectrum> sample(const BSDFContext &ctx,
@@ -317,6 +317,5 @@ private:
     ScalarFloat m_b;
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(RTLSBSDF, BSDF)
-MI_EXPORT_PLUGIN(RTLSBSDF, "Ross-Thick-Li-Sparse BSDF")
+MI_EXPORT_PLUGIN(RTLSBSDF)
 NAMESPACE_END(mitsuba)

@@ -40,7 +40,7 @@ public:
     MI_IMPORT_TYPES(PhaseFunctionContext, Volume)
 
     RayleighPolarizedPhaseFunction(const Properties &props) : Base(props) {
-        m_depolarization = props.volume<Volume>("depolarization",0.f);
+        m_depolarization = props.get_volume<Volume>("depolarization",0.f);
 
         if(m_depolarization->max() >= 1.f)
             Log(Error, "Depolarization factor must be in [0, 1[");
@@ -49,8 +49,8 @@ public:
     }
 
     void traverse(TraversalCallback *callback) override {
-        callback->put_object("depolarization", m_depolarization.get(),
-                             +ParamFlags::Differentiable);
+        callback->put("depolarization", m_depolarization.get(),
+ ParamFlags::Differentiable);
     }
 
     MI_INLINE
@@ -186,7 +186,5 @@ private:
     ref<Volume> m_depolarization;
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(RayleighPolarizedPhaseFunction, PhaseFunction)
-MI_EXPORT_PLUGIN(RayleighPolarizedPhaseFunction,
-                 "Polarized Rayleigh phase function")
+MI_EXPORT_PLUGIN(RayleighPolarizedPhaseFunction)
 NAMESPACE_END(mitsuba)

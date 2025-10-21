@@ -166,8 +166,8 @@ public:
     PiecewiseMedium(const Properties &props) : Base(props) {
 
         m_is_homogeneous = false;
-        m_albedo         = props.volume<Volume>("albedo", .75f);
-        m_sigmat         = props.volume<Volume>("sigma_t", 1.f);
+        m_albedo         = props.get_volume<Volume>("albedo", .75f);
+        m_sigmat         = props.get_volume<Volume>("sigma_t", 1.f);
 
         m_scale = props.get<ScalarFloat>("scale", 1.f);
         m_has_spectral_extinction =
@@ -429,12 +429,12 @@ public:
     }
 
     void traverse(TraversalCallback *callback) override {
-        callback->put_parameter("scale", m_scale,
-                                +ParamFlags::NonDifferentiable);
-        callback->put_object("albedo", m_albedo.get(),
-                             +ParamFlags::Differentiable);
-        callback->put_object("sigma_t", m_sigmat.get(),
-                             +ParamFlags::Differentiable);
+        callback->put("scale", m_scale,
+ ParamFlags::NonDifferentiable);
+        callback->put("albedo", m_albedo.get(),
+ ParamFlags::Differentiable);
+        callback->put("sigma_t", m_sigmat.get(),
+ ParamFlags::Differentiable);
         Base::traverse(callback);
     }
 
@@ -574,6 +574,5 @@ private:
     FloatStorage m_reverse_cum_opt_thickness;
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(PiecewiseMedium, Medium)
-MI_EXPORT_PLUGIN(PiecewiseMedium, "Piecewise Medium")
+MI_EXPORT_PLUGIN(PiecewiseMedium)
 NAMESPACE_END(mitsuba)

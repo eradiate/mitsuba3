@@ -293,20 +293,20 @@ public:
     }
 
     void traverse(TraversalCallback *callback) override {
-        callback->put_parameter("wavelength", m_wavelength,
-                                +ParamFlags::NonDifferentiable);
-        callback->put_parameter("wind_speed", m_wind_speed,
-                                +ParamFlags::Differentiable);
-        callback->put_parameter("wind_direction", m_wind_direction,
-                                +ParamFlags::Differentiable);
-        callback->put_parameter("chlorinity", m_chlorinity,
-                                +ParamFlags::Differentiable);
-        callback->put_parameter("pigmentation", m_pigmentation,
-                                +ParamFlags::Differentiable);
-        callback->put_parameter("shadowing", m_shadowing,
-                                +ParamFlags::NonDifferentiable);
-        callback->put_parameter("coverage", m_coverage,
-                                +ParamFlags::NonDifferentiable);
+        callback->put("wavelength", m_wavelength,
+ ParamFlags::NonDifferentiable);
+        callback->put("wind_speed", m_wind_speed,
+ ParamFlags::Differentiable);
+        callback->put("wind_direction", m_wind_direction,
+ ParamFlags::Differentiable);
+        callback->put("chlorinity", m_chlorinity,
+ ParamFlags::Differentiable);
+        callback->put("pigmentation", m_pigmentation,
+ ParamFlags::Differentiable);
+        callback->put("shadowing", m_shadowing,
+ ParamFlags::NonDifferentiable);
+        callback->put("coverage", m_coverage,
+ ParamFlags::NonDifferentiable);
     }
 
     void parameters_changed(const std::vector<std::string> &/*keys*/) override {
@@ -801,6 +801,5 @@ private:
     static constexpr ScalarFloat m_underlight_alpha = 0.485f;
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(OceanBSDF, BSDF)
-MI_EXPORT_PLUGIN(OceanBSDF, "Ocean material")
+MI_EXPORT_PLUGIN(OceanBSDF)
 NAMESPACE_END(mitsuba)

@@ -71,7 +71,7 @@ public:
                 up;
             std::tie(up, std::ignore) = coordinate_system(direction);
             m_to_world =
-                ScalarTransform4f::look_at(0.f, ScalarPoint3f(direction), up);
+                ScalarAffineTransform4f::look_at(0.f, ScalarPoint3f(direction), up);
             dr::make_opaque(m_to_world);
         }
 
@@ -83,7 +83,7 @@ public:
         ScalarFloat angular_radius = dr::deg_to_rad(angular_diameter / 2.f);
         m_cos_angular_radius       = dr::cos(angular_radius);
         m_omega      = 2.f * dr::Pi<ScalarFloat> * (1.f - m_cos_angular_radius);
-        m_irradiance = props.texture_d65<Texture>("irradiance", 1.f);
+        m_irradiance = props.get_emissive_texture<Texture>("irradiance", 1.f);
 
         Log(Debug,
             "angular_radius: %s; angular_radius_cos: %s; solid angle omega: %s",
@@ -97,11 +97,11 @@ public:
         m_flags = +EmitterFlags::Infinite;
     }
 
-    void traverse(TraversalCallback *callback) override {
-        callback->put_object("irradiance", m_irradiance.get(),
-                             +ParamFlags::Differentiable);
-        callback->put_parameter("to_world", *m_to_world.ptr(),
-                                +ParamFlags::NonDifferentiable);
+    void traverse(TraversalCallback *cb) override {
+        cb->put("irradiance", m_irradiance.get(),
+ ParamFlags::Differentiable);
+        cb->put("to_world", *m_to_world.ptr(),
+ ParamFlags::NonDifferentiable);
     }
 
     void set_scene(const Scene *scene) override {
@@ -120,7 +120,7 @@ public:
         MI_MASKED_FUNCTION(ProfilerPhase::EndpointEvaluate, active);
 
         // Transform interaction point to local frame
-        Vector3f v = m_to_world.value().inverse().transform_affine(-si.wi);
+        Vector3f v = m_to_world.value().inverse() * (-si.wi);
         // Compute cut-off criterion
         Float cos_theta = dr::dot(v, ScalarVector3f{ 0.f, 0.f, 1.f });
         Mask selected   = active & (cos_theta > m_cos_angular_radius);
@@ -139,7 +139,7 @@ public:
             warp::square_to_uniform_cone(sample, m_cos_angular_radius);
         Float pdf =
             warp::square_to_uniform_cone_pdf(local_dir, m_cos_angular_radius);
-        Vector3f d = m_to_world.value().transform_affine(local_dir);
+        Vector3f d = m_to_world.value() * (local_dir);
 
         // Needed when the reference point is on the sensor, which is not part
         // of the bbox
@@ -192,7 +192,7 @@ public:
                         Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::EndpointEvaluate, active);
 
-        Vector3f d = m_to_world.value().inverse().transform_affine(ds.d);
+        Vector3f d = m_to_world.value().inverse() * (ds.d);
         Float pdf  = warp::square_to_uniform_cone_pdf(d, m_cos_angular_radius);
 
         return pdf;
@@ -238,6 +238,5 @@ protected:
     Float m_omega;
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(AstroObjectEmitter, Emitter)
-MI_EXPORT_PLUGIN(AstroObjectEmitter, "Distant Astronomical Object Emitter")
+MI_EXPORT_PLUGIN(AstroObjectEmitter)
 NAMESPACE_END(mitsuba)

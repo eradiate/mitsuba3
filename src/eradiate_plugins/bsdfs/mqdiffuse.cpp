@@ -68,14 +68,14 @@ public:
                 Throw("Cannot specify both \"grid\" and \"filename\".");
             Log(Debug, "Loading volume grid from memory...");
             // Note: ref-counted, so we don't have to worry about lifetime
-            ref<Object> other = props.object("grid");
+            ref<Object> other = props.get<ref<Object>>("grid");
             VolumeGrid *volume_grid = dynamic_cast<VolumeGrid *>(other.get());
             if (!volume_grid)
                 Throw("Property \"grid\" must be a VolumeGrid instance.");
             m_volume_grid = volume_grid;
         } else {
             FileResolver *fs = Thread::thread()->file_resolver();
-            fs::path file_path = fs->resolve(props.string("filename"));
+            fs::path file_path = fs->resolve(props.get<std::string>("filename"));
             if (!fs::exists(file_path))
                 Log(Error, "\"%s\": file does not exist!", file_path);
             m_volume_grid = new VolumeGrid(file_path);
@@ -209,6 +209,5 @@ private:
     bool m_accel;
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(MeasuredQuasiDiffuse, BSDF)
-MI_EXPORT_PLUGIN(MeasuredQuasiDiffuse, "Measure quasi-diffuse material")
+MI_EXPORT_PLUGIN(MeasuredQuasiDiffuse)
 NAMESPACE_END(mitsuba)

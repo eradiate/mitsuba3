@@ -143,7 +143,7 @@ public:
                     dr::cross(dr::normalize(tmp), -ray.d);
             } else {
                 Vector3f vertical =
-                    sensor->world_transform() * Vector3f(0.f, 1.f, 0.f);
+                    m_sensor->world_transform() * Vector3f(0.f, 1.f, 0.f);
                 target_basis = dr::cross(ray.d, vertical);
             }
 

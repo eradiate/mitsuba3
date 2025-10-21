@@ -66,25 +66,25 @@ public:
 
     HapkeBSDF(const Properties &props) : Base(props) {
 
-        m_w     = props.texture<Texture>("w");
-        m_b     = props.texture<Texture>("b");
-        m_c     = props.texture<Texture>("c");
-        m_theta = props.texture<Texture>("theta");
-        m_B_0   = props.texture<Texture>("B_0");
-        m_h     = props.texture<Texture>("h");
+        m_w     = props.get_texture<Texture>("w");
+        m_b     = props.get_texture<Texture>("b");
+        m_c     = props.get_texture<Texture>("c");
+        m_theta = props.get_texture<Texture>("theta");
+        m_B_0   = props.get_texture<Texture>("B_0");
+        m_h     = props.get_texture<Texture>("h");
 
         m_flags = BSDFFlags::GlossyReflection | BSDFFlags::FrontSide;
         m_components.push_back(m_flags);
     }
 
     void traverse(TraversalCallback *callback) override {
-        callback->put_object("w", m_w.get(), +ParamFlags::Differentiable);
-        callback->put_object("b", m_b.get(), +ParamFlags::Differentiable);
-        callback->put_object("c", m_c.get(), +ParamFlags::Differentiable);
-        callback->put_object("theta", m_theta.get(),
-                             +ParamFlags::Differentiable);
-        callback->put_object("B_0", m_B_0.get(), +ParamFlags::Differentiable);
-        callback->put_object("h", m_h.get(), +ParamFlags::Differentiable);
+        callback->put("w", m_w.get(), ParamFlags::Differentiable);
+        callback->put("b", m_b.get(), ParamFlags::Differentiable);
+        callback->put("c", m_c.get(), ParamFlags::Differentiable);
+        callback->put("theta", m_theta.get(),
+ ParamFlags::Differentiable);
+        callback->put("B_0", m_B_0.get(), ParamFlags::Differentiable);
+        callback->put("h", m_h.get(), ParamFlags::Differentiable);
     }
 
     std::pair<BSDFSample3f, Spectrum> sample(const BSDFContext &ctx,
@@ -395,6 +395,5 @@ private:
     ref<Texture> m_h;
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(HapkeBSDF, BSDF)
-MI_EXPORT_PLUGIN(HapkeBSDF, "Hapke BSDF")
+MI_EXPORT_PLUGIN(HapkeBSDF)
 NAMESPACE_END(mitsuba)

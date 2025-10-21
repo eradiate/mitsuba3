@@ -191,13 +191,13 @@ public:
 
         // Set ray target if relevant
         if (props.has_property("target")) {
-            if (props.type("target") == Properties::Type::Array3f) {
+            if (props.type("target") == Properties::Type::Vector) {
                 m_target_type = RayTargetType::Point;
                 m_target_point = props.get<ScalarPoint3f>("target");
             } else if (props.type("target") == Properties::Type::Object) {
                 // We assume it's a shape
                 m_target_type = RayTargetType::Shape;
-                auto obj = props.object("target");
+                auto obj = props.get<ref<Object>>("target");
                 m_target_shape = dynamic_cast<Shape *>(obj.get());
 
                 if (!m_target_shape)
@@ -239,8 +239,8 @@ public:
         ray.wavelengths = wavelengths;
 
         // Sample ray direction
-        ray.d = -m_to_world.value().transform_affine(
-            warp::square_to_uniform_hemisphere(film_sample));
+        ray.d = m_to_world.value() * (
+            -warp::square_to_uniform_hemisphere(film_sample));
 
         // Sample target point and position ray origin
         Spectrum ray_weight = 0.f;
@@ -258,8 +258,8 @@ public:
             // Sample target uniformly on bounding sphere cross section
             Point2f offset =
                 warp::square_to_uniform_disk_concentric(aperture_sample);
-            Vector3f perp_offset = m_to_world.value().transform_affine(
-                Vector3f(offset.x(), offset.y(), 0.f));
+            Vector3f perp_offset = m_to_world.value() *
+                Vector3f(offset.x(), offset.y(), 0.f);
             ray.o = m_bsphere.center + perp_offset * m_bsphere.radius -
                     ray.d * m_ray_offset;
             ray_weight = wav_weight;
@@ -286,13 +286,13 @@ public:
         Spectrum ray_weight = 0.f;
 
         // Sample ray direction
-        ray.d = -m_to_world.value().transform_affine(
-            warp::square_to_uniform_hemisphere(film_sample));
-        ray.d_x = -m_to_world.value().transform_affine(
-            warp::square_to_uniform_hemisphere(
+        ray.d = m_to_world.value() * (
+            -warp::square_to_uniform_hemisphere(film_sample));
+        ray.d_x = m_to_world.value() * (
+            -warp::square_to_uniform_hemisphere(
                 Point2f{ film_sample.x() + m_d.x(), film_sample.y() }));
-        ray.d_y = -m_to_world.value().transform_affine(
-            warp::square_to_uniform_hemisphere(
+        ray.d_y = m_to_world.value() * (
+            -warp::square_to_uniform_hemisphere(
                 Point2f{ film_sample.x(), film_sample.y() + m_d.y() }));
 
         // Sample target point and position ray origin
@@ -313,8 +313,8 @@ public:
             // Sample target uniformly on bounding sphere cross section
             Point2f offset =
                 warp::square_to_uniform_disk_concentric(aperture_sample);
-            Vector3f perp_offset = m_to_world.value().transform_affine(
-                Vector3f(offset.x(), offset.y(), 0.f));
+            Vector3f perp_offset = m_to_world.value() *
+                Vector3f(offset.x(), offset.y(), 0.f);
             ray.o = m_bsphere.center + perp_offset * m_bsphere.radius -
                     ray.d * m_ray_offset;
             ray.o_x = m_bsphere.center + perp_offset * m_bsphere.radius -
@@ -366,6 +366,5 @@ protected:
     ScalarFloat m_ray_offset;
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(HemisphericalDistantSensor, Sensor)
-MI_EXPORT_PLUGIN(HemisphericalDistantSensor, "HemisphericalDistantSensor")
+MI_EXPORT_PLUGIN(HemisphericalDistantSensor)
 NAMESPACE_END(mitsuba)

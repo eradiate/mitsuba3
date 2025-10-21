@@ -45,8 +45,8 @@ public:
     MI_IMPORT_TYPES(Texture)
 
     BiLambertian(const Properties &props) : Base(props) {
-        m_reflectance   = props.texture<Texture>("reflectance", .5f);
-        m_transmittance = props.texture<Texture>("transmittance", .5f);
+        m_reflectance   = props.get_texture<Texture>("reflectance", .5f);
+        m_transmittance = props.get_texture<Texture>("transmittance", .5f);
 
         m_components.push_back(BSDFFlags::DiffuseReflection |
                                BSDFFlags::FrontSide | BSDFFlags::BackSide);
@@ -205,8 +205,8 @@ public:
     }
 
     void traverse(TraversalCallback *callback) override {
-        callback->put_object("reflectance", m_reflectance.get(), +ParamFlags::Differentiable);
-        callback->put_object("transmittance", m_transmittance.get(), +ParamFlags::Differentiable);
+        callback->put("reflectance", m_reflectance.get(), ParamFlags::Differentiable);
+        callback->put("transmittance", m_transmittance.get(), ParamFlags::Differentiable);
     }
 
     std::string to_string() const override {
@@ -225,6 +225,5 @@ private:
     ref<Texture> m_transmittance;
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(BiLambertian, BSDF)
-MI_EXPORT_PLUGIN(BiLambertian, "Bi-Lambertian material")
+MI_EXPORT_PLUGIN(BiLambertian)
 NAMESPACE_END(mitsuba)

@@ -49,12 +49,13 @@ public:
 
     SelectBSDF(const Properties &props) : Base(props) {
         // Collect selector texture
-        m_indices = props.texture<Texture>("indices");
+        m_indices = props.get_texture<Texture>("indices");
 
         // Initialize nested BSDFs
         size_t bsdf_index = 0;
-        for (auto &[name, obj] : props.objects(false)) {
-            Base *bsdf = dynamic_cast<Base *>(obj.get());
+        for (auto &prop : props.objects()) {
+            std::string name(prop.name());
+            Base *bsdf = prop.try_get<Base>();
             if (bsdf) {
                 m_nested_bsdf.push_back(bsdf);
                 bsdf_index++;
@@ -82,12 +83,12 @@ public:
     }
 
     void traverse(TraversalCallback *callback) override {
-        callback->put_object("indices", m_indices.get(),
-                             +ParamFlags::NonDifferentiable);
+        callback->put("indices", m_indices.get(),
+ ParamFlags::NonDifferentiable);
         for (size_t i = 0; i < m_nested_bsdf.size(); ++i) {
-            callback->put_object("bsdf_" + std::to_string(i),
+            callback->put("bsdf_" + std::to_string(i),
                                  m_nested_bsdf[i].get(),
-                                 +ParamFlags::Differentiable);
+ ParamFlags::Differentiable);
         }
     }
 
@@ -151,6 +152,5 @@ protected:
     DynamicBuffer<BSDFPtr> m_nested_bsdf_dr;
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(SelectBSDF, BSDF)
-MI_EXPORT_PLUGIN(SelectBSDF, "SelectBSDF material")
+MI_EXPORT_PLUGIN(SelectBSDF)
 NAMESPACE_END(mitsuba)

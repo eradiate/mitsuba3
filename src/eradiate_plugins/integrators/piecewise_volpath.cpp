@@ -550,8 +550,5 @@ public:
     MI_DECLARE_CLASS()
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(PiecewiseVolumetricPathIntegrator,
-                           MonteCarloIntegrator);
-MI_EXPORT_PLUGIN(PiecewiseVolumetricPathIntegrator,
-                 "Piecewise Volumetric Path Tracer integrator");
+MI_EXPORT_PLUGIN(PiecewiseVolumetricPathIntegrator)
 NAMESPACE_END(mitsuba)

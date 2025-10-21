@@ -231,8 +231,8 @@ public:
 
             // Extract required properties, nodes (cos_theta) and m11.
             std::vector<std::string> cos_theta_str =
-                string::tokenize(props.string("nodes"), " ,");
-            std::vector<std::string> m11_str = string::tokenize(props.string("m11"), " ,");
+                string::tokenize(props.get<std::string>("nodes"), " ,");
+            std::vector<std::string> m11_str = string::tokenize(props.get<std::string>("m11"), " ,");
 
             if (cos_theta_str.size() != m11_str.size()) {
                 Throw("TabulatedPolarizedPhaseFunction: 'cos_theta_str' and "
@@ -274,7 +274,7 @@ public:
             for (size_t i = 0; i < size; ++i) {
                 // Initialize coefficients to 0 in case no value is passed.
                 ms_vec[i] = std::vector<ScalarFloat>(cos_theta_str.size(), 0.f);
-                const std::string &raw = props.string(coef_names[i], "");
+                const std::string &raw = props.get<std::string>(coef_names[i], "");
 
                 bool is_init = raw != "";
                 size_t node_size = cos_theta_str.size();
@@ -397,22 +397,22 @@ public:
 
     void traverse(TraversalCallback *callback) override {
 
-        callback->put_parameter("m11", m_m11.pdf(),
-                                +ParamFlags::NonDifferentiable);
-        callback->put_parameter("m12", m_mvec.data(0),
-                                +ParamFlags::NonDifferentiable);
-        callback->put_parameter("m22", m_mvec.data(1),
-                                +ParamFlags::NonDifferentiable);
-        callback->put_parameter("m33", m_mvec.data(2),
-                                +ParamFlags::NonDifferentiable);
-        callback->put_parameter("m34", m_mvec.data(3),
-                                +ParamFlags::NonDifferentiable);
-        callback->put_parameter("m44", m_mvec.data(4),
-                                +ParamFlags::NonDifferentiable);
-        callback->put_parameter("nodes", m_m11.nodes(),
-                                +ParamFlags::NonDifferentiable);
-        callback->put_parameter("nodes", m_mvec.nodes(),
-                                +ParamFlags::NonDifferentiable);
+        callback->put("m11", m_m11.pdf(),
+ ParamFlags::NonDifferentiable);
+        callback->put("m12", m_mvec.data(0),
+ ParamFlags::NonDifferentiable);
+        callback->put("m22", m_mvec.data(1),
+ ParamFlags::NonDifferentiable);
+        callback->put("m33", m_mvec.data(2),
+ ParamFlags::NonDifferentiable);
+        callback->put("m34", m_mvec.data(3),
+ ParamFlags::NonDifferentiable);
+        callback->put("m44", m_mvec.data(4),
+ ParamFlags::NonDifferentiable);
+        callback->put("nodes", m_m11.nodes(),
+ ParamFlags::NonDifferentiable);
+        callback->put("nodes", m_mvec.nodes(),
+ ParamFlags::NonDifferentiable);
     }
 
     void
@@ -437,7 +437,5 @@ private:
     IrregularInterpolant<Float, 5> m_mvec;
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(TabulatedPolarizedPhaseFunction, PhaseFunction)
-MI_EXPORT_PLUGIN(TabulatedPolarizedPhaseFunction,
-                 "Tabulated (polarized) phase function")
+MI_EXPORT_PLUGIN(TabulatedPolarizedPhaseFunction)
 NAMESPACE_END(mitsuba)

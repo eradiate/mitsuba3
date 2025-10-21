@@ -100,9 +100,9 @@ public:
     MishchenkoOceanBSDF(const Properties &props) : Base(props) {
         // Retrieve parameters
         m_wind_speed = props.get<ScalarFloat>("wind_speed", 0.1f);
-        m_eta        = props.texture<Texture>("eta", 1.33f);
-        m_k          = props.texture<Texture>("k", 0.f);
-        m_ext_eta    = props.texture<Texture>("ext_ior", 1.000277f);
+        m_eta        = props.get_texture<Texture>("eta", 1.33f);
+        m_k          = props.get_texture<Texture>("k", 0.f);
+        m_ext_eta    = props.get_texture<Texture>("ext_ior", 1.000277f);
         m_shadowing  = props.get<bool>("shadowing", true);
 
         update();
@@ -117,10 +117,10 @@ public:
     }
 
     void traverse(TraversalCallback *callback) override {
-        callback->put_parameter("wind_speed", m_wind_speed, +ParamFlags::Differentiable);
-        callback->put_object("eta", m_eta, +ParamFlags::Differentiable);
-        callback->put_object("k", m_k, +ParamFlags::Differentiable);
-        callback->put_object("ext_ior", m_ext_eta, +ParamFlags::Differentiable);
+        callback->put("wind_speed", m_wind_speed, ParamFlags::Differentiable);
+        callback->put("eta", m_eta, ParamFlags::Differentiable);
+        callback->put("k", m_k, ParamFlags::Differentiable);
+        callback->put("ext_ior", m_ext_eta, ParamFlags::Differentiable);
     }
 
     void
@@ -342,6 +342,5 @@ private:
     OceanProperties<Float, Spectrum> m_ocean_props;
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(MishchenkoOceanBSDF, BSDF)
-MI_EXPORT_PLUGIN(MishchenkoOceanBSDF, "Mishchenko Ocean material")
+MI_EXPORT_PLUGIN(MishchenkoOceanBSDF)
 NAMESPACE_END(mitsuba)

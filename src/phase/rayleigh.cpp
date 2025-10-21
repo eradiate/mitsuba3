@@ -45,7 +45,7 @@ public:
                 "Polarized version of Rayleigh phase function not implemented, "
                 "falling back to scalar version");
 
-        m_depolarization = props.volume<Volume>("depolarization", 0.f);
+        m_depolarization = props.get_volume<Volume>("depolarization", 0.f);
 
         if (m_depolarization->max() >= 1.f)
             Log(Error, "Depolarization factor must be in [0, 1[");
@@ -53,9 +53,9 @@ public:
         m_flags = +PhaseFunctionFlags::Anisotropic;
     }
 
-    void traverse(TraversalCallback *callback) override {
-        callback->put_object("depolarization", m_depolarization.get(),
-                             +ParamFlags::Differentiable);
+    void traverse(TraversalCallback *cb) override {
+        cb->put("depolarization", m_depolarization.get(),
+                ParamFlags::Differentiable);
     }
 
     MI_INLINE Spectrum eval_rayleigh(Float cos_theta, Spectrum rho) const {

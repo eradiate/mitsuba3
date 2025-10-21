@@ -17,7 +17,7 @@ enum class RayTargetType { Shape, Point, None };
 .. _plugin-sensor-distantflux:
 
 Distant fluxmeter sensor (:monosp:`distantflux`)
-------------------------------------------------
+-----------------------------------------------
 
 .. pluginparameters::
 
@@ -106,13 +106,13 @@ public:
         // Set ray target if relevant
         // Get target
         if (props.has_property("target")) {
-            if (props.type("target") == Properties::Type::Array3f) {
+            if (props.type("target") == Properties::Type::Vector) {
                 m_target_type = RayTargetType::Point;
                 m_target_point = props.get<ScalarPoint3f>("target");
             } else if (props.type("target") == Properties::Type::Object) {
                 // We assume it's a shape
                 m_target_type = RayTargetType::Shape;
-                auto obj = props.object("target");
+                auto obj = props.get<ref<Object>>("target");
                 m_target_shape = dynamic_cast<Shape *>(obj.get());
 
                 if (!m_target_shape)
@@ -127,10 +127,10 @@ public:
         }
 
         // Set reference surface normal (in world coords)
-        ScalarTransform4f trafo =
-            props.get<ScalarTransform4f>("to_world", ScalarTransform4f());
+        ScalarAffineTransform4f trafo =
+            props.get<ScalarAffineTransform4f>("to_world", ScalarAffineTransform4f());
         m_reference_normal =
-            trafo.transform_affine(ScalarVector3f{ 0.f, 0.f, 1.f });
+            trafo * ScalarVector3f{ 0.f, 0.f, 1.f };
     }
 
     void set_scene(const Scene *scene) override {
@@ -161,8 +161,7 @@ public:
         ray.wavelengths = wavelengths;
 
         // Sample ray direction
-        ray.d = -m_to_world.value().transform_affine(
-            warp::square_to_uniform_hemisphere(film_sample));
+        ray.d = m_to_world.value() * (-warp::square_to_uniform_hemisphere(film_sample));
 
         // Sample target point and position ray origin
         Spectrum ray_weight =
@@ -184,8 +183,7 @@ public:
             // by reference surface normal
             Point2f offset =
                 warp::square_to_uniform_disk_concentric(aperture_sample);
-            Vector3f perp_offset = m_to_world.value().transform_affine(
-                Vector3f{ offset.x(), offset.y(), 0.f });
+            Vector3f perp_offset = m_to_world.value() * Vector3f{ offset.x(), offset.y(), 0.f };
             ray.o = m_bsphere.center + perp_offset * m_bsphere.radius -
                     ray.d * m_ray_offset;
             ray_weight *= wav_weight;
@@ -265,6 +263,5 @@ protected:
     ScalarFloat m_ray_offset;
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(DistantFluxSensor, Sensor)
-MI_EXPORT_PLUGIN(DistantFluxSensor, "DistantFluxSensor")
+MI_EXPORT_PLUGIN(DistantFluxSensor)
 NAMESPACE_END(mitsuba)

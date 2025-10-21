@@ -82,21 +82,24 @@ public:
     MI_IMPORT_TYPES(Texture)
 
     RPVBSDF(const Properties &props) : Base(props) {
-        m_rho_0 = props.texture<Texture>("rho_0", 0.1f);
-        m_g = props.texture<Texture>("g", 0.f);
-        m_k = props.texture<Texture>("k", 0.1f);
-        m_rho_c = props.texture<Texture>("rho_c", m_rho_0);
+        m_rho_0 = props.get_texture<Texture>("rho_0", 0.1f);
+        m_g = props.get_texture<Texture>("g", 0.f);
+        m_k = props.get_texture<Texture>("k", 0.1f);
+        if (props.has_property("rho_c"))
+            m_rho_c = props.get_texture<Texture>("rho_c");
+        else
+            m_rho_c = m_rho_0;
         m_flags = BSDFFlags::GlossyReflection | BSDFFlags::FrontSide;
         m_components.push_back(m_flags);
     }
 
     void traverse(TraversalCallback *callback) override {
-        callback->put_object("rho_0", m_rho_0.get(),
-                             +ParamFlags::Differentiable);
-        callback->put_object("g", m_g.get(), +ParamFlags::Differentiable);
-        callback->put_object("k", m_k.get(), +ParamFlags::Differentiable);
-        callback->put_object("rho_c", m_rho_c.get(),
-                             +ParamFlags::Differentiable);
+        callback->put("rho_0", m_rho_0.get(),
+ ParamFlags::Differentiable);
+        callback->put("g", m_g.get(), ParamFlags::Differentiable);
+        callback->put("k", m_k.get(), ParamFlags::Differentiable);
+        callback->put("rho_c", m_rho_c.get(),
+ ParamFlags::Differentiable);
     }
 
     std::pair<BSDFSample3f, Spectrum> sample(const BSDFContext &ctx,
@@ -217,6 +220,5 @@ private:
     ref<Texture> m_rho_c;
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(RPVBSDF, BSDF)
-MI_EXPORT_PLUGIN(RPVBSDF, "Rahman-Pinty-Verstraete BSDF")
+MI_EXPORT_PLUGIN(RPVBSDF)
 NAMESPACE_END(mitsuba)
