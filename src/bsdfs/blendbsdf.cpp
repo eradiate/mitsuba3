@@ -79,17 +79,15 @@ public:
 
     BlendBSDF(const Properties &props) : Base(props) {
         int bsdf_index = 0;
-        for (auto &[name, obj] : props.objects(false)) {
-            auto *bsdf = dynamic_cast<Base *>(obj.get());
-            if (bsdf) {
+        for (auto &prop : props.objects()) {
+            if (Base *bsdf = prop.try_get<Base>()) {
                 if (bsdf_index == 2)
                     Throw("BlendBSDF: Cannot specify more than two child BSDFs");
                 m_nested_bsdf[bsdf_index++] = bsdf;
-                props.mark_queried(name);
             }
         }
 
-        m_weight = props.texture<Texture>("weight");
+        m_weight = props.get_texture<Texture>("weight");
         if (bsdf_index != 2)
             Throw("BlendBSDF: Two child BSDFs must be specified!");
 
@@ -101,10 +99,10 @@ public:
         m_flags = m_nested_bsdf[0]->flags() | m_nested_bsdf[1]->flags();
     }
 
-    void traverse(TraversalCallback *callback) override {
-        callback->put_object("weight", m_weight.get(),          +ParamFlags::Differentiable);
-        callback->put_object("bsdf_0", m_nested_bsdf[0].get(),  +ParamFlags::Differentiable);
-        callback->put_object("bsdf_1", m_nested_bsdf[1].get(),  +ParamFlags::Differentiable);
+    void traverse(TraversalCallback *cb) override {
+        cb->put("weight", m_weight,         ParamFlags::Differentiable);
+        cb->put("bsdf_0", m_nested_bsdf[0], ParamFlags::Differentiable);
+        cb->put("bsdf_1", m_nested_bsdf[1], ParamFlags::Differentiable);
     }
 
     std::pair<BSDFSample3f, Spectrum> sample(const BSDFContext &ctx,
@@ -233,12 +231,13 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(BlendBSDF)
 protected:
     ref<Texture> m_weight;
     ref<Base> m_nested_bsdf[2];
+
+    MI_TRAVERSE_CB(Base, m_weight, m_nested_bsdf[0], m_nested_bsdf[1])
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(BlendBSDF, BSDF)
-MI_EXPORT_PLUGIN(BlendBSDF, "BlendBSDF material")
+MI_EXPORT_PLUGIN(BlendBSDF)
 NAMESPACE_END(mitsuba)

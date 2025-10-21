@@ -18,7 +18,6 @@
 # if defined(MI_USE_OPTIX_HEADERS)
     #include <optix_function_table_definition.h>
 # endif
-    #include "../shapes/optix/mesh.cuh"
 #endif
 
 NAMESPACE_BEGIN(mitsuba)
@@ -74,17 +73,17 @@ void Mesh<Float, Spectrum>::initialize() {
 
 MI_VARIANT Mesh<Float, Spectrum>::~Mesh() {}
 
-MI_VARIANT void Mesh<Float, Spectrum>::traverse(TraversalCallback *callback) {
-    Base::traverse(callback);
+MI_VARIANT void Mesh<Float, Spectrum>::traverse(TraversalCallback *cb) {
+    Base::traverse(cb);
 
-    callback->put_parameter("faces",            m_faces,            +ParamFlags::NonDifferentiable);
-    callback->put_parameter("vertex_positions", m_vertex_positions, ParamFlags::Differentiable | ParamFlags::Discontinuous);
-    callback->put_parameter("vertex_normals",   m_vertex_normals,   ParamFlags::Differentiable | ParamFlags::Discontinuous);
-    callback->put_parameter("vertex_texcoords", m_vertex_texcoords, +ParamFlags::Differentiable);
+    cb->put("faces",            m_faces,            ParamFlags::NonDifferentiable);
+    cb->put("vertex_positions", m_vertex_positions, ParamFlags::Differentiable | ParamFlags::Discontinuous);
+    cb->put("vertex_normals",   m_vertex_normals,   ParamFlags::Differentiable | ParamFlags::Discontinuous);
+    cb->put("vertex_texcoords", m_vertex_texcoords, ParamFlags::Differentiable);
 
     // We arbitrarily chose to show all attributes as being differentiable here.
     for (auto &[name, attribute]: m_mesh_attributes)
-        callback->put_parameter(name, attribute.buf, +ParamFlags::Differentiable);
+        cb->put(name, attribute.buf, ParamFlags::Differentiable);
 }
 
 MI_VARIANT void Mesh<Float, Spectrum>::parameters_changed(const std::vector<std::string> &keys) {
@@ -156,7 +155,7 @@ MI_VARIANT void Mesh<Float, Spectrum>::parameters_changed(const std::vector<std:
             Base::initialize();
     }
 
-    Base::parameters_changed();
+    Base::parameters_changed(keys);
 }
 
 MI_VARIANT typename Mesh<Float, Spectrum>::ScalarBoundingBox3f
@@ -185,10 +184,23 @@ Mesh<Float, Spectrum>::bbox(ScalarIndex index) const {
                                                                dr::maximum(dr::maximum(v0, v1), v2));
 }
 
+MI_VARIANT void
+Mesh<Float, Spectrum>::set_bsdf(typename Mesh<Float, Spectrum>::BSDF *bsdf) {
+    bool backside_changed =
+        !m_bsdf || (bsdf && (has_flag(m_bsdf->flags(), BSDFFlags::BackSide) !=
+                             has_flag(bsdf->flags(), BSDFFlags::BackSide)));
+    m_bsdf = bsdf;
+
+    // Since `build_indirect_silhouette_distribution()` checks attributes of the BSDF
+    // while building the silhouette sampling distribution, we have to re-run it
+    // here to be safe if the relevant BSDF flags changed.
+    if (backside_changed && !m_sil_dedge_pmf.empty())
+        build_indirect_silhouette_distribution();
+}
 
 MI_VARIANT void Mesh<Float, Spectrum>::write_ply(const std::string &filename) const {
     ref<FileStream> stream =
-        new FileStream(filename, FileStream::ETruncReadWrite);
+        new FileStream(fs::path(filename), FileStream::ETruncReadWrite);
 
     Timer timer;
     Log(Info, "Writing mesh to \"%s\" ..", filename);
@@ -380,7 +392,10 @@ MI_VARIANT void Mesh<Float, Spectrum>::recompute_vertex_normals() {
                           vertex_position(fi[1]),
                           vertex_position(fi[2]) };
 
-        Vector3f n = dr::normalize(dr::cross(v[1] - v[0], v[2] - v[0]));
+        Vector3f n = dr::cross(v[1] - v[0], v[2] - v[0]);
+        Float length_sqr = dr::squared_norm(n);
+        Mask valid = length_sqr > 0;
+        n *= dr::rsqrt(length_sqr);
 
         Vector3f normals = dr::zeros<Vector3f>(m_vertex_count);
         for (int i = 0; i < 3; ++i) {
@@ -391,12 +406,15 @@ MI_VARIANT void Mesh<Float, Spectrum>::recompute_vertex_normals() {
             Vector3f nn = n * face_angle;
 
             for (int j = 0; j < 3; ++j)
-                dr::scatter_reduce(ReduceOp::Add, normals[j], nn[j], fi[i]);
+                dr::scatter_reduce(ReduceOp::Add, normals[j], nn[j], fi[i], valid);
         }
 
         // --------------------- Kernel 2 starts here ---------------------
 
-        normals = dr::normalize(normals);
+        // Normalize and fall back to dummy value in case of zero-length vector.
+        Float final_length_sqr = dr::squared_norm(normals);
+        normals = dr::select(final_length_sqr > 0, normals * dr::rsqrt(final_length_sqr),
+                             Vector3f(1.f, 0.f, 0.f));
 
         // Convert to 32-bit precision
         using JitInputNormal3f = Normal<dr::replace_scalar_t<Float, InputFloat>, 3>;
@@ -430,23 +448,13 @@ MI_VARIANT void Mesh<Float, Spectrum>::recompute_bbox() {
 
 MI_VARIANT void Mesh<Float, Spectrum>::build_pmf() {
     std::lock_guard<std::mutex> lock(m_mutex);
-    dr::scoped_symbolic_independence<Float> guard{};
 
     if (m_face_count == 0)
         Throw("Cannot create sampling table for an empty mesh: %s", to_string());
 
     if constexpr (!dr::is_jit_v<Float>) {
-        if (!m_area_pmf.empty())
-            return; // already built!
-
-        auto &&vertex_positions =
-            dr::migrate(m_vertex_positions, AllocType::Host);
-        auto &&faces = dr::migrate(m_faces, AllocType::Host);
-        if constexpr (dr::is_jit_v<Float>)
-            dr::sync_thread();
-
-        const InputFloat *pos_p  = vertex_positions.data();
-        const ScalarIndex *idx_p = faces.data();
+        const InputFloat *pos_p  = m_vertex_positions.data();
+        const ScalarIndex *idx_p = m_faces.data();
 
         std::vector<ScalarFloat> table(m_face_count);
         for (ScalarIndex i = 0; i < m_face_count; i++) {
@@ -461,8 +469,11 @@ MI_VARIANT void Mesh<Float, Spectrum>::build_pmf() {
 
         m_area_pmf = DiscreteDistribution<Float>(table.data(), m_face_count);
     } else {
+        dr::scoped_disable_symbolic<Float> guard{};
+
         Vector3u v_idx = face_indices(dr::arange<UInt32>(m_face_count));
-        Point3f p0 = vertex_position(v_idx[0]), p1 = vertex_position(v_idx[1]),
+        Point3f p0 = vertex_position(v_idx[0]),
+                p1 = vertex_position(v_idx[1]),
                 p2 = vertex_position(v_idx[2]);
 
         Float face_surface_area = .5f * dr::norm(dr::cross(p1 - p0, p2 - p0));
@@ -563,7 +574,7 @@ MI_VARIANT void Mesh<Float, Spectrum>::build_directed_edges() {
     if (non_manifold_count > 0)
         Log(Warn,
             "Mesh::build_directed_edges(): there are %d non-manifold vertices in the "
-            "follwing mesh: %s",
+            "following mesh: %s",
             non_manifold_count, to_string());
 
     m_E2E = dr::load<DynamicBuffer<UInt32>>(E2E.data(), m_face_count * 3);
@@ -580,7 +591,7 @@ MI_VARIANT void Mesh<Float, Spectrum>::build_directed_edges() {
  */
 template <typename Index>
 MI_INLINE auto pick_vertex(const dr::Array<dr::uint32_array_t<Index>, 3> &vec, const Index &offset) {
-    Index dim_mod = dr::imod(offset, 3u);
+    Index dim_mod = dr::imod(offset, 3);
     Index res = dr::select(dim_mod == 1u, vec[1], vec[0]);
     res = dr::select(dim_mod == 2u, vec[2], res);
     return res;
@@ -632,22 +643,24 @@ Mesh<Float, Spectrum>::merge(const Mesh *other) const {
         other->has_vertex_normals() != has_vertex_normals() ||
         other->has_vertex_texcoords() != has_vertex_texcoords() ||
         other->has_face_normals() != has_face_normals() ||
+        other->has_flipped_normals() != has_flipped_normals() ||
         other->has_mesh_attributes() || has_mesh_attributes())
         Throw("Mesh::merge(): the two meshes are incompatible (%s and %s)!",
               to_string(), other->to_string());
 
     Properties props;
     if (m_bsdf)
-        props.set_object("bsdf", (Object *) m_bsdf.get());
+        props.set("bsdf", (Object *) m_bsdf.get());
     if (m_interior_medium)
-        props.set_object("interior", (Object *) m_interior_medium.get());
+        props.set("interior", (Object *) m_interior_medium.get());
     if (m_exterior_medium)
-        props.set_object("exterior", (Object *) m_exterior_medium.get());
+        props.set("exterior", (Object *) m_exterior_medium.get());
     if (m_sensor)
-        props.set_object("sensor", (Object *) m_sensor.get());
+        props.set("sensor", (Object *) m_sensor.get());
     if (m_emitter)
-        props.set_object("emitter", (Object *) m_emitter.get());
-    props.set_bool("face_normals", m_face_normals);
+        props.set("emitter", (Object *) m_emitter.get());
+    props.set("face_normals", m_face_normals);
+    props.set("flip_normals", m_flip_normals);
 
     ref<Mesh> result = new Mesh(
         m_name + " + " + other->m_name, m_vertex_count + other->vertex_count(),
@@ -726,10 +739,10 @@ MI_VARIANT void Mesh<Float, Spectrum>::build_parameterization() {
     mesh->m_bbox = bbox;
     mesh->initialize();
 
-    props.set_object("mesh", mesh.get());
+    props.set("mesh", mesh.get());
 
     if (m_scene)
-        props.set_object("parent_scene", m_scene);
+        props.set("parent_scene", m_scene);
 
     m_parameterization = new Scene<Float, Spectrum>(props);
 }
@@ -817,7 +830,7 @@ Mesh<Float, Spectrum>::eval_parameterization(const Point2f &uv,
 
     PreliminaryIntersection3f pi =
         m_parameterization->ray_intersect_preliminary(
-            ray, /* coherent = */ true, active);
+            ray, /* coherent = */ true, false, 0, 0, active);
     active &= pi.is_valid();
 
     if (dr::none_or<false>(active))
@@ -949,7 +962,7 @@ Mesh<Float, Spectrum>::invert_silhouette_sample(const SilhouetteSample3f &ss,
     if (m_E2E_outdated)
         return dr::zeros<Point3f>();
 
-    // Safley ignore invalid boundary segments
+    // Safely ignore invalid boundary segments
     Mask active =
         active_ && (ss.discontinuity_type ==
                            (uint32_t) DiscontinuityFlags::PerimeterType);
@@ -1545,6 +1558,7 @@ Mesh<Float, Spectrum>::compute_surface_interaction(const Ray3f &ray,
         si.sh_frame.n = -si.sh_frame.n;
     }
 
+    si.prim_index = pi.prim_index;
     si.shape    = this;
     si.instance = nullptr;
 
@@ -1558,17 +1572,25 @@ Mesh<Float, Spectrum>::compute_surface_interaction(const Ray3f &ray,
 //! @{ \name Mesh attributes
 // =============================================================
 
-MI_VARIANT void Mesh<Float, Spectrum>::add_attribute(const std::string& name,
+MI_VARIANT typename Mesh<Float, Spectrum>::FloatStorage &
+Mesh<Float, Spectrum>::attribute_buffer(std::string_view name) {
+    auto attribute = m_mesh_attributes.find(name);
+    if (attribute == m_mesh_attributes.end())
+        Throw("attribute_buffer(): attribute %s doesn't exist.", name);
+    return attribute->second.buf;
+}
+
+MI_VARIANT void Mesh<Float, Spectrum>::add_attribute(std::string_view name,
                                                      size_t dim,
                                                      const std::vector<InputFloat>& data) {
     auto attribute = m_mesh_attributes.find(name);
     if (attribute != m_mesh_attributes.end())
-        Throw("add_attribute(): attribute %s already exists.", name.c_str());
+        Throw("add_attribute(): attribute %s already exists.", name);
 
     bool is_vertex_attr = name.find("vertex_") == 0;
     bool is_face_attr   = name.find("face_") == 0;
     if (!is_vertex_attr && !is_face_attr)
-        Throw("add_attribute(): attribute name must start with either \"vertex_\" of \"face_\".");
+        Throw("add_attribute(): attribute name must start with either \"vertex_\" or \"face_\".");
 
     MeshAttributeType type = is_vertex_attr ? MeshAttributeType::Vertex : MeshAttributeType::Face;
     size_t count = is_vertex_attr ? m_vertex_count : m_face_count;
@@ -1585,11 +1607,21 @@ MI_VARIANT void Mesh<Float, Spectrum>::add_attribute(const std::string& name,
     }
 
     FloatStorage buffer = dr::load<FloatStorage>(data.data(), count * dim);
-    m_mesh_attributes.insert({ name, { dim, type, buffer } });
+    m_mesh_attributes.insert({ std::string(name), { dim, type, buffer } });
+}
+
+MI_VARIANT void
+Mesh<Float, Spectrum>::remove_attribute(std::string_view name) {
+    const auto& it = m_mesh_attributes.find(name);
+    if (it == m_mesh_attributes.end()) {
+        // Maybe it exists as a texture attribute, try that.
+        return Base::remove_attribute(name);
+    }
+    m_mesh_attributes.erase(it);
 }
 
 MI_VARIANT typename Mesh<Float, Spectrum>::Mask
-Mesh<Float, Spectrum>::has_attribute(const std::string& name, Mask active) const {
+Mesh<Float, Spectrum>::has_attribute(std::string_view name, Mask active) const {
     const auto& it = m_mesh_attributes.find(name);
     if (it == m_mesh_attributes.end())
         return Base::has_attribute(name, active);
@@ -1597,7 +1629,7 @@ Mesh<Float, Spectrum>::has_attribute(const std::string& name, Mask active) const
 }
 
 MI_VARIANT typename Mesh<Float, Spectrum>::UnpolarizedSpectrum
-Mesh<Float, Spectrum>::eval_attribute(const std::string& name,
+Mesh<Float, Spectrum>::eval_attribute(std::string_view name,
                                       const SurfaceInteraction3f &si,
                                       Mask active) const {
     const auto& it = m_mesh_attributes.find(name);
@@ -1622,7 +1654,7 @@ Mesh<Float, Spectrum>::eval_attribute(const std::string& name,
 }
 
 MI_VARIANT Float
-Mesh<Float, Spectrum>::eval_attribute_1(const std::string& name,
+Mesh<Float, Spectrum>::eval_attribute_1(std::string_view name,
                                         const SurfaceInteraction3f &si,
                                         Mask active) const {
     const auto& it = m_mesh_attributes.find(name);
@@ -1641,7 +1673,7 @@ Mesh<Float, Spectrum>::eval_attribute_1(const std::string& name,
 }
 
 MI_VARIANT typename Mesh<Float, Spectrum>::Color3f
-Mesh<Float, Spectrum>::eval_attribute_3(const std::string& name,
+Mesh<Float, Spectrum>::eval_attribute_3(std::string_view name,
                                         const SurfaceInteraction3f &si,
                                         Mask active) const {
     const auto& it = m_mesh_attributes.find(name);
@@ -1765,7 +1797,7 @@ Mesh<Float, Spectrum>::bbox(ScalarIndex index, const ScalarBoundingBox3f &clip) 
 
 MI_VARIANT std::string Mesh<Float, Spectrum>::to_string() const {
     std::ostringstream oss;
-    oss << class_()->name() << "[" << std::endl
+    oss << class_name() << "[" << std::endl
         << "  name = \"" << m_name << "\"," << std::endl
         << "  bbox = " << string::indent(m_bbox) << "," << std::endl
         << "  vertex_count = " << m_vertex_count << "," << std::endl
@@ -1842,6 +1874,7 @@ MI_VARIANT void Mesh<Float, Spectrum>::optix_prepare_geometry() { }
 
 MI_VARIANT void Mesh<Float, Spectrum>::optix_build_input(OptixBuildInput &build_input) const {
     m_vertex_buffer_ptr = (void*) m_vertex_positions.data(); // triggers dr::eval()
+
     build_input.type                           = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
     build_input.triangleArray.vertexFormat     = OPTIX_VERTEX_FORMAT_FLOAT3;
     build_input.triangleArray.indexFormat      = OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
@@ -1858,6 +1891,6 @@ MI_VARIANT bool Mesh<Float, Spectrum>::parameters_grad_enabled() const {
     return dr::grad_enabled(m_vertex_positions);
 }
 
-MI_IMPLEMENT_CLASS_VARIANT(Mesh, Shape)
+MI_IMPLEMENT_TRAVERSE_CB(Mesh, Base)
 MI_INSTANTIATE_CLASS(Mesh)
 NAMESPACE_END(mitsuba)
