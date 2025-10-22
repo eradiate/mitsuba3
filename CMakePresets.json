@@ -7,6 +7,7 @@
         "generator": "Ninja",
         "cacheVariables": {
             "CMAKE_BUILD_TYPE": "Release",
+            "DRJIT_ENABLE_LEAK_WARNINGS": "OFF",
             "MI_ENABLE_EMBREE": "OFF",
             "MI_DEFAULT_VARIANTS": "scalar_mono;scalar_mono_double;scalar_mono_polarized;scalar_mono_polarized_double;scalar_rgb;scalar_spectral;llvm_ad_rgb;llvm_ad_spectral_polarized"
         }
