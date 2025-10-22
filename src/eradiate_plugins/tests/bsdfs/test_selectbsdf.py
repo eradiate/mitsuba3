@@ -4,25 +4,27 @@ import numpy as np
 
 data = np.expand_dims([[0, 1], [2, 3]], axis=-1)
 colors = {"red": (1, 0, 0), "green": (0, 1, 0), "blue": (0, 0, 1), "white": (1, 1, 1)}
-bsdf = {
-    "type": "selectbsdf",
-    "id": "mat_select",
-    "indices": {
-        "type": "bitmap",
-        "data": data,
-        "raw": True,
-        "filter_type": "nearest",
-        "wrap_mode": "clamp",
-    },
-    **{
-        f"bsdf_{i}": {"type": "diffuse", "reflectance": {"type": "rgb", "value": color}}
-        for i, color in enumerate(colors.values())
-    },
-}
+
+def get_bsdf():
+    return {
+        "type": "selectbsdf",
+        "id": "mat_select",
+        "indices": {
+            "type": "bitmap",
+            "data": mi.TensorXf(data),
+            "raw": True,
+            "filter_type": "nearest",
+            "wrap_mode": "clamp",
+        },
+        **{
+            f"bsdf_{i}": {"type": "diffuse", "reflectance": {"type": "rgb", "value": color}}
+            for i, color in enumerate(colors.values())
+        },
+    }
 
 
 def test01_create(variant_scalar_rgb):
-    b = mi.load_dict(bsdf)
+    b = mi.load_dict(get_bsdf())
     assert b is not None
     assert b.component_count() == 4
     assert b.flags(0) == mi.BSDFFlags.DiffuseReflection | mi.BSDFFlags.FrontSide
@@ -30,7 +32,7 @@ def test01_create(variant_scalar_rgb):
 
 
 def test02_eval_scalar(variant_scalar_rgb):
-    b = mi.load_dict(bsdf)
+    b = mi.load_dict(get_bsdf())
     si = dr.zeros(mi.SurfaceInteraction3f)
     si.t = 0.0
     si.wi = [0, 0, 1]
@@ -51,7 +53,7 @@ def test02_eval_scalar(variant_scalar_rgb):
 
 
 def test03_eval_vec(variants_vec_backends_once_rgb):
-    b = mi.load_dict(bsdf)
+    b = mi.load_dict(get_bsdf())
     si = dr.zeros(mi.SurfaceInteraction3f)
     si.t = [0.0] * 4
     si.wi = mi.Vector3f([[0] * 4, [0] * 4, [1] * 4])
