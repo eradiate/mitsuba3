@@ -23,5 +23,6 @@ MI_PY_EXPORT(DiscontinuityFlags) {
         .def_value(ShapeType, Sphere)
         .def_value(ShapeType, Ellipsoids)
         .def_value(ShapeType, EllipsoidsMesh)
+        .def_value(ShapeType, AnalyticalRectangle)
         .def_value(ShapeType, Invalid);
 }

@@ -54,6 +54,9 @@ enum class ShapeType : uint32_t {
     /// ShapeGroup (`shapegroup`)
     ShapeGroup = 1u << 11,
 
+    /// AnalyticalRectangle (`arectangle`)
+    AnalyticalRectangle = 1u << 12,
+
     /// Invalid for default initialization
     Invalid = 0
 };

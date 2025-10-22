@@ -8925,6 +8925,8 @@ static const char *__doc_mitsuba_ShapeKDTree_to_string = R"doc(Return a human-re
 
 static const char *__doc_mitsuba_ShapeType = R"doc(Enumeration of all shape types in Mitsuba)doc";
 
+static const char *__doc_mitsuba_ShapeType_AnalyticalRectangle = R"doc(AnalyticalRectangle (`arectangle`))doc";
+
 static const char *__doc_mitsuba_ShapeType_BSplineCurve = R"doc(B-Spline curves (`bsplinecurve`))doc";
 
 static const char *__doc_mitsuba_ShapeType_Cylinder = R"doc(Cylinders (`cylinder`))doc";
