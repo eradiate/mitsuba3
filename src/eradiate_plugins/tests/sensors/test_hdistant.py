@@ -4,8 +4,35 @@ import numpy as np
 import pytest
 
 
-def sensor_dict(target=None, to_world=None):
+def sensor_dict(target=None, film="1x1", to_world=None):
     result = {"type": "hdistant"}
+
+    if film == "1x1":
+        result.update(
+            {
+                "film": {
+                    "type": "hdrfilm",
+                    "width": 1,
+                    "height": 1,
+                    "rfilter": {"type": "box"},
+                }
+            }
+        )
+
+    elif film == "32x32":
+        result.update(
+            {
+                "film": {
+                    "type": "hdrfilm",
+                    "width": 32,
+                    "height": 32,
+                    "rfilter": {"type": "box"},
+                }
+            }
+        )
+
+    else:
+        raise ValueError("unhandled film parameter value")
 
     if to_world is not None:
         result["to_world"] = to_world
@@ -28,7 +55,9 @@ def make_sensor(d):
 
 def test_construct(variant_scalar_rgb):
     # Construct without parameters
-    sensor = make_sensor({"type": "hdistant"})
+    sensor = make_sensor(
+        {"type": "hdistant", "film": {"type": "hdrfilm", "rfilter": {"type": "box"}}}
+    )
     assert sensor is not None
     assert not sensor.bbox().valid()  # Degenerate bounding box
 
@@ -63,7 +92,7 @@ def test_sample_ray_direction(variant_scalar_rgb):
     sensor = make_sensor(sensor_dict())
 
     # Check that directions are appropriately set
-    for (sample1, sample2, expected) in [
+    for sample1, sample2, expected in [
         [[0.5, 0.5], [0.16, 0.44], [0, 0, -1]],
         [[0.0, 0.0], [0.23, 0.40], [0.707107, 0.707107, 0]],
         [[1.0, 0.0], [0.22, 0.81], [-0.707107, 0.707107, 0]],
@@ -95,8 +124,8 @@ def test_sample_target(variant_scalar_rgb, sensor_setup, w_e):
 
     # Basic illumination and sensing parameters
     l_e = 1.0  # Emitted radiance
-    w_e = list(w_e / np.linalg.norm(w_e))  # Emitter direction
-    cos_theta_e = abs(np.dot(w_e, [0, 0, 1]))
+    w_e = dr.normalize(mi.Vector3f(w_e))  # Emitter direction
+    cos_theta_e = abs(dr.dot(w_e, [0, 0, 1]))
 
     # Reflecting surface specification
     surface_scale = 1.0
@@ -159,7 +188,7 @@ def test_sample_target(variant_scalar_rgb, sensor_setup, w_e):
             },
             "sampler": {
                 "type": "independent",
-                "sample_count": 1000000,
+                "sample_count": 1_000_000,
             },
             "film": {
                 "type": "hdrfilm",
@@ -177,6 +206,7 @@ def test_sample_target(variant_scalar_rgb, sensor_setup, w_e):
             },
             "film": {
                 "type": "hdrfilm",
+                "component_format": "float16",
                 "height": 16,
                 "width": 16,
                 "rfilter": {"type": "box"},
@@ -207,27 +237,23 @@ def test_sample_target(variant_scalar_rgb, sensor_setup, w_e):
         "shape": {
             "type": "rectangle",
             "to_world": mi.ScalarTransform4f().scale(surface_scale),
-            "bsdf": {
-                "type": "diffuse",
-                "reflectance": rho,
-            },
+            "bsdf": {"type": "diffuse", "reflectance": rho},
         },
-        "emitter": {"type": "directional", "direction": w_e, "irradiance": l_e},
+        "emitter": {
+            "type": "directional",
+            "direction": w_e,
+            "irradiance":l_e,
+        },
         "integrator": {"type": "path"},
     }
 
     scene = mi.load_dict({**scene_dict, "sensor": sensors[sensor_setup]})
 
     # Run simulation
-    mi.render(scene)
-    result = np.array(
-        scene.sensors()[0]
-        .film()
-        .bitmap()
-        .convert(mi.Bitmap.PixelFormat.RGB, mi.Struct.Type.Float32, False)
-    ).squeeze()
+    result = mi.render(scene)
+    result = result.numpy().squeeze()
 
-    l_o = l_e * cos_theta_e * rho / np.pi  # Outgoing radiance
+    l_o = l_e * cos_theta_e * rho / dr.pi  # Outgoing radiance
     expected = {  # Special expected values for some cases
         "default": l_o * 2.0 / dr.pi,
         "target_square_large": l_o * 0.25,
@@ -240,7 +266,7 @@ def test_sample_target(variant_scalar_rgb, sensor_setup, w_e):
     }
     rtol_value = rtol.get(sensor_setup, 5e-3)
 
-    assert np.allclose(result, expected_value, rtol=rtol_value)
+    np.testing.assert_allclose(result, expected_value, rtol=rtol_value)
 
 
 @pytest.mark.parametrize("target", ("point", "shape"))
@@ -304,7 +330,11 @@ def test_checkerboard(variants_all_rgb):
                 },
             },
         },
-        "emitter": {"type": "directional", "direction": [0, 0, -1], "irradiance": 1.0},
+        "emitter": {
+            "type": "directional",
+            "direction": [0, 0, -1],
+            "irradiance": 1.0,
+        },
         "sensor0": {
             "type": "hdistant",
             "target": {"type": "rectangle"},
@@ -341,13 +371,8 @@ def test_checkerboard(variants_all_rgb):
     }
 
     scene = mi.load_dict(scene_dict)
-    mi.render(scene)
-    result = np.array(
-        scene.sensors()[0]
-        .film()
-        .bitmap()
-        .convert(mi.Bitmap.PixelFormat.RGB, mi.Struct.Type.Float32, False)
-    ).squeeze()
+    result = mi.render(scene)
+    result = result.numpy().squeeze()
 
     expected = l_e * 0.5 * (rho0 + rho1) / dr.pi
-    assert np.allclose(result, expected, atol=1e-3)
+    np.testing.assert_allclose(result, expected, atol=1e-3)

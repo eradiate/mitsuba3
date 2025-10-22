@@ -31,6 +31,9 @@ def sensor_dict(target=None, film="1x1", to_world=None):
             }
         )
 
+    else:
+        raise ValueError("unhandled film parameter value")
+
     if to_world is not None:
         result["to_world"] = to_world
 
@@ -48,7 +51,9 @@ def sensor_dict(target=None, film="1x1", to_world=None):
 
 def test_construct(variant_scalar_rgb):
     # Construct without parameters
-    sensor = mi.load_dict({"type": "distantflux"})
+    sensor = mi.load_dict(
+        {"type": "distantflux", "film": {"type": "hdrfilm", "rfilter": {"type": "box"}}}
+    )
     assert sensor is not None
     assert not sensor.bbox().valid()  # Degenerate bounding box
 
@@ -88,7 +93,7 @@ def test_sample_ray_direction(variant_scalar_rgb):
     sensor = mi.load_dict(sensor_dict())
 
     # Check that directions are appropriately set
-    for (sample1, sample2, expected) in [
+    for sample1, sample2, expected in [
         [[0.5, 0.5], [0.16, 0.44], [0, 0, -1]],
         [[0.0, 0.0], [0.23, 0.40], [0.707107, 0.707107, 0]],
         [[1.0, 0.0], [0.22, 0.81], [-0.707107, 0.707107, 0]],
@@ -242,27 +247,29 @@ def test_sample_ray_target(variant_scalar_rgb, sensor_setup):
     }
 
     scene = mi.load_dict({**scene_dict, "sensor": sensors[sensor_setup]})
+    # sensor = scene.sensors()[0]
+
+    # for (sample1, sample2) in [
+    #     [[0.32, 0.87], [0.16, 0.44]],
+    #     [[0.17, 0.44], [0.22, 0.81]],
+    #     [[0.12, 0.82], [0.99, 0.42]],
+    #     [[0.72, 0.40], [0.01, 0.61]],
+    # ]:
+    #     ray, origin = sensor.sample_ray(1.0, 1.0, sample1, sample2, True)
+    #     # print(sensor.sample_ray(1.0, 1.0, sample1, sample2, True))
+    #     print(scene.ray_intersect(ray))
 
     # Run simulation
-    sensor = scene.sensors()[0]
-    scene.integrator().render(scene, sensor)
+    result = mi.render(scene)
 
     # Check result
-    result = (
-        np.array(
-            sensor.film()
-            .bitmap()
-            .convert(mi.Bitmap.PixelFormat.Y, mi.Struct.Type.Float32, False)
-        )
-        .squeeze()
-        .sum()
-    )
+    result = result.numpy().sum(axis=(0, 1))
 
     irradiance = (
         l_e * cos_theta_e
     )  # Irradiance accounting for slanting factor of targeted surface
     expected = {  # Special expected values for some cases
-        "default": irradiance * (2.0 / np.pi),
+        "default": irradiance * (2.0 / dr.pi),
         "target_square_large": irradiance * 0.25,
     }
     expected_value = expected.get(
@@ -274,12 +281,12 @@ def test_sample_ray_target(variant_scalar_rgb, sensor_setup):
     }
     rtol_value = rtol.get(sensor_setup, 1e-3)
 
-    assert np.allclose(result, expected_value, rtol=rtol_value)
+    np.testing.assert_allclose(result, expected_value, rtol=rtol_value)
 
 
 def test_checkerboard(variant_scalar_rgb):
     """
-    Very basic render test with checkboard texture and square target.
+    Very basic render test with checkerboard texture and square target.
     """
     irradiance = 1.0
     rho0 = 0.5
@@ -341,14 +348,11 @@ def test_checkerboard(variant_scalar_rgb):
     }
 
     scene = mi.load_dict(scene_dict)
-
-    sensor = scene.sensors()[0]
-    scene.integrator().render(scene, sensor)
-
-    data = np.array(sensor.film().bitmap()).squeeze().sum()
+    result = mi.render(scene)
+    result = result.numpy().squeeze().sum(axis=(0, 1))
 
     expected = irradiance * 0.5 * (rho0 + rho1)
-    assert np.allclose(data, expected, atol=1e-3)
+    assert np.allclose(result, expected, atol=1e-3)
 
 
 @pytest.mark.slow

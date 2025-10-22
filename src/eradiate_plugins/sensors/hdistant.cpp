@@ -151,7 +151,7 @@ radiance is averaged over the targeted geometry.
 
    * While setting ``target`` using any shape plugin is possible, only specific
      configurations will produce meaningful results. This is due to ray sampling
-     method: when ``target`` is a shape, a point is sampled at its  surface,
+     method: when ``target`` is a shape, a point is sampled at its surface,
      then shifted along the ``-direction`` vector by the diameter of the scene's
      bounding sphere, effectively positioning the ray origin outside of the
      geometry. The ray's weight is set to :math:`\frac{1}{A \, p}`, where
@@ -171,7 +171,8 @@ radiance is averaged over the targeted geometry.
 template <typename Float, typename Spectrum>
 class HemisphericalDistantSensor final : public Sensor<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(Sensor, m_to_world, m_film)
+    MI_IMPORT_BASE(Sensor, m_to_world, m_film, m_needs_sample_2,
+                   m_needs_sample_3, sample_wavelengths)
     MI_IMPORT_TYPES(Scene, Shape)
 
     HemisphericalDistantSensor(const Properties &props) : Base(props) {
@@ -210,6 +211,9 @@ public:
             m_target_type = RayTargetType::None;
             Log(Debug, "No target specified.");
         }
+
+        m_needs_sample_2 = true;
+        m_needs_sample_3 = true;
     }
 
     void set_scene(const Scene *scene) override {
@@ -224,18 +228,20 @@ public:
                                : 2.f * m_bsphere.radius;
     }
 
-    std::pair<Ray3f, Spectrum> sample_ray(Float time, Float wavelength_sample,
-                                          const Point2f &film_sample,
-                                          const Point2f &aperture_sample,
-                                          Mask active) const override {
-        MI_MASKED_FUNCTION(ProfilerPhase::EndpointSampleRay, active);
+    std::pair<Ray3f, Spectrum>
+    sample_ray(Float time, Float wavelength_sample,
+                    const Point2f &film_sample,
+                    const Point2f &aperture_sample, Mask active) const override {
+        MI_MASK_ARGUMENT(active);
 
         Ray3f ray;
         ray.time = time;
 
         // Sample spectrum
         auto [wavelengths, wav_weight] =
-            sample_wavelength<Float, Spectrum>(wavelength_sample);
+            sample_wavelengths(dr::zeros<SurfaceInteraction3f>(),
+                               wavelength_sample,
+                               active);
         ray.wavelengths = wavelengths;
 
         // Sample ray direction
@@ -279,11 +285,10 @@ public:
 
         // Sample spectrum
         auto [wavelengths, wav_weight] =
-            sample_wavelength<Float, Spectrum>(wavelength_sample);
+            sample_wavelengths(dr::zeros<SurfaceInteraction3f>(),
+                               wavelength_sample,
+                               active);
         ray.wavelengths = wavelengths;
-
-        // Sample ray origin
-        Spectrum ray_weight = 0.f;
 
         // Sample ray direction
         ray.d = m_to_world.value() * (
@@ -296,6 +301,8 @@ public:
                 Point2f{ film_sample.x(), film_sample.y() + m_d.y() }));
 
         // Sample target point and position ray origin
+        Spectrum ray_weight = 0.f;
+
         if (m_target_type == RayTargetType::Point) {
             ray.o = m_target_point - ray.d * m_ray_offset;
             ray.o_x = m_target_point - ray.d_x * m_ray_offset;
@@ -332,17 +339,18 @@ public:
     ScalarBoundingBox3f bbox() const override { return ScalarBoundingBox3f(); }
 
     std::string to_string() const override {
+        using string::indent;
         std::ostringstream oss;
         oss << "HemisphericalDistantSensor[" << std::endl
-            << "  to_world = " << string::indent(m_to_world, 13) << "," << std::endl
-            << "  film = " << string::indent(m_film) << "," << std::endl;
+            << "  to_world = " << indent(m_to_world, 13) << "," << std::endl
+            << "  film = " << indent(m_film) << "," << std::endl;
 
         if (m_target_type == RayTargetType::Point)
             oss << "  target = " << m_target_point << "," << std::endl;
         else if (m_target_type == RayTargetType::Shape)
-            oss << "  target = " << string::indent(m_target_shape) << "," << std::endl;
+            oss << "  target = " << indent(m_target_shape) << "," << std::endl;
         else // if (m_target_type == RayTargetType::None)
-            oss << "  target = None" << "," << std::endl;
+            oss << "  target = none" << "," << std::endl;
 
         oss << "  ray_offset = " << m_ray_offset << std::endl << "]";
 

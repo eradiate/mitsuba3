@@ -88,7 +88,7 @@ template <typename Float, typename Spectrum>
 class MultiDistantSensor final : public Sensor<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Sensor, m_to_world, m_film, m_needs_sample_2,
-                   m_needs_sample_3)
+                   m_needs_sample_3, sample_wavelengths)
     MI_IMPORT_TYPES(Scene, Shape)
 
     using Matrix = dr::Matrix<Float, AffineTransform4f::Size>;
@@ -200,7 +200,9 @@ public:
 
         // Sample spectrum
         auto [wavelengths, wav_weight] =
-            sample_wavelength<Float, Spectrum>(wavelength_sample);
+            sample_wavelengths(dr::zeros<SurfaceInteraction3f>(),
+                               wavelength_sample,
+                               active);
         ray.wavelengths = wavelengths;
 
         // Select sub-sensor
@@ -261,15 +263,16 @@ public:
     ScalarBoundingBox3f bbox() const override { return ScalarBoundingBox3f(); }
 
     std::string to_string() const override {
+        using string::indent;
         std::ostringstream oss;
         oss << "MultiDistantSensor[" << std::endl
-            << "  transforms = " << string::indent(m_transforms.array()) << "," << std::endl
-            << "  film = " << string::indent(m_film) << "," << std::endl;
+            << "  transforms = " << indent(m_transforms.array()) << "," << std::endl
+            << "  film = " << indent(m_film) << "," << std::endl;
 
         if (m_target_type == RayTargetType::Point)
             oss << "  target = " << m_target_point << "," << std::endl;
         else if (m_target_type == RayTargetType::Shape)
-            oss << "  target = " << string::indent(m_target_shape) << "," << std::endl;
+            oss << "  target = " << indent(m_target_shape) << "," << std::endl;
         else // if (m_target_type == RayTargetType::None)
             oss << "  target = none" << "," << std::endl;
 

@@ -226,16 +226,17 @@ public:
     ScalarBoundingBox3f bbox() const override { return ScalarBoundingBox3f(); }
 
     std::string to_string() const override {
+        using string::indent;
         std::ostringstream oss;
         oss << "DistantFluxSensor[" << std::endl
             << "  reference_normal = " << m_reference_normal << "," << std::endl
-            << "  to_world = " << string::indent(m_to_world) << "," << std::endl
-            << "  film = " << string::indent(m_film) << "," << std::endl;
+            << "  to_world = " << indent(m_to_world, 13) << "," << std::endl
+            << "  film = " << indent(m_film) << "," << std::endl;
 
         if (m_target_type == RayTargetType::Point)
             oss << "  target = " << m_target_point << "," << std::endl;
         else if (m_target_type == RayTargetType::Shape)
-            oss << "  target = " << string::indent(m_target_shape) << "," << std::endl;
+            oss << "  target = " << indent(m_target_shape) << "," << std::endl;
         else // if (m_target_type == RayTargetType::None)
             oss << "  target = None" << "," << std::endl;
 

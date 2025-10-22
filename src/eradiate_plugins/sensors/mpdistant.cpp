@@ -222,8 +222,8 @@ public:
 
     std::pair<Ray3f, Spectrum>
     sample_ray(Float time, Float wavelength_sample,
-                    const Point2f &film_sample,
-                    const Point2f &/*aperture_sample*/, Mask active) const override {
+               const Point2f &film_sample,
+               const Point2f &/*aperture_sample*/, Mask active) const override {
         MI_MASK_ARGUMENT(active);
 
         Ray3f ray;
@@ -296,20 +296,21 @@ public:
     ScalarBoundingBox3f bbox() const override { return ScalarBoundingBox3f(); }
 
     std::string to_string() const override {
+        using string::indent;
         std::ostringstream oss;
         oss << "MultiPixelDistantSensor[" << std::endl
-            << "  to_world = " << string::indent(m_to_world, 13) << "," << std::endl
-            << "  film = " << string::indent(m_film) << "," << std::endl
+            << "  to_world = " << indent(m_to_world, 13) << "," << std::endl
+            << "  film = " << indent(m_film) << "," << std::endl
             << "  ray_offset = " << m_ray_offset << "," << std::endl;
 
         if constexpr (TargetType == RayTargetType::Point)
             oss << "  target = " << m_target_point << "," << std::endl
                 << "  target_radius = " << m_target_radius << std::endl;
         else if constexpr (TargetType == RayTargetType::Shape)
-            oss << "  target = " << string::indent(m_target_shape) << std::endl;
+            oss << "  target = " << indent(m_target_shape) << std::endl;
         else // if constexpr (TargetType == RayTargetType::None)
             oss << "  target = none" << "," << std::endl
-                << "  bsphere = " << string::indent(m_bsphere) << std::endl;
+                << "  bsphere = " << indent(m_bsphere) << std::endl;
 
         oss << "]";
 

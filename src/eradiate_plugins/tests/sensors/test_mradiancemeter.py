@@ -2,7 +2,6 @@ import random
 
 import drjit as dr
 import mitsuba as mi
-import numpy as np
 import pytest
 
 
@@ -168,7 +167,7 @@ def test_render(variant_scalar_rgb, radiance):
 
     scene = mi.load_dict(scene_dict)
     img = mi.render(scene)
-    assert np.allclose(np.array(img), radiance)
+    assert dr.allclose(img, radiance)
 
 
 def test_render_complex(variant_scalar_rgb):
@@ -201,7 +200,7 @@ def test_render_complex(variant_scalar_rgb):
             "direction": (0, 0, -1),
             "irradiance": {"type": "uniform", "value": 1},
         },
-        "light_rectangle": {
+        "bright_rectangle": {
             "type": "rectangle",
             "to_world": mi.ScalarTransform4f().translate((-2, 0, 0)),
             "bsdf": {
@@ -229,7 +228,7 @@ def test_render_complex(variant_scalar_rgb):
 
     scene = mi.load_dict(scene_dict)
     img = mi.render(scene)
-    data = np.squeeze(np.array(img))
+    data = img[0]
 
-    assert np.isclose(data[0] / data[1], 2, atol=1e-3)
+    assert dr.allclose(data[0] / data[1], 2, atol=1e-3)
     assert data[2] == 0

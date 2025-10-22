@@ -130,10 +130,10 @@ def test_sample_target(variant_scalar_rgb, sensor_setup, w_e, w_o):
     """
     # Basic illumination and sensing parameters
     l_e = 1.0  # Emitted radiance
-    w_e = list(w_e / np.linalg.norm(w_e))  # Emitter direction
-    w_o = list(w_o / np.linalg.norm(w_o))  # Sensor direction
-    cos_theta_e = abs(np.dot(w_e, [0, 0, 1]))
-    cos_theta_o = abs(np.dot(w_o, [0, 0, 1]))
+    w_e = dr.normalize(mi.Vector3f(w_e)) # Emitter direction
+    w_o = dr.normalize(mi.Vector3f(w_o)) # Sensor direction
+    cos_theta_e = abs(dr.dot(w_e, [0, 0, 1]))
+    cos_theta_o = abs(dr.dot(w_o, [0, 0, 1]))
 
     # Reflecting surface specification
     surface_scale = 1.0
@@ -262,19 +262,14 @@ def test_sample_target(variant_scalar_rgb, sensor_setup, w_e, w_o):
 
     # Run simulation
     scene = mi.load_dict({**scene_dict, "sensor": sensors[sensor_setup]})
-    sensor = scene.sensors()[0]
-    scene.integrator().render(scene, sensor)
+    result = mi.render(scene)
 
     # Check result
-    result = np.array(
-        sensor.film()
-        .bitmap()
-        .convert(mi.Bitmap.PixelFormat.RGB, mi.Struct.Type.Float32, False)
-    ).squeeze()
+    result = result.numpy().squeeze()
 
-    l_o = l_e * cos_theta_e * rho / np.pi  # Outgoing radiance
+    l_o = l_e * cos_theta_e * rho / dr.pi  # Outgoing radiance
     expected = {  # Special expected values for some cases (when rays are "lost")
-        "default": l_o * (2.0 / np.pi) * cos_theta_o,
+        "default": l_o * (2.0 / dr.pi) * cos_theta_o,
         "target_square_large": l_o * 0.25,
     }
     expected_value = expected.get(sensor_setup, l_o)
@@ -284,7 +279,7 @@ def test_sample_target(variant_scalar_rgb, sensor_setup, w_e, w_o):
     }
     rtol_value = rtol.get(sensor_setup, 5e-3)
 
-    assert np.allclose(result, expected_value, rtol=rtol_value)
+    np.testing.assert_allclose(result, expected_value, rtol=rtol_value)
 
 
 def test_checkerboard(variant_scalar_rgb):
@@ -349,16 +344,11 @@ def test_checkerboard(variant_scalar_rgb):
     }
 
     scene = mi.load_dict(scene_dict)
-    sensor = scene.sensors()[0]
-    scene.integrator().render(scene, sensor)
-    result = np.array(
-        sensor.film()
-        .bitmap()
-        .convert(mi.Bitmap.PixelFormat.RGB, mi.Struct.Type.Float32, False)
-    ).squeeze()
+    result = mi.render(scene)
+    result = result.numpy().squeeze()
 
-    expected = l_o * 0.5 * (rho0 + rho1) / np.pi
-    assert np.allclose(result, expected, atol=1e-3)
+    expected = l_o * 0.5 * (rho0 + rho1) / dr.pi
+    np.testing.assert_allclose(result, expected, atol=1e-3)
 
 
 @pytest.mark.parametrize("offset", [0.9, 0.5, 0.1])
@@ -419,9 +409,9 @@ def test_ray_offset(variant_scalar_rgb, offset, sigma):
             },
         }
     )
-    result = np.squeeze(mi.render(scene, spp=4**8))
+    result = mi.render(scene, spp=4**8)
     expected = (
-        rho * np.exp(-sigma * (l + offset)) / np.pi
+        rho * dr.exp(-sigma * (l + offset)) / dr.pi
     )  # geometric distance is l + offset
     # Fairly loose criterion, but a stricter one requires too many samples
-    assert np.isclose(result, expected, rtol=1e-2), f"{result = }, {expected = }"
+    assert dr.allclose(result, expected, rtol=1e-2), f"{result = }, {expected = }"
