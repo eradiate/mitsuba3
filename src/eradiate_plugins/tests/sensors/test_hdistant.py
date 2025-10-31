@@ -235,7 +235,7 @@ def test_sample_target(variant_scalar_rgb, sensor_setup, w_e):
     scene_dict = {
         "type": "scene",
         "shape": {
-            "type": "rectangle",
+            "type": "arectangle",
             "to_world": mi.ScalarTransform4f().scale(surface_scale),
             "bsdf": {"type": "diffuse", "reflectance": rho},
         },

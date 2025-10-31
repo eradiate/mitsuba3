@@ -235,7 +235,7 @@ def test_sample_ray_target(variant_scalar_rgb, sensor_setup):
     scene_dict = {
         "type": "scene",
         "shape": {
-            "type": "rectangle",
+            "type": "arectangle",
             "to_world": mi.ScalarTransform4f().scale(surface_scale),
             "bsdf": {
                 "type": "diffuse",
@@ -296,7 +296,7 @@ def test_checkerboard(variant_scalar_rgb):
     scene_dict = {
         "type": "scene",
         "shape": {
-            "type": "rectangle",
+            "type": "arectangle",
             "bsdf": {
                 "type": "diffuse",
                 "reflectance": {
@@ -407,7 +407,7 @@ def test_lobe(variant_scalar_rgb, bsdf, w_e):
     scene_dict = {
         "type": "scene",
         "shape": {
-            "type": "rectangle",
+            "type": "arectangle",
             "to_world": mi.ScalarTransform4f().scale(surface_scale),
             "bsdf": bsdf_dict,
         },
