@@ -1,6 +1,5 @@
 import drjit as dr
 import mitsuba as mi
-import numpy as np
 import pytest
 
 _bsdf_dict = {
@@ -9,7 +8,7 @@ _bsdf_dict = {
     "wavelength": 1600,
     "water_body_reflectance": 0.0,
     "wind_speed": 2.0,
-    "eta":1.336949,
+    "eta": 1.336949,
 }
 
 
@@ -30,6 +29,7 @@ def test_chi2_oceanic(variants_vec_backends_once_rgb):
     )
 
     assert chi2.run()
+
 
 def test_create_oceanic(variants_vec_backends_once_rgb):
     # Test constructor of oceanic BSDF
