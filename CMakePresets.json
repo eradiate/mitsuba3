@@ -1,26 +1,32 @@
 {
     "version": 3,
     "configurePresets": [{
-        "name": "eradiate",
-        "displayName": "Eradiate Config",
-        "description": "Eradiate kernel (mitsuba3) build using Ninja generator",
-        "generator": "Ninja",
+        "name": "eradiate_core",
+        "displayName": "Eradiate core configuration",
+        "description": "Eradiate kernel (mitsuba3) core build with Embree off and required variants",
         "cacheVariables": {
-            "CMAKE_BUILD_TYPE": "Release",
-            "DRJIT_ENABLE_LEAK_WARNINGS": "OFF",
             "MI_ENABLE_EMBREE": "OFF",
             "MI_DEFAULT_VARIANTS": "scalar_mono;scalar_mono_double;scalar_mono_polarized;scalar_mono_polarized_double;scalar_rgb;scalar_spectral;llvm_ad_rgb;llvm_ad_spectral_polarized"
         }
     },{
+        "name": "eradiate",
+        "inherits": "eradiate_core",
+        "displayName": "Eradiate default development configuration",
+        "description": "Eradiate kernel (mitsuba3) build using Ninja generator",
+        "generator": "Ninja",
+        "cacheVariables": {
+            "CMAKE_BUILD_TYPE": "Release",
+            "DRJIT_ENABLE_LEAK_WARNINGS": "OFF"
+        }
+    },{
         "name": "eradiate_debug",
+        "inherits": "eradiate",
         "displayName": "Eradiate Debug Config",
         "description": "Eradiate kernel (mitsuba3) build using Ninja generator with debug symbols and no optimisation flags",
         "generator": "Ninja",
         "cacheVariables": {
             "CMAKE_BUILD_TYPE": "Debug",
-            "CMAKE_CXX_FLAGS": "-O0 -g3",
-            "MI_ENABLE_EMBREE": "OFF",
-            "MI_DEFAULT_VARIANTS": "scalar_mono;scalar_mono_double;scalar_mono_polarized;scalar_mono_polarized_double;scalar_rgb;scalar_spectral;llvm_ad_rgb;llvm_ad_spectral_polarized"
+            "CMAKE_CXX_FLAGS": "-O0 -g3"
         }
     }],
     "buildPresets": [{
