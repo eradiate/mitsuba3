@@ -90,25 +90,21 @@ public:
     using Complex2u = dr::Complex<UnpolarizedSpectrum>;
 
     MaignanBSDF(const Properties &props) : Base(props) {
-        m_C   = props.texture<Texture>("C", 0.1f);
-        m_ndvi    = props.texture<Texture>("ndvi", 0.f);
-        m_refr_re = props.texture<Texture>("refr_re", 1.5f);
-        m_refr_im = props.texture<Texture>("refr_im", 0.f);
-        m_ext_eta = props.texture<Texture>("ext_ior", 1.000277f);
+        m_C       = props.get_texture<Texture>("C", 0.1f);
+        m_ndvi    = props.get_texture<Texture>("ndvi", 0.f);
+        m_refr_re = props.get_texture<Texture>("refr_re", 1.5f);
+        m_refr_im = props.get_texture<Texture>("refr_im", 0.f);
+        m_ext_eta = props.get_texture<Texture>("ext_ior", 1.000277f);
         m_flags   = BSDFFlags::GlossyReflection | BSDFFlags::FrontSide;
-        dr::set_attr(this, "flags", m_flags);
         m_components.push_back(m_flags);
     }
 
-    void traverse(TraversalCallback *callback) override {
-        callback->put_object("C", m_C.get(),
-                             +ParamFlags::Differentiable);
-        callback->put_object("ndvi", m_ndvi.get(), +ParamFlags::Differentiable);
-        callback->put_object("refr_re", m_refr_re.get(),
-                             +ParamFlags::Differentiable);
-        callback->put_object("refr_im", m_refr_im.get(),
-                             +ParamFlags::Differentiable);
-        callback->put_object("ext_ior", m_ext_eta, +ParamFlags::Differentiable);
+    void traverse(TraversalCallback *cb) override {
+        cb->put("C", m_C.get(), ParamFlags::Differentiable);
+        cb->put("ndvi", m_ndvi.get(), ParamFlags::Differentiable);
+        cb->put("refr_re", m_refr_re.get(), ParamFlags::Differentiable);
+        cb->put("refr_im", m_refr_im.get(), ParamFlags::Differentiable);
+        cb->put("ext_ior", m_ext_eta, ParamFlags::Differentiable);
     }
 
     MI_INLINE std::pair<Spectrum, Spectrum>
@@ -256,6 +252,5 @@ private:
     ref<Texture> m_ext_eta;
 };
 
-MI_IMPLEMENT_CLASS_VARIANT(MaignanBSDF, BSDF)
-MI_EXPORT_PLUGIN(MaignanBSDF, "Maignan BSDF")
+MI_EXPORT_PLUGIN(MaignanBSDF)
 NAMESPACE_END(mitsuba)
