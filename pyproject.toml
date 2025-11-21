@@ -10,10 +10,9 @@ build-backend = "scikit_build_core.build"
 
 
 [project]
-# name = "Mitsuba"
 name = "eradiate-mitsuba"
 dynamic = ["version", "readme"]
-description = "Mitsuba 3: A Retargetable Forward and Inverse Renderer"
+description = "Eradiate radiometric kernel, based on the Mitsuba 3 renderer"
 dependencies = [
   "typing_extensions>=4.12;python_version<\"3.11\"",
   "drjit==1.2.0",
