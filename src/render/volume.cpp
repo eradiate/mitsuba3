@@ -61,7 +61,7 @@ Volume<Float, Spectrum>::max_per_channel(ScalarFloat * /*out*/) const {
 MI_VARIANT typename Volume<Float, Spectrum>::ScalarVector3f
 Volume<Float, Spectrum>::voxel_size() const {
     // Extract the scale from the to_world matrix, assuming an affine transformation.
-    ScalarTransform4f to_world = m_to_local.inverse();
+    ScalarAffineTransform4f to_world = m_to_local.inverse();
     ScalarVector3f scale(
         dr::norm(to_world.matrix.x()),
         dr::norm(to_world.matrix.y()),
