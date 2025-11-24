@@ -429,7 +429,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(TabulatedPolarizedPhaseFunction)
 private:
     // m11 of the mueller matrix, used to sample the phase function
     IrregularContinuousDistribution<Float> m_m11;

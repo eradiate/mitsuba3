@@ -247,7 +247,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(DistantFluxSensor)
 
 protected:
     // Scene bounding sphere

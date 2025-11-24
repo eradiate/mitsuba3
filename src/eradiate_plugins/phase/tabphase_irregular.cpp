@@ -159,7 +159,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(IrregularTabulatedPhaseFunction)
 private:
     IrregularContinuousDistribution<Float> m_distr;
 };

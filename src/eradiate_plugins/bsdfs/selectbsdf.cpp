@@ -145,7 +145,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(SelectBSDF)
 protected:
     ref<Texture> m_indices;
     std::vector<ref<Base>> m_nested_bsdf;

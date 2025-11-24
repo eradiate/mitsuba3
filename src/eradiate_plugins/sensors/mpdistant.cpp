@@ -156,7 +156,7 @@ public:
         return { result };
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(MultiPixelDistantSensor)
 
 protected:
     Properties m_props;
@@ -317,7 +317,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(MultiPixelDistantSensorImpl)
 
 protected:
     // Scene bounding sphere

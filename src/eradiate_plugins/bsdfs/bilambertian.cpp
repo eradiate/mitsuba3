@@ -39,12 +39,12 @@ into the outgoing hemisphere. This material is two-sided.
 */
 
 template <typename Float, typename Spectrum>
-class BiLambertian final : public BSDF<Float, Spectrum> {
+class BilambertianBSDF final : public BSDF<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(BSDF, m_flags, m_components)
     MI_IMPORT_TYPES(Texture)
 
-    BiLambertian(const Properties &props) : Base(props) {
+    BilambertianBSDF(const Properties &props) : Base(props) {
         m_reflectance   = props.get_texture<Texture>("reflectance", .5f);
         m_transmittance = props.get_texture<Texture>("transmittance", .5f);
 
@@ -211,7 +211,7 @@ public:
 
     std::string to_string() const override {
         std::ostringstream oss;
-        oss << "Bilambertian[" << std::endl
+        oss << "BilambertianBDSF[" << std::endl
             << "  reflectance = " << string::indent(m_reflectance) << std::endl
             << "  transmittance = " << string::indent(m_transmittance)
             << std::endl
@@ -219,11 +219,11 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(BilambertianBSDF)
 private:
     ref<Texture> m_reflectance;
     ref<Texture> m_transmittance;
 };
 
-MI_EXPORT_PLUGIN(BiLambertian)
+MI_EXPORT_PLUGIN(BilambertianBSDF)
 NAMESPACE_END(mitsuba)

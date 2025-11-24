@@ -524,7 +524,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(GRASPOceanBSDF)
 private:
     //  User-provided fields
     ScalarInt32 m_component;

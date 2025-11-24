@@ -547,7 +547,7 @@ public:
         return dr::select(dr::isfinite(w), w, 0.f);
     };
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(PiecewiseVolumetricPathIntegrator)
 };
 
 MI_EXPORT_PLUGIN(PiecewiseVolumetricPathIntegrator)

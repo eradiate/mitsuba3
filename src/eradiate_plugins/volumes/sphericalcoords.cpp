@@ -166,7 +166,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(SphericalCoordsVolume)
 
 private:
     ScalarFloat m_rmin, m_rmax, m_fillmin, m_fillmax;

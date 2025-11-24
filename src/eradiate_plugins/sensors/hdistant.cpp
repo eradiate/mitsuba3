@@ -357,7 +357,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(HemisphericalDistantSensor)
 
 protected:
     // Scene bounding sphere

@@ -741,7 +741,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(OceanBSDF)
 private:
     //  User-provided fields
     ScalarInt32 m_component;

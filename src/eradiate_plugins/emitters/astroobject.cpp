@@ -229,7 +229,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(AstroObjectEmitter)
 
 protected:
     ref<Texture> m_irradiance;

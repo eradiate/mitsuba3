@@ -329,7 +329,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(MishchenkoOceanBSDF)
 private:
     //  User-provided fields
     ScalarFloat m_wind_speed;

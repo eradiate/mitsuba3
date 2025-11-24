@@ -65,7 +65,7 @@ the other located at (0, 1, 0) and pointing in the direction (0, -1, 0).
 
 */
 
-MI_VARIANT class MultiRadianceMeter final : public Sensor<Float, Spectrum> {
+MI_VARIANT class MultiRadianceMeterSensor final : public Sensor<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Sensor, m_film, m_to_world, m_needs_sample_2,
                     m_needs_sample_3, sample_wavelengths)
@@ -74,7 +74,7 @@ public:
     using Matrix = dr::Matrix<Float, AffineTransform4f::Size>;
     using Index  = dr::uint32_array_t<Float>;
 
-    MultiRadianceMeter(const Properties &props) : Base(props) {
+    MultiRadianceMeterSensor(const Properties &props) : Base(props) {
         // Collect directions and set transforms accordingly
         if (props.has_property("to_world")) {
             Throw("This sensor is specified through a set of origin and "
@@ -175,19 +175,19 @@ public:
 
     std::string to_string() const override {
         std::ostringstream oss;
-        oss << "MultiRadianceMeter[" << std::endl
+        oss << "MultiRadianceMeterSensor[" << std::endl
             << "  transforms = " << m_transforms.array() << "," << std::endl
             << "  film = " << m_film << "," << std::endl
             << "]";
         return oss.str();
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(MultiRadianceMeterSensor)
 private:
     TensorXf m_transforms;
     size_t m_sensor_count;
 };
 
-MI_EXPORT_PLUGIN(MultiRadianceMeter)
+MI_EXPORT_PLUGIN(MultiRadianceMeterSensor)
 
 NAMESPACE_END(mitsuba)

@@ -181,7 +181,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(RayleighPolarizedPhaseFunction)
 private:
     ref<Volume> m_depolarization;
 };

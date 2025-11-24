@@ -591,7 +591,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(AnalyticalRectangle)
 private:
     Frame3f m_frame;
     Float m_inv_surface_area;

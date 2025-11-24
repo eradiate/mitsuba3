@@ -305,7 +305,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS();
+    MI_DECLARE_CLASS(RTLSBSDF);
 
 private:
     ref<Texture> m_f_iso;

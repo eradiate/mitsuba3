@@ -384,7 +384,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS();
+    MI_DECLARE_CLASS(HapkeBSDF);
 
 private:
     ref<Texture> m_w;

@@ -281,7 +281,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(MultiDistantSensor)
 
 protected:
     // Scene bounding sphere

@@ -563,7 +563,7 @@ public:
         return result;
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(PiecewiseMedium)
 
 private:
     ref<Volume> m_sigmat, m_albedo;

@@ -55,12 +55,12 @@ The sampling routine is uniform cosine-weighted (*i.e.* the same as for the
    user's responsibility.
 */
 template <typename Float, typename Spectrum>
-class MeasuredQuasiDiffuse final : public BSDF<Float, Spectrum> {
+class MeasuredQuasiDiffuseBSDF final : public BSDF<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(BSDF, m_flags, m_components)
     MI_IMPORT_TYPES(VolumeGrid)
 
-    MeasuredQuasiDiffuse(const Properties &props) : Base(props) {
+    MeasuredQuasiDiffuseBSDF(const Properties &props) : Base(props) {
 
         if (props.has_property("grid")) {
             // Creates a Bitmap texture directly from an existing Bitmap object
@@ -184,7 +184,7 @@ public:
 
     std::string to_string() const override {
         std::ostringstream oss;
-        oss << "MeasuredQuasiDiffuse[" << std::endl
+        oss << "MeasuredQuasiDiffuseBSDF[" << std::endl
             << "  volume_grid_size = " << m_volume_grid->size() << ","
             << std::endl
             << "  volume_grid_data = [ " << util::mem_string(buffer_size())
@@ -193,7 +193,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(MeasuredQuasiDiffuseBSDF)
 
 protected:
     /// Return the volume grid size in bytes (excluding metadata)
@@ -209,5 +209,5 @@ private:
     bool m_accel;
 };
 
-MI_EXPORT_PLUGIN(MeasuredQuasiDiffuse)
+MI_EXPORT_PLUGIN(MeasuredQuasiDiffuseBSDF)
 NAMESPACE_END(mitsuba)
