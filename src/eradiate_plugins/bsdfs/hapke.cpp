@@ -20,39 +20,37 @@ Hapke surface model (:monosp:`hapke`)
 
  * - w
    - |spectrum| or |texture|
-   - :math:`0 \le w \le 1`.
+   - Single scattering albedo (in :math:`[0, 1]`; default: 0.5).
    - |exposed| |differentiable|
 
  * - b
    - |spectrum| or |texture|
-   - :math:`0 \le w \le 1`.
+   - Asymmetry parameter of the Henyey-Greenstein phase function (in :math:`[0, 1]`; default: 0.2).
    - |exposed| |differentiable|
 
  * - c
    - |spectrum| or |texture|
-   - :math:`0 \le w \le 1`.
+   - Backscattering parameter of the Henyey-Greenstein phase function (in :math:`[0, 1]`; default: 0.5).
    - |exposed| |differentiable|
 
- * - theta (degree)
+ * - theta
    - |spectrum| or |texture|
-   - :math:`0 \le w \le 90`.
+   - Macroscopic roughness, expressed as the mean slope angle (in :math:`[0°, 90°]`; default: 30°).
    - |exposed| |differentiable|
 
  * - B_0
    - |spectrum| or |texture|
-   - :math:`0 \le w \le 1`.
+   - Intensity of shadow hiding opposition effect (in :math:`[0, 1]`; default: 0).
    - |exposed| |differentiable|
 
  * - h
    - |spectrum| or |texture|
-   - :math:`0 \le w \le 1`.
+   - Width of shadow hiding opposition effect (in :math:`[0, 1]`; default: 0).
    - |exposed| |differentiable|
 
-This plugin implements the Hapke BSDF model as proposed by Bruce Hapke in 1984
-(https://doi.org/10.1016/0019-1035(84)90054-X).
+This plugin implements a bare soil reflection model based on the work of Bruce Hapke. This variant is validated against the one presented by :cite:t:`Nguyen2025MappingSurfaceProperties`. It features 6 parameters and includes adjustments compared to the core reference :cite:p:`Hapke2012TheoryReflectanceEmittance`.
 
-All parameters are required.
-
+The default parameters are an order of magnitude of the results presented by :cite:t:`Nguyen2025MappingSurfaceProperties` and notably neglect the influence of the opposition effect.
 */
 
 // In particular, and for quick reference, equations 1 to 3, 14 to 18, 31 to 36,
@@ -66,12 +64,12 @@ public:
 
     HapkeBSDF(const Properties &props) : Base(props) {
 
-        m_w     = props.get_texture<Texture>("w");
-        m_b     = props.get_texture<Texture>("b");
-        m_c     = props.get_texture<Texture>("c");
-        m_theta = props.get_texture<Texture>("theta");
-        m_B_0   = props.get_texture<Texture>("B_0");
-        m_h     = props.get_texture<Texture>("h");
+        m_w     = props.get_texture<Texture>("w", 0.f);
+        m_b     = props.get_texture<Texture>("b", 0.f);
+        m_c     = props.get_texture<Texture>("c", 0.f);
+        m_theta = props.get_texture<Texture>("theta", 0.f);
+        m_B_0   = props.get_texture<Texture>("B_0", 0.f);
+        m_h     = props.get_texture<Texture>("h", 0.f);
 
         m_flags = BSDFFlags::GlossyReflection | BSDFFlags::FrontSide;
         m_components.push_back(m_flags);

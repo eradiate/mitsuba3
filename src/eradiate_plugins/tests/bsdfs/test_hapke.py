@@ -41,7 +41,6 @@ def plot_figures():
 
 
 def test_create_hapke(variant_scalar_rgb):
-    # Test constructor of 3-parameter version of RPV
     rtls = mi.load_dict(
         {
             "type": "hapke",
@@ -66,24 +65,6 @@ def test_create_hapke(variant_scalar_rgb):
     assert "theta.value" in params
     assert "B_0.value" in params
     assert "h.value" in params
-
-
-def test_defaults_and_print(variant_scalar_rgb):
-    rtls = mi.load_dict({"type": "rtls"})
-    value = str(rtls)
-    reference = "\n".join(
-        [
-            "RTLSBSDF[",
-            "  f_iso = UniformSpectrum[value=0.209741],",
-            "  f_vol = UniformSpectrum[value=0.081384],",
-            "  f_geo = UniformSpectrum[value=0.004140],",
-            "  h = 2,",
-            "  r = 1,",
-            "  b = 1",
-            "]",
-        ]
-    )
-    assert reference == value
 
 
 def test_eval_hotspot(variant_scalar_rgb):
