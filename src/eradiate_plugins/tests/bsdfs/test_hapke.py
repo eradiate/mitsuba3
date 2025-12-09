@@ -7,6 +7,28 @@ import pytest
 import xarray as xr
 from mitsuba.test.util import find_resource
 
+PARAMS = {
+    "default": {},
+    "null": {
+        "w": 0.0,
+        "b": 0.0,
+        "c": 0.0,
+        "theta": 0.0,
+        "h": 0.0,
+        "B_0": 0.0,
+    },
+    "pommerol": {
+        # From Pommerol et al. (2013), identical to what is in the
+        # "hapke_*_example.nc" datasets below
+        "w": 0.526,
+        "theta": 13.3,
+        "b": 0.187,
+        "c": (1.0 + 0.273) / 2.0,
+        "h": 0.083,
+        "B_0": 1.0,
+    },
+}
+
 
 def angles_to_directions(theta, phi):
     return mi.Vector3f(
@@ -41,24 +63,14 @@ def plot_figures():
 
 
 def test_create_hapke(variant_scalar_rgb):
-    rtls = mi.load_dict(
-        {
-            "type": "hapke",
-            "w": 0.0,
-            "b": 0.0,
-            "c": 0.0,
-            "theta": 0.0,
-            "h": 0.0,
-            "B_0": 0.0,
-        }
-    )
+    bsdf = mi.load_dict({"type": "hapke", **PARAMS["null"]})
 
-    assert isinstance(rtls, mi.BSDF)
-    assert rtls.component_count() == 1
-    assert rtls.flags(0) == mi.BSDFFlags.GlossyReflection | mi.BSDFFlags.FrontSide
-    assert rtls.flags() == rtls.flags(0)
+    assert isinstance(bsdf, mi.BSDF)
+    assert bsdf.component_count() == 1
+    assert bsdf.flags(0) == mi.BSDFFlags.GlossyReflection | mi.BSDFFlags.FrontSide
+    assert bsdf.flags() == bsdf.flags(0)
 
-    params = mi.traverse(rtls)
+    params = mi.traverse(bsdf)
     assert "w.value" in params
     assert "b.value" in params
     assert "c.value" in params
@@ -68,20 +80,7 @@ def test_create_hapke(variant_scalar_rgb):
 
 
 def test_eval_hotspot(variant_scalar_rgb):
-    c = 0.273
-    c = (1 + c) / 2
-
-    hapke = mi.load_dict(
-        {  # Pommerol et al. (2013)
-            "type": "hapke",
-            "w": 0.526,
-            "theta": 13.3,
-            "b": 0.187,
-            "c": c,
-            "h": 0.083,
-            "B_0": 1.0,
-        }
-    )
+    hapke = mi.load_dict({"type": "hapke", **PARAMS["pommerol"]})
 
     theta_i = dr.deg2rad(30.0)
     theta_o = dr.deg2rad(30.0)
@@ -99,17 +98,7 @@ def test_hapke_grazing_outgoing_direction(variant_scalar_rgb):
     c = 0.273
     c = (1 + c) / 2
 
-    hapke = mi.load_dict(
-        {  # Pommerol et al. (2013)
-            "type": "hapke",
-            "w": 0.526,
-            "theta": 13.3,
-            "b": 0.187,
-            "c": c,
-            "h": 0.083,
-            "B_0": 1.0,
-        }
-    )
+    hapke = mi.load_dict({"type": "hapke", **PARAMS["pommerol"]})
 
     theta_i = dr.deg2rad(30.0)
     theta_o = dr.deg2rad(-89.0)
@@ -124,20 +113,7 @@ def test_hapke_grazing_outgoing_direction(variant_scalar_rgb):
 
 
 def test_eval_backward(variant_scalar_rgb):
-    c = 0.273
-    c = (1 + c) / 2
-
-    hapke = mi.load_dict(
-        {  # Pommerol et al. (2013)
-            "type": "hapke",
-            "w": 0.526,
-            "theta": 13.3,
-            "b": 0.187,
-            "c": c,
-            "h": 0.083,
-            "B_0": 1.0,
-        }
-    )
+    hapke = mi.load_dict({"type": "hapke", **PARAMS["pommerol"]})
 
     theta_i = dr.deg2rad(30.0)
     theta_o = dr.deg2rad(80.0)
@@ -152,17 +128,7 @@ def test_eval_backward(variant_scalar_rgb):
 
 
 def test_hapke_hemisphere(variant_llvm_ad_rgb, static_hemisphere, plot_figures):
-    hapke = mi.load_dict(
-        {  # Pommerol et al. (2013)
-            "type": "hapke",
-            "w": static_hemisphere.w.item(),
-            "theta": static_hemisphere.theta.item(),
-            "b": static_hemisphere.b.item(),
-            "c": static_hemisphere.c.item(),
-            "h": static_hemisphere.h.item(),
-            "B_0": static_hemisphere.B0.item(),
-        }
-    )
+    hapke = mi.load_dict({"type": "hapke", **PARAMS["pommerol"]})
 
     azimuths = dr.deg2rad(mi.Float(static_hemisphere["phi"].values))
     zeniths = dr.deg2rad(mi.Float(static_hemisphere["vza"].values))
@@ -229,17 +195,7 @@ def test_hapke_hemisphere(variant_llvm_ad_rgb, static_hemisphere, plot_figures):
 def test_hapke_static_principal_plane_reference(
     variant_llvm_ad_rgb, static_pplane, plot_figures
 ):
-    hapke = mi.load_dict(
-        {  # Pommerol et al. (2013)
-            "type": "hapke",
-            "w": static_pplane.w.item(),
-            "theta": static_pplane.theta.item(),
-            "b": static_pplane.b.item(),
-            "c": static_pplane.c.item(),
-            "h": static_pplane.h.item(),
-            "B_0": static_pplane.B0.item(),
-        }
-    )
+    hapke = mi.load_dict({"type": "hapke", **PARAMS["pommerol"]})
 
     theta_o = mi.Float(dr.deg2rad(static_pplane.svza.values))
     phi_o = dr.zeros(mi.Float, dr.shape(theta_o))
@@ -293,6 +249,28 @@ def test_hapke_static_principal_plane_reference(
     ref = static_pplane.reflectance.values
 
     assert dr.allclose(ref, values)
+
+
+@pytest.mark.parametrize("params", ["default", "pommerol"])
+def test_reciprocal(variant_llvm_ad_rgb, params):
+    """This BSDF is expected to be reciprocal, and this test checks for it."""
+
+    bsdf = mi.load_dict({"type": "hapke", **PARAMS[params]})
+    num_samples = 1_000_000
+    rng = dr.rng()
+
+    theta_i = rng.uniform(mi.Float, (num_samples,)) * dr.pi / 2.0
+    theta_o = rng.uniform(mi.Float, (num_samples,)) * dr.pi / 2.0
+    phi_i = rng.uniform(mi.Float, (num_samples,)) * dr.two_pi
+    phi_o = rng.uniform(mi.Float, (num_samples,)) * dr.two_pi
+
+    wi = angles_to_directions(theta_i, phi_i)
+    wo = angles_to_directions(theta_o, phi_o)
+
+    values_a = eval_bsdf(bsdf, wi, wo) / dr.cos(theta_o)
+    values_b = eval_bsdf(bsdf, wo, wi) / dr.cos(theta_i)
+
+    assert dr.allclose(values_a, values_b)
 
 
 def test_chi2_hapke(variants_vec_backends_once_rgb):

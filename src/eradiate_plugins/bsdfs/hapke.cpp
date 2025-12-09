@@ -64,10 +64,10 @@ public:
 
     HapkeBSDF(const Properties &props) : Base(props) {
 
-        m_w     = props.get_texture<Texture>("w", 0.f);
-        m_b     = props.get_texture<Texture>("b", 0.f);
-        m_c     = props.get_texture<Texture>("c", 0.f);
-        m_theta = props.get_texture<Texture>("theta", 0.f);
+        m_w     = props.get_texture<Texture>("w", .5f);
+        m_b     = props.get_texture<Texture>("b", .2f);
+        m_c     = props.get_texture<Texture>("c", .5f);
+        m_theta = props.get_texture<Texture>("theta", 30.f);
         m_B_0   = props.get_texture<Texture>("B_0", 0.f);
         m_h     = props.get_texture<Texture>("h", 0.f);
 
