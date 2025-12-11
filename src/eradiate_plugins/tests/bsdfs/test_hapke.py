@@ -90,7 +90,7 @@ def test_eval_hotspot(variant_scalar_rgb):
     wi = angles_to_directions(theta_i, phi_i)
     wo = angles_to_directions(theta_o, phi_o)
 
-    values = eval_bsdf(hapke, wi, wo) / dr.abs(dr.cos(theta_o))
+    values = eval_bsdf(hapke, wi, wo) / dr.abs(dr.cos(theta_o)) * dr.pi
     assert dr.allclose(values, 0.24746648)
 
 
@@ -108,7 +108,7 @@ def test_hapke_grazing_outgoing_direction(variant_scalar_rgb):
     wi = angles_to_directions(theta_i, phi_i)
     wo = angles_to_directions(theta_o, phi_o)
 
-    values = eval_bsdf(hapke, wi, wo) / dr.abs(dr.cos(theta_o))
+    values = eval_bsdf(hapke, wi, wo) / dr.abs(dr.cos(theta_o)) * dr.pi
     assert dr.allclose(values, 0.15426355)
 
 
@@ -123,7 +123,7 @@ def test_eval_backward(variant_scalar_rgb):
     wi = angles_to_directions(theta_i, phi_i)
     wo = angles_to_directions(theta_o, phi_o)
 
-    values = eval_bsdf(hapke, wi, wo) / dr.abs(dr.cos(theta_o))
+    values = eval_bsdf(hapke, wi, wo) / dr.abs(dr.cos(theta_o)) * dr.pi
     assert dr.allclose(values, 0.19555340)
 
 
@@ -139,7 +139,7 @@ def test_hapke_hemisphere(variant_llvm_ad_rgb, static_hemisphere, plot_figures):
 
     wi = angles_to_directions(theta_i, phi_i)
     wo = angles_to_directions(theta_o, phi_o)
-    values = eval_bsdf(hapke, wi, wo) / dr.abs(dr.cos(theta_o))
+    values = eval_bsdf(hapke, wi, wo) / dr.abs(dr.cos(theta_o)) * dr.pi
 
     npref = static_hemisphere["reflectance"].values
     ref = mi.Float(npref.ravel())
@@ -205,7 +205,7 @@ def test_hapke_static_principal_plane_reference(
     wi = angles_to_directions(theta_i, phi_i)
     wo = angles_to_directions(theta_o, phi_o)
 
-    values = eval_bsdf(hapke, wi, wo) / dr.abs(dr.cos(theta_o))
+    values = eval_bsdf(hapke, wi, wo) / dr.abs(dr.cos(theta_o)) * dr.pi
 
     if plot_figures:
         nrows = 2

@@ -280,7 +280,7 @@ public:
         Float phi    = dr::abs(dr::select(fr_phi > dr::Pi<Float>,
                                           2.f * dr::Pi<Float> - fr_phi, fr_phi));
 
-        UnpolarizedSpectrum w_div_4 = w * 0.25f;
+        UnpolarizedSpectrum w_div_4pi = w * 0.25f * dr::InvPi<Float>;
 
         UnpolarizedSpectrum mu_0eG = eval_mu_0eG(tan_theta, e, i, phi, cos_phi);
         UnpolarizedSpectrum mu_eG  = eval_mu_eG(tan_theta, e, i, phi, cos_phi);
@@ -323,7 +323,7 @@ public:
         Log(Trace, "M %s", M);
         Log(Trace, "S %s", S);
 
-        return w_div_4 * mu_ratio * (P * (1 + B) + M) * S;
+        return w_div_4pi * mu_ratio * (P * (1 + B) + M) * S;
     }
 
     Spectrum eval(const BSDFContext & /*ctx*/, const SurfaceInteraction3f &si,
