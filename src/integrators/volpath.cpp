@@ -76,7 +76,12 @@ public:
                      Medium, MediumPtr, PhaseFunctionContext)
 
     VolumetricPathIntegrator(const Properties &props) : Base(props) {
-        m_ddis_threshold = props.get<float>("ddis_threshold", 0.1f);
+        float threshold = props.get<float>("ddis_threshold", 0.1f);
+        // Debug parameter
+        m_ddis_method = props.get<int>("ddis_method", 0);
+        if (m_ddis_method == 0 && threshold > 0.f) 
+            Throw("ddis_threshold should be set to 0. when ddis_method is 0");
+        m_ddis_threshold = threshold;
     }
 
     MI_INLINE
@@ -277,21 +282,34 @@ public:
 
                 Mask active_e = act_medium_scatter && sample_emitters;
 
-                Float eps = sampler->next_1d(active_medium);
-                Mask active_ddis = (eps < m_ddis_threshold) && act_medium_scatter && active_e;
-                MediumInteraction3f sample_mei = mei;  
+                
+                MediumInteraction3f ddis_mei = mei;
 
                 if (dr::any_or<true>(active_e)) {
                     auto [emitted, ds] = sample_emitter(mei, scene, sampler, medium, channel, active_e);
-                    auto [phase_val, phase_pdf] = phase->eval_pdf(phase_ctx, mei, ds.d, active_e);
+                    auto [phase_val, natural_phase_pdf] = phase->eval_pdf(phase_ctx, mei, ds.d, active_e);
+
+
+                    // Set ddis incoming direction towards emitter
+                    dr::masked(ddis_mei.wi, active_e) = -ds.d;
+                    dr::masked(ddis_mei.sh_frame, active_e) = Frame3f(-ds.d);
+                    auto [_, ddis_phase_pdf] = phase->eval_pdf(phase_ctx, ddis_mei, ds.d, active_e);
+            
+                    // Compute mixture pdf accounting for DDIS probability
+                    Float mixed_phase_pdf = (1.f - m_ddis_threshold) * natural_phase_pdf +
+                                            m_ddis_threshold * ddis_phase_pdf;  
+
                     dr::masked(result, active_e) += throughput * phase_val * emitted *
-                                                    mis_weight(ds.pdf, dr::select(ds.delta, 0.f, phase_pdf));
+                                                    mis_weight(ds.pdf, dr::select(ds.delta, 0.f, mixed_phase_pdf));
                     
-                    dr::masked(sample_mei.wi, active_ddis) = -ds.d;
                 }
 
                 // ------------------ Phase function sampling -----------------
                 dr::masked(phase, !act_medium_scatter) = nullptr;
+
+                Float eps = sampler->next_1d(active_medium);
+                Mask active_ddis = (eps < m_ddis_threshold) && act_medium_scatter && active_e;
+                MediumInteraction3f sample_mei = dr::select(active_ddis, ddis_mei, mei);
 
                 // ddis off -> phase_weight: p(mu)/pdf(mu); phase_pdf: pdf(mu);
                 // ddis on  -> phase_weight: p(mu')/pdf(mu'); phase_pdf: pdf(mu');
@@ -301,17 +319,28 @@ public:
                     act_medium_scatter);
                 act_medium_scatter &= phase_pdf > 0.f;
 
-                // ddis off -> NA;
-                // ddis on  -> ddis_val: p(mu); ddis_pdf: pdf(mu);
-                auto [ddis_val, ddis_pdf] = phase->eval_pdf(phase_ctx, mei, wo, active_ddis);
+                auto [natural_val, natural_pdf] = phase->eval_pdf(phase_ctx, mei, wo, act_medium_scatter);
+                auto [ddis_val, ddis_pdf] = phase->eval_pdf(phase_ctx, ddis_mei, wo, act_medium_scatter);
                 
-                // ddis off -> phase_weight: p(mu)/(pdf(mu)*(1.f-eps))
-                // ddis on  -> phase_weight: p(mu)/(pdf(mu')*(eps))
-                phase_weight = dr::select(
-                    active_ddis,
-                    ddis_val * dr::rcp(m_ddis_threshold*phase_pdf),
-                    phase_weight * dr::rcp(1.f-m_ddis_threshold)
-                );
+                switch (m_ddis_method) {
+                case(0): { // no MIS !m_ddis_threshold has to be 0.!
+                    break;
+                }
+                case(1): { // balance heuristic
+                    phase_pdf = ((1.f-m_ddis_threshold)*natural_pdf + m_ddis_threshold*ddis_pdf);
+                    phase_weight = natural_val / phase_pdf;
+                    break;
+                }
+                case(2): { // Power Heuristic
+                    Float natural_weight = (1.f-m_ddis_threshold) * natural_pdf;
+                    Float ddis_weight    = m_ddis_threshold * ddis_pdf;
+                    phase_pdf = dr::select(active_ddis, ddis_weight, natural_weight);
+                    phase_weight = natural_val* phase_pdf / ( natural_weight * natural_weight + ddis_weight * ddis_weight );
+                    break;
+                }
+                default:
+                    break;
+                }
 
                 Ray3f new_ray  = mei.spawn_ray(wo);
                 dr::masked(ray, act_medium_scatter) = new_ray;
@@ -598,6 +627,7 @@ public:
     MI_DECLARE_CLASS(VolumetricPathIntegrator)
 private:
     Float m_ddis_threshold;
+    u_int32_t m_ddis_method;
 
 };
 
