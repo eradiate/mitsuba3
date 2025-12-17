@@ -25,22 +25,26 @@ Hapke surface model (:monosp:`hapke`)
 
  * - b
    - |spectrum| or |texture|
-   - Asymmetry parameter of the Henyey-Greenstein phase function (in :math:`[0, 1]`; default: 0.2).
+   - Asymmetry parameter of the Henyey-Greenstein phase function
+     (in :math:`[0, 1]`; default: 0.2).
    - |exposed| |differentiable|
 
  * - c
    - |spectrum| or |texture|
-   - Backscattering parameter of the Henyey-Greenstein phase function (in :math:`[0, 1]`; default: 0.5).
+   - Backscattering parameter of the Henyey-Greenstein phase function
+     (in :math:`[0, 1]`; default: 0.5).
    - |exposed| |differentiable|
 
  * - theta
    - |spectrum| or |texture|
-   - Macroscopic roughness, expressed as the mean slope angle (in :math:`[0°, 90°]`; default: 30°).
+   - Macroscopic roughness, expressed as the mean slope angle
+     (in :math:`[0°, 90°]`; default: 30°).
    - |exposed| |differentiable|
 
  * - B_0
    - |spectrum| or |texture|
-   - Intensity of shadow hiding opposition effect (in :math:`[0, 1]`; default: 0).
+   - Intensity of shadow hiding opposition effect
+     (in :math:`[0, 1]`; default: 0).
    - |exposed| |differentiable|
 
  * - h
@@ -48,9 +52,15 @@ Hapke surface model (:monosp:`hapke`)
    - Width of shadow hiding opposition effect (in :math:`[0, 1]`; default: 0).
    - |exposed| |differentiable|
 
-This plugin implements a bare soil reflection model based on the work of Bruce Hapke. This variant is validated against the one presented by :cite:t:`Nguyen2025MappingSurfaceProperties`. It features 6 parameters and includes adjustments compared to the core reference :cite:p:`Hapke2012TheoryReflectanceEmittance`.
+This plugin implements a bare soil reflection model based on the work of Bruce
+Hapke. This variant is validated against the one presented by
+:cite:t:`Nguyen2025MappingSurfaceProperties`. It features 6 parameters and
+includes adjustments compared to the core reference
+:cite:p:`Hapke2012TheoryReflectanceEmittance`.
 
-The default parameters are an order of magnitude of the results presented by :cite:t:`Nguyen2025MappingSurfaceProperties` and notably neglect the influence of the opposition effect.
+The default parameters are an order of magnitude of the results presented by
+:cite:t:`Nguyen2025MappingSurfaceProperties` and notably neglect the influence
+of the opposition effect.
 */
 
 // In particular, and for quick reference, equations 1 to 3, 14 to 18, 31 to 36,
