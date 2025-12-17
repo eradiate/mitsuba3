@@ -322,8 +322,6 @@ public:
                 activate_cp &= m_max_cp_depth > 1;
                 dr::masked(ls.active_cp, activate_cp) = activate_cp;
                 dr::masked(ls.parent, activate_cp) = ls.current;
-                if (dr::any_or<false>(activate_cp))
-                    Log(Debug,"activate cp");
 
                 Mask active_e = act_medium_scatter && sample_emitters;
                 Mask active_nee = active_e && ls.nee_depth < depth;
@@ -333,7 +331,6 @@ public:
                 active_ddis &= act_medium_scatter && active_e;
 
                 MediumInteraction3f ddis_mei = mei;
-                Log(Debug,"[%f, %f] Medium SCA", depth, ls.nee_depth);
                 if (dr::any_or<true>(active_e)) {
                     auto [emitted, ds] = sample_emitter(mei, scene, sampler, medium, channel, active_e);
                     auto [phase_val, natural_phase_pdf] = phase->eval_pdf(phase_ctx, mei, ds.d, active_nee);
@@ -351,36 +348,21 @@ public:
                     dr::masked(result, active_nee) += throughput * phase_val * emitted *
                                                     mis_weight(ds.pdf, dr::select(ds.delta, 0.f, phase_pdf));
                     
-                    if(dr::any_or<false>(active_nee)) {
-                        Log(Debug, "[%f, %f] Medium NEE: %f, %f", depth, ls.nee_depth, unpolarized_spectrum(result)[0], unpolarized_spectrum(throughput)[0]);
-                    }
                     // Increment nee_depth
                     dr::masked(ls.nee_depth, active_nee) += 1;
                 }
-
-                // Log(Debug, "ls.active_cp: %f Depth: %f, first cp: %f, nee depth: %f", ls.active_cp, depth, m_first_cp_nee, ls.nee_depth);
-
 
                 end_cp = ls.active_cp && (depth - ls.parent.depth) >= m_max_cp_depth;
                 active &= !end_cp;
                 active_ddis &= active;
 
-                if (dr::any_or<false>(end_cp))
-                    Log(Debug,"end cp");
-
-                // Log(Debug, "EndCP? active: %f, ls.active_cp: %f, Depth: %f, Parent Depth: %f", active, ls.active_cp, depth, ls.parent.depth);
-                
-
                 // ------------------ Phase function sampling -----------------
                 dr::masked(phase, !act_medium_scatter) = nullptr;
 
                 Mask sample_ddis = active_ddis && (eps < m_ddis_threshold) ;
-                Log(Debug,"[%f, %f] Medium DDIS: %f, %f ", depth, ls.nee_depth, active_ddis, sample_ddis);
 
                 MediumInteraction3f sample_mei = dr::select(sample_ddis, ddis_mei, mei);
 
-                // ddis off -> phase_weight: p(mu)/pdf(mu); phase_pdf: pdf(mu);
-                // ddis on  -> phase_weight: p(mu')/pdf(mu'); phase_pdf: pdf(mu');
                 auto [wo, phase_weight, phase_pdf] = phase->sample(phase_ctx, sample_mei,
                     sampler->next_1d(act_medium_scatter),
                     sampler->next_2d(act_medium_scatter),
@@ -463,9 +445,6 @@ public:
                 }
             }
             active_surface &= si.is_valid();
-            if(dr::any_or<false>(escaped_medium)) {
-                Log(Debug, "escaped medium");
-            }
             if (dr::any_or<true>(active_surface)) {
                 // --------------------- Emitter sampling ---------------------
                 BSDFContext ctx;
@@ -486,9 +465,6 @@ public:
                     Float bsdf_pdf = bsdf->pdf(ctx, si, wo, active_e);
                     result[active_nee] += throughput * bsdf_val * mis_weight(ds.pdf, dr::select(ds.delta, 0.f, bsdf_pdf)) * emitted;
 
-                    if(dr::any_or<false>(active_nee)){
-                        Log(Debug,"[%f, %f] Surface NEE: %f, %f", depth+1, ls.nee_depth, unpolarized_spectrum(result)[0], unpolarized_spectrum(throughput)[0]);
-                    }
                     // Increment nee_depth
                     dr::masked(ls.nee_depth, active_nee) += 1;
                 }
@@ -496,8 +472,6 @@ public:
 
                 end_cp = ls.active_cp && (depth + 1 - ls.parent.depth) >= m_max_cp_depth;
                 active &= !end_cp;
-                if (dr::any_or<false>(end_cp))
-                    Log(Debug,"end cp");
 
                 // ----------------------- BSDF sampling ----------------------
                 auto [bs, bsdf_val] = bsdf->sample(ctx, si, sampler->next_1d(active_surface),
@@ -530,18 +504,9 @@ public:
 
             // restore the current state to the parrent state when the copy path is not active anymore.
             Mask restore_parent = ls.parent.active && ls.active_cp && !ls.current.active;
-            // Log(Debug, "restore_parent: %f, parent active: %f, active_cp: %f, current active: %f", restore_parent, ls.parent.active, ls.active_cp, ls.current.active);
             dr::masked(ls.nee_depth, restore_parent && !end_cp) += m_max_cp_depth - (ls.nee_depth - ls.parent.depth);
-            if (dr::any_or<false>(restore_parent))
-                    Log(Debug,"restore + escape: %f, %f", ls.current.depth, ls.nee_depth);
-
             dr::masked(ls.active_cp, restore_parent) = false;
             dr::masked(ls.current, restore_parent) = ls.parent;
-            if (dr::any_or<false>(restore_parent))
-                    Log(Debug,"restore parent: %f, %f", ls.current.depth, ls.nee_depth);
-
-            if(dr::any_or<false>(!act_null_scatter))
-                Log(Debug,"[%f, %f] result: %f", ls.current.depth, ls.nee_depth, unpolarized_spectrum(ls.result)[0]);
         },
         "Volpath integrator");
 
