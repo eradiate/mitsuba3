@@ -82,6 +82,9 @@ public:
         if (m_ddis_method == 0 && threshold > 0.f) 
             Throw("ddis_threshold should be set to 0. when ddis_method is 0");
         m_ddis_threshold = threshold;
+
+        m_max_cp_depth = props.get<int>("max_cp_depth", 2);
+        m_first_cp_nee = props.get<int>("first_cp_nee", 4);
     }
 
     MI_INLINE
@@ -104,6 +107,7 @@ public:
                                      Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::SamplingIntegratorSample, active);
 
+        Log(Debug, "NEW SAMPLE");
         // If there is an environment emitter and emitters are visible: all rays will be valid
         // Otherwise, it will depend on whether a valid interaction is sampled
         Mask valid_ray = !m_hide_emitters && (scene->environment() != nullptr);
@@ -134,12 +138,11 @@ public:
         /* Set up a Dr.Jit loop (optimizes away to a normal loop in scalar mode,
            generates wavefront or megakernel renderer based on configuration).
            Register everything that changes as part of the loop here */
-        struct LoopState {
+        struct InnerLoopState {
             Mask active;
             UInt32 depth;
             Ray3f ray;
             Spectrum throughput;
-            Spectrum result;
             SurfaceInteraction3f si;
             MediumInteraction3f mei;
             MediumPtr medium;
@@ -151,16 +154,30 @@ public:
             Mask valid_ray;
             Sampler* sampler;
 
-            DRJIT_STRUCT(LoopState, active, depth, ray, throughput, result, \
+            DRJIT_STRUCT(InnerLoopState, active, depth, ray, throughput, \
                 si, mei, medium, eta, last_scatter_event, \
                 last_scatter_direction_pdf, needs_intersection, \
                 specular_chain, valid_ray, sampler)
-        } ls = {
+        };
+        
+        /* Set up a Dr.Jit loop (optimizes away to a normal loop in scalar mode,
+           generates wavefront or megakernel renderer based on configuration).
+           Register everything that changes as part of the loop here */
+        struct LoopState {
+            InnerLoopState current;
+            InnerLoopState parent;
+            Spectrum result;
+            Mask active_cp;
+            UInt32 nee_depth;
+
+            DRJIT_STRUCT(LoopState, current, parent,  result, active_cp, nee_depth)
+        };
+        
+        InnerLoopState current = {
             active,
             depth,
             ray,
             throughput,
-            result,
             si,
             mei,
             medium,
@@ -173,25 +190,42 @@ public:
             sampler
         };
 
+        InnerLoopState parent = current;
+
+        LoopState ls = {
+            current,
+            parent,
+            result,
+            Mask(false), // active_cp
+            depth, // nee_depth
+        };
+
         dr::tie(ls) = dr::while_loop(dr::make_tuple(ls),
-            [](const LoopState& ls) { return ls.active; },
+            [](const LoopState& ls) { return ls.current.active; },
             [this, scene, channel](LoopState& ls) {
 
-            Mask& active = ls.active;
-            UInt32& depth = ls.depth;
-            Ray3f& ray = ls.ray;
-            Spectrum& throughput = ls.throughput;
+            // This selection indicates whether we are tracking a copy sample
+            // or parent/mother sample. The termination of a copy sample wont
+            // result in the termination of the parent sample.
+            // Mask& active = dr::select(ls.active_cp, ls.active_cp, ls.current.active);
+            Mask& active = ls.current.active;
+
+            UInt32& depth = ls.current.depth;
+            Ray3f& ray = ls.current.ray;
+            Spectrum& throughput = ls.current.throughput;
+            SurfaceInteraction3f& si = ls.current.si;
+            MediumInteraction3f& mei = ls.current.mei;
+            MediumPtr& medium = ls.current.medium;
+            Float& eta = ls.current.eta;
+            Interaction3f& last_scatter_event = ls.current.last_scatter_event;
+            Float& last_scatter_direction_pdf = ls.current.last_scatter_direction_pdf;
+            Mask& needs_intersection = ls.current.needs_intersection;
+            Mask& specular_chain = ls.current.specular_chain;
+            Mask& valid_ray = ls.current.valid_ray;
+            Sampler* sampler = ls.current.sampler;
+            
             Spectrum& result = ls.result;
-            SurfaceInteraction3f& si = ls.si;
-            MediumInteraction3f& mei = ls.mei;
-            MediumPtr& medium = ls.medium;
-            Float& eta = ls.eta;
-            Interaction3f& last_scatter_event = ls.last_scatter_event;
-            Float& last_scatter_direction_pdf = ls.last_scatter_direction_pdf;
-            Mask& needs_intersection = ls.needs_intersection;
-            Mask& specular_chain = ls.specular_chain;
-            Mask& valid_ray = ls.valid_ray;
-            Sampler* sampler = ls.sampler;
+            
 
             // ----------------- Handle termination of paths ------------------
             // Russian roulette: try to keep path weights equal to one, while accounting for the
@@ -202,16 +236,19 @@ public:
             Mask perform_rr = (depth > (uint32_t) m_rr_depth);
             active &= sampler->next_1d(active) < q || !perform_rr;
             dr::masked(throughput, perform_rr) *= dr::rcp(dr::detach(q));
-
+            
             active &= depth < (uint32_t) m_max_depth;
-            if (dr::none_or<false>(active))
+            if (dr::none_or<false>(active || ls.active_cp)) {
                 return;
+            }
 
             // ----------------------- Sampling the RTE -----------------------
             Mask active_medium  = active && (medium != nullptr);
             Mask active_surface = active && !active_medium;
             Mask act_null_scatter = false, act_medium_scatter = false,
                  escaped_medium = false;
+
+            Mask end_cp = false;
 
             // If the medium does not have a spectrally varying extinction,
             // we can perform a few optimizations to speed up rendering
@@ -279,37 +316,68 @@ public:
                 valid_ray |= act_medium_scatter;
                 specular_chain &= !act_medium_scatter;
                 specular_chain |= act_medium_scatter && !sample_emitters;
+                
+                // Copy Sample 
+                Mask activate_cp = active && !ls.active_cp && depth >= m_first_cp_nee && depth >= ls.nee_depth;
+                activate_cp &= m_max_cp_depth > 1;
+                dr::masked(ls.active_cp, activate_cp) = activate_cp;
+                dr::masked(ls.parent, activate_cp) = ls.current;
+                if (dr::any_or<false>(activate_cp))
+                    Log(Debug,"activate cp");
 
                 Mask active_e = act_medium_scatter && sample_emitters;
+                Mask active_nee = active_e && ls.nee_depth < depth;
 
-                
+                Float eps = sampler->next_1d(act_medium_scatter);
+                Mask active_ddis = ls.active_cp || depth < m_first_cp_nee;
+                active_ddis &= act_medium_scatter && active_e;
+
                 MediumInteraction3f ddis_mei = mei;
-
+                Log(Debug,"[%f, %f] Medium SCA", depth, ls.nee_depth);
                 if (dr::any_or<true>(active_e)) {
                     auto [emitted, ds] = sample_emitter(mei, scene, sampler, medium, channel, active_e);
-                    auto [phase_val, natural_phase_pdf] = phase->eval_pdf(phase_ctx, mei, ds.d, active_e);
-
+                    auto [phase_val, natural_phase_pdf] = phase->eval_pdf(phase_ctx, mei, ds.d, active_nee);
 
                     // Set ddis incoming direction towards emitter
                     dr::masked(ddis_mei.wi, active_e) = -ds.d;
                     dr::masked(ddis_mei.sh_frame, active_e) = Frame3f(-ds.d);
-                    auto [_, ddis_phase_pdf] = phase->eval_pdf(phase_ctx, ddis_mei, ds.d, active_e);
+                    auto [_, ddis_phase_pdf] = phase->eval_pdf(phase_ctx, ddis_mei, ds.d, active_nee);
             
                     // Compute mixture pdf accounting for DDIS probability
                     Float mixed_phase_pdf = (1.f - m_ddis_threshold) * natural_phase_pdf +
                                             m_ddis_threshold * ddis_phase_pdf;  
+                    Float phase_pdf = dr::select(active_ddis, mixed_phase_pdf, natural_phase_pdf);
 
-                    dr::masked(result, active_e) += throughput * phase_val * emitted *
-                                                    mis_weight(ds.pdf, dr::select(ds.delta, 0.f, mixed_phase_pdf));
+                    dr::masked(result, active_nee) += throughput * phase_val * emitted *
+                                                    mis_weight(ds.pdf, dr::select(ds.delta, 0.f, phase_pdf));
                     
+                    if(dr::any_or<false>(active_nee)) {
+                        Log(Debug, "[%f, %f] Medium NEE: %f, %f", depth, ls.nee_depth, unpolarized_spectrum(result)[0], unpolarized_spectrum(throughput)[0]);
+                    }
+                    // Increment nee_depth
+                    dr::masked(ls.nee_depth, active_nee) += 1;
                 }
+
+                // Log(Debug, "ls.active_cp: %f Depth: %f, first cp: %f, nee depth: %f", ls.active_cp, depth, m_first_cp_nee, ls.nee_depth);
+
+
+                end_cp = ls.active_cp && (depth - ls.parent.depth) >= m_max_cp_depth;
+                active &= !end_cp;
+                active_ddis &= active;
+
+                if (dr::any_or<false>(end_cp))
+                    Log(Debug,"end cp");
+
+                // Log(Debug, "EndCP? active: %f, ls.active_cp: %f, Depth: %f, Parent Depth: %f", active, ls.active_cp, depth, ls.parent.depth);
+                
 
                 // ------------------ Phase function sampling -----------------
                 dr::masked(phase, !act_medium_scatter) = nullptr;
 
-                Float eps = sampler->next_1d(active_medium);
-                Mask active_ddis = (eps < m_ddis_threshold) && act_medium_scatter && active_e;
-                MediumInteraction3f sample_mei = dr::select(active_ddis, ddis_mei, mei);
+                Mask sample_ddis = active_ddis && (eps < m_ddis_threshold) ;
+                Log(Debug,"[%f, %f] Medium DDIS: %f, %f ", depth, ls.nee_depth, active_ddis, sample_ddis);
+
+                MediumInteraction3f sample_mei = dr::select(sample_ddis, ddis_mei, mei);
 
                 // ddis off -> phase_weight: p(mu)/pdf(mu); phase_pdf: pdf(mu);
                 // ddis on  -> phase_weight: p(mu')/pdf(mu'); phase_pdf: pdf(mu');
@@ -319,23 +387,23 @@ public:
                     act_medium_scatter);
                 act_medium_scatter &= phase_pdf > 0.f;
 
-                auto [natural_val, natural_pdf] = phase->eval_pdf(phase_ctx, mei, wo, act_medium_scatter);
-                auto [ddis_val, ddis_pdf] = phase->eval_pdf(phase_ctx, ddis_mei, wo, act_medium_scatter);
+                auto [natural_val, natural_pdf] = phase->eval_pdf(phase_ctx, mei, wo, active_ddis);
+                auto [ddis_val, ddis_pdf] = phase->eval_pdf(phase_ctx, ddis_mei, wo, active_ddis);
                 
                 switch (m_ddis_method) {
                 case(0): { // no MIS !m_ddis_threshold has to be 0.!
                     break;
                 }
                 case(1): { // balance heuristic
-                    phase_pdf = ((1.f-m_ddis_threshold)*natural_pdf + m_ddis_threshold*ddis_pdf);
-                    phase_weight = natural_val / phase_pdf;
+                    dr::masked(phase_pdf, active_ddis) = ((1.f-m_ddis_threshold)*natural_pdf + m_ddis_threshold*ddis_pdf);
+                    dr::masked(phase_weight, active_ddis) = natural_val / phase_pdf;
                     break;
                 }
                 case(2): { // Power Heuristic
                     Float natural_weight = (1.f-m_ddis_threshold) * natural_pdf;
                     Float ddis_weight    = m_ddis_threshold * ddis_pdf;
-                    phase_pdf = dr::select(active_ddis, ddis_weight, natural_weight);
-                    phase_weight = natural_val* phase_pdf / ( natural_weight * natural_weight + ddis_weight * ddis_weight );
+                    dr::masked(phase_pdf, active_ddis) = dr::select(sample_ddis, ddis_weight, natural_weight);
+                    dr::masked(phase_weight, active_ddis) = natural_val* phase_pdf / ( natural_weight * natural_weight + ddis_weight * ddis_weight );
                     break;
                 }
                 default:
@@ -357,16 +425,16 @@ public:
 
             if (dr::any_or<true>(active_surface)) {
                 // ---------------------- Hide area emitters ----------------------
-                if (m_hide_emitters && dr::any_or<true>(ls.depth == 0u)) {
+                if (m_hide_emitters && dr::any_or<true>(ls.current.depth == 0u)) {
                     // Are we on the first segment and did we hit an area emitter?
                     // If so, skip all area emitters along this ray
                     Mask skip_emitters = si.is_valid() &&
                                          (si.shape->emitter() != nullptr) &&
-                                         (ls.depth == 0) &&
+                                         (ls.current.depth == 0) &&
                                          intersect;
 
                     if (dr::any_or<true>(skip_emitters)) {
-                        Ray3f ray = si.spawn_ray(ls.ray.d);
+                        Ray3f ray = si.spawn_ray(ls.current.ray.d);
                         PreliminaryIntersection3f pi =
                             Base::skip_area_emitters(scene, ray, true, skip_emitters);
                         SurfaceInteraction3f si_after_skip =
@@ -395,11 +463,15 @@ public:
                 }
             }
             active_surface &= si.is_valid();
+            if(dr::any_or<false>(escaped_medium)) {
+                Log(Debug, "escaped medium");
+            }
             if (dr::any_or<true>(active_surface)) {
                 // --------------------- Emitter sampling ---------------------
                 BSDFContext ctx;
                 BSDFPtr bsdf  = si.bsdf(ray);
                 Mask active_e = active_surface && has_flag(bsdf->flags(), BSDFFlags::Smooth) && (depth + 1 < (uint32_t) m_max_depth);
+                Mask active_nee = active_e && ls.nee_depth < depth+1;
 
                 if (likely(dr::any_or<true>(active_e))) {
                     auto [emitted, ds] = sample_emitter(si, scene, sampler, medium, channel, active_e);
@@ -412,8 +484,20 @@ public:
                     // Determine probability of having sampled that same
                     // direction using BSDF sampling.
                     Float bsdf_pdf = bsdf->pdf(ctx, si, wo, active_e);
-                    result[active_e] += throughput * bsdf_val * mis_weight(ds.pdf, dr::select(ds.delta, 0.f, bsdf_pdf)) * emitted;
+                    result[active_nee] += throughput * bsdf_val * mis_weight(ds.pdf, dr::select(ds.delta, 0.f, bsdf_pdf)) * emitted;
+
+                    if(dr::any_or<false>(active_nee)){
+                        Log(Debug,"[%f, %f] Surface NEE: %f, %f", depth+1, ls.nee_depth, unpolarized_spectrum(result)[0], unpolarized_spectrum(throughput)[0]);
+                    }
+                    // Increment nee_depth
+                    dr::masked(ls.nee_depth, active_nee) += 1;
                 }
+
+
+                end_cp = ls.active_cp && (depth + 1 - ls.parent.depth) >= m_max_cp_depth;
+                active &= !end_cp;
+                if (dr::any_or<false>(end_cp))
+                    Log(Debug,"end cp");
 
                 // ----------------------- BSDF sampling ----------------------
                 auto [bs, bsdf_val] = bsdf->sample(ctx, si, sampler->next_1d(active_surface),
@@ -441,11 +525,27 @@ public:
                 Mask has_medium_trans                = active_surface && si.is_medium_transition();
                 dr::masked(medium, has_medium_trans) = si.target_medium(ray.d);
             }
+
             active &= (active_surface | active_medium);
+
+            // restore the current state to the parrent state when the copy path is not active anymore.
+            Mask restore_parent = ls.parent.active && ls.active_cp && !ls.current.active;
+            // Log(Debug, "restore_parent: %f, parent active: %f, active_cp: %f, current active: %f", restore_parent, ls.parent.active, ls.active_cp, ls.current.active);
+            dr::masked(ls.nee_depth, restore_parent && !end_cp) += m_max_cp_depth - (ls.nee_depth - ls.parent.depth);
+            if (dr::any_or<false>(restore_parent))
+                    Log(Debug,"restore + escape: %f, %f", ls.current.depth, ls.nee_depth);
+
+            dr::masked(ls.active_cp, restore_parent) = false;
+            dr::masked(ls.current, restore_parent) = ls.parent;
+            if (dr::any_or<false>(restore_parent))
+                    Log(Debug,"restore parent: %f, %f", ls.current.depth, ls.nee_depth);
+
+            if(dr::any_or<false>(!act_null_scatter))
+                Log(Debug,"[%f, %f] result: %f", ls.current.depth, ls.nee_depth, unpolarized_spectrum(ls.result)[0]);
         },
         "Volpath integrator");
 
-        return { ls.result, ls.valid_ray };
+        return { ls.result, ls.current.valid_ray };
     }
 
 
@@ -628,7 +728,9 @@ public:
 private:
     Float m_ddis_threshold;
     u_int32_t m_ddis_method;
-
+    
+    UInt32 m_max_cp_depth;
+    UInt32 m_first_cp_nee;
 };
 
 MI_EXPORT_PLUGIN(VolumetricPathIntegrator)
