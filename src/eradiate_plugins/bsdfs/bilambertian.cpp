@@ -204,17 +204,16 @@ public:
         return result;
     }
 
-    void traverse(TraversalCallback *callback) override {
-        callback->put("reflectance", m_reflectance.get(), ParamFlags::Differentiable);
-        callback->put("transmittance", m_transmittance.get(), ParamFlags::Differentiable);
+    void traverse(TraversalCallback *cb) override {
+        cb->put("reflectance", m_reflectance.get(), ParamFlags::Differentiable);
+        cb->put("transmittance", m_transmittance.get(), ParamFlags::Differentiable);
     }
 
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "BilambertianBDSF[" << std::endl
             << "  reflectance = " << string::indent(m_reflectance) << std::endl
-            << "  transmittance = " << string::indent(m_transmittance)
-            << std::endl
+            << "  transmittance = " << string::indent(m_transmittance) << std::endl
             << "]";
         return oss.str();
     }
@@ -223,6 +222,8 @@ public:
 private:
     ref<Texture> m_reflectance;
     ref<Texture> m_transmittance;
+
+    MI_TRAVERSE_CB(Base, m_reflectance, m_transmittance)
 };
 
 MI_EXPORT_PLUGIN(BilambertianBSDF)

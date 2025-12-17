@@ -98,10 +98,8 @@ public:
     }
 
     void traverse(TraversalCallback *cb) override {
-        cb->put("irradiance", m_irradiance.get(),
- ParamFlags::Differentiable);
-        cb->put("to_world", *m_to_world.ptr(),
- ParamFlags::NonDifferentiable);
+        cb->put("irradiance", m_irradiance.get(), ParamFlags::Differentiable);
+        cb->put("to_world", *m_to_world.ptr(), ParamFlags::NonDifferentiable);
     }
 
     void set_scene(const Scene *scene) override {
@@ -236,6 +234,8 @@ protected:
     ScalarBoundingSphere3f m_bsphere;
     Float m_cos_angular_radius;
     Float m_omega;
+
+    MI_TRAVERSE_CB(Base, m_irradiance)
 };
 
 MI_EXPORT_PLUGIN(AstroObjectEmitter)

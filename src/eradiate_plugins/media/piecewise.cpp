@@ -428,14 +428,11 @@ public:
         return { tr, pdf, escaped };
     }
 
-    void traverse(TraversalCallback *callback) override {
-        callback->put("scale", m_scale,
- ParamFlags::NonDifferentiable);
-        callback->put("albedo", m_albedo.get(),
- ParamFlags::Differentiable);
-        callback->put("sigma_t", m_sigmat.get(),
- ParamFlags::Differentiable);
-        Base::traverse(callback);
+    void traverse(TraversalCallback *cb) override {
+        cb->put("scale", m_scale, ParamFlags::NonDifferentiable);
+        cb->put("albedo", m_albedo.get(), ParamFlags::Differentiable);
+        cb->put("sigma_t", m_sigmat.get(), ParamFlags::Differentiable);
+        Base::traverse(cb);
     }
 
     void parameters_changed(
@@ -572,6 +569,8 @@ private:
     Float m_max_density;
     FloatStorage m_cum_opt_thickness;
     FloatStorage m_reverse_cum_opt_thickness;
+
+    MI_TRAVERSE_CB(Base, m_albedo, m_sigmat, m_max_density)
 };
 
 MI_EXPORT_PLUGIN(PiecewiseMedium)

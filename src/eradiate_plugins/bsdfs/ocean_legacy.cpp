@@ -1,16 +1,13 @@
-#include <array>
 #include <drjit/dynamic.h>
 #include <drjit/texture.h>
 #include <mitsuba/core/distr_1d.h>
 #include <mitsuba/core/properties.h>
 #include <mitsuba/core/random.h>
-#include <mitsuba/core/spectrum.h>
 #include <mitsuba/core/warp.h>
 #include <mitsuba/render/bsdf.h>
 #include <mitsuba/render/microfacet.h>
 #include <mitsuba/render/texture.h>
 #include <mitsuba/eradiate/oceanprops.h>
-#include <tuple>
 
 // Transmittance angular resolution
 // i.e. texture resolution
@@ -292,21 +289,14 @@ public:
             m_flags |= c;
     }
 
-    void traverse(TraversalCallback *callback) override {
-        callback->put("wavelength", m_wavelength,
- ParamFlags::NonDifferentiable);
-        callback->put("wind_speed", m_wind_speed,
- ParamFlags::Differentiable);
-        callback->put("wind_direction", m_wind_direction,
- ParamFlags::Differentiable);
-        callback->put("chlorinity", m_chlorinity,
- ParamFlags::Differentiable);
-        callback->put("pigmentation", m_pigmentation,
- ParamFlags::Differentiable);
-        callback->put("shadowing", m_shadowing,
- ParamFlags::NonDifferentiable);
-        callback->put("coverage", m_coverage,
- ParamFlags::NonDifferentiable);
+    void traverse(TraversalCallback *cb) override {
+        cb->put("wavelength", m_wavelength, ParamFlags::NonDifferentiable);
+        cb->put("wind_speed", m_wind_speed, ParamFlags::Differentiable);
+        cb->put("wind_direction", m_wind_direction, ParamFlags::Differentiable);
+        cb->put("chlorinity", m_chlorinity, ParamFlags::Differentiable);
+        cb->put("pigmentation", m_pigmentation, ParamFlags::Differentiable);
+        cb->put("shadowing", m_shadowing, ParamFlags::NonDifferentiable);
+        cb->put("coverage", m_coverage, ParamFlags::NonDifferentiable);
     }
 
     void parameters_changed(const std::vector<std::string> &/*keys*/) override {
@@ -722,20 +712,13 @@ public:
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "OceanLegacy[" << std::endl
-            << "  component = " << string::indent(m_component) << ","
-            << std::endl
-            << "  wavelength = " << string::indent(m_wavelength) << ","
-            << std::endl
-            << "  wind_speed = " << string::indent(m_wind_speed) << ","
-            << std::endl
-            << "  wind_direction = " << string::indent(m_wind_direction) << ","
-            << std::endl
-            << "  chlorinity = " << string::indent(m_chlorinity) << ","
-            << std::endl
-            << "  pigmentation = " << string::indent(m_pigmentation) << ","
-            << std::endl
-            << "  shadowing = " << string::indent(m_shadowing) << ","
-            << std::endl
+            << "  component = " << string::indent(m_component) << "," << std::endl
+            << "  wavelength = " << string::indent(m_wavelength) << "," << std::endl
+            << "  wind_speed = " << string::indent(m_wind_speed) << "," << std::endl
+            << "  wind_direction = " << string::indent(m_wind_direction) << "," << std::endl
+            << "  chlorinity = " << string::indent(m_chlorinity) << "," << std::endl
+            << "  pigmentation = " << string::indent(m_pigmentation) << "," << std::endl
+            << "  shadowing = " << string::indent(m_shadowing) << "," << std::endl
             << "  coverage = " << string::indent(m_coverage) << std::endl
             << "]";
         return oss.str();
@@ -768,8 +751,10 @@ private:
 
     // Whitecap constants
     static constexpr ScalarFloat m_f_eff_base = 0.4f;
-    // Underlight contants
+    // Underlight constants
     static constexpr ScalarFloat m_underlight_alpha = 0.485f;
+
+    MI_TRAVERSE_CB(Base, m_wind_speed, m_wind_direction, m_chlorinity, m_pigmentation)
 };
 
 MI_EXPORT_PLUGIN(OceanBSDF)

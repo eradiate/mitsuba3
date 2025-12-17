@@ -1,8 +1,4 @@
-#include <mitsuba/core/frame.h>
-#include <mitsuba/core/fwd.h>
-#include <mitsuba/core/math.h>
 #include <mitsuba/core/properties.h>
-#include <mitsuba/core/spectrum.h>
 #include <mitsuba/core/warp.h>
 #include <mitsuba/render/bsdf.h>
 #include <mitsuba/render/texture.h>
@@ -85,14 +81,13 @@ public:
         m_components.push_back(m_flags);
     }
 
-    void traverse(TraversalCallback *callback) override {
-        callback->put("w", m_w.get(), ParamFlags::Differentiable);
-        callback->put("b", m_b.get(), ParamFlags::Differentiable);
-        callback->put("c", m_c.get(), ParamFlags::Differentiable);
-        callback->put("theta", m_theta.get(),
- ParamFlags::Differentiable);
-        callback->put("B_0", m_B_0.get(), ParamFlags::Differentiable);
-        callback->put("h", m_h.get(), ParamFlags::Differentiable);
+    void traverse(TraversalCallback *cb) override {
+        cb->put("w", m_w.get(), ParamFlags::Differentiable);
+        cb->put("b", m_b.get(), ParamFlags::Differentiable);
+        cb->put("c", m_c.get(), ParamFlags::Differentiable);
+        cb->put("theta", m_theta.get(), ParamFlags::Differentiable);
+        cb->put("B_0", m_B_0.get(), ParamFlags::Differentiable);
+        cb->put("h", m_h.get(), ParamFlags::Differentiable);
     }
 
     std::pair<BSDFSample3f, Spectrum> sample(const BSDFContext &ctx,
@@ -401,6 +396,8 @@ private:
     ref<Texture> m_theta;
     ref<Texture> m_B_0;
     ref<Texture> m_h;
+
+    MI_TRAVERSE_CB(Base, m_w, m_b, m_c, m_theta, m_B_0, m_h)
 };
 
 MI_EXPORT_PLUGIN(HapkeBSDF)

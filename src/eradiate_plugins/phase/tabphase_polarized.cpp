@@ -395,24 +395,15 @@ public:
         return { phase_val, pdf };
     }
 
-    void traverse(TraversalCallback *callback) override {
-
-        callback->put("m11", m_m11.pdf(),
- ParamFlags::NonDifferentiable);
-        callback->put("m12", m_mvec.data(0),
- ParamFlags::NonDifferentiable);
-        callback->put("m22", m_mvec.data(1),
- ParamFlags::NonDifferentiable);
-        callback->put("m33", m_mvec.data(2),
- ParamFlags::NonDifferentiable);
-        callback->put("m34", m_mvec.data(3),
- ParamFlags::NonDifferentiable);
-        callback->put("m44", m_mvec.data(4),
- ParamFlags::NonDifferentiable);
-        callback->put("nodes", m_m11.nodes(),
- ParamFlags::NonDifferentiable);
-        callback->put("nodes", m_mvec.nodes(),
- ParamFlags::NonDifferentiable);
+    void traverse(TraversalCallback *cb) override {
+        cb->put("m11", m_m11.pdf(), ParamFlags::NonDifferentiable);
+        cb->put("m12", m_mvec.data(0), ParamFlags::NonDifferentiable);
+        cb->put("m22", m_mvec.data(1), ParamFlags::NonDifferentiable);
+        cb->put("m33", m_mvec.data(2), ParamFlags::NonDifferentiable);
+        cb->put("m34", m_mvec.data(3), ParamFlags::NonDifferentiable);
+        cb->put("m44", m_mvec.data(4), ParamFlags::NonDifferentiable);
+        cb->put("nodes", m_m11.nodes(), ParamFlags::NonDifferentiable);
+        cb->put("nodes", m_mvec.nodes(), ParamFlags::NonDifferentiable);
     }
 
     void

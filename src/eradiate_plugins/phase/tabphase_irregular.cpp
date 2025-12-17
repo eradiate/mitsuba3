@@ -97,11 +97,9 @@ public:
         m_components.push_back(m_flags);
     }
 
-    void traverse(TraversalCallback *callback) override {
-        callback->put("values", m_distr.pdf(),
- ParamFlags::NonDifferentiable);
-        callback->put("nodes", m_distr.nodes(),
- ParamFlags::NonDifferentiable);
+    void traverse(TraversalCallback *cb) override {
+        cb->put("values", m_distr.pdf(), ParamFlags::NonDifferentiable);
+        cb->put("nodes", m_distr.nodes(), ParamFlags::NonDifferentiable);
     }
 
     void
@@ -160,6 +158,7 @@ public:
     }
 
     MI_DECLARE_CLASS(IrregularTabulatedPhaseFunction)
+
 private:
     IrregularContinuousDistribution<Float> m_distr;
 };

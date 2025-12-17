@@ -1,8 +1,4 @@
-#include <mitsuba/core/frame.h>
-#include <mitsuba/core/fwd.h>
-#include <mitsuba/core/math.h>
 #include <mitsuba/core/properties.h>
-#include <mitsuba/core/spectrum.h>
 #include <mitsuba/core/warp.h>
 #include <mitsuba/eradiate/oceanprops.h>
 #include <mitsuba/render/bsdf.h>
@@ -250,6 +246,8 @@ private:
     ref<Texture> m_refr_re;
     ref<Texture> m_refr_im;
     ref<Texture> m_ext_eta;
+
+    MI_TRAVERSE_CB(Base, m_C, m_ndvi, m_refr_re, m_refr_im, m_ext_eta)
 };
 
 MI_EXPORT_PLUGIN(MaignanBSDF)

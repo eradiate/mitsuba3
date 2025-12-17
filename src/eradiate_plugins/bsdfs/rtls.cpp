@@ -1,8 +1,4 @@
-#include <mitsuba/core/frame.h>
-#include <mitsuba/core/fwd.h>
-#include <mitsuba/core/math.h>
 #include <mitsuba/core/properties.h>
-#include <mitsuba/core/spectrum.h>
 #include <mitsuba/core/warp.h>
 #include <mitsuba/render/bsdf.h>
 #include <mitsuba/render/texture.h>
@@ -81,13 +77,10 @@ public:
         m_components.push_back(m_flags);
     }
 
-    void traverse(TraversalCallback *callback) override {
-        callback->put("f_iso", m_f_iso.get(),
- ParamFlags::Differentiable);
-        callback->put("f_vol", m_f_vol.get(),
- ParamFlags::Differentiable);
-        callback->put("f_geo", m_f_geo.get(),
- ParamFlags::Differentiable);
+    void traverse(TraversalCallback *cb) override {
+        cb->put("f_iso", m_f_iso.get(), ParamFlags::Differentiable);
+        cb->put("f_vol", m_f_vol.get(), ParamFlags::Differentiable);
+        cb->put("f_geo", m_f_geo.get(), ParamFlags::Differentiable);
     }
 
     std::pair<BSDFSample3f, Spectrum> sample(const BSDFContext &ctx,
@@ -315,6 +308,8 @@ private:
     ScalarFloat m_h;
     ScalarFloat m_r;
     ScalarFloat m_b;
+
+    MI_TRAVERSE_CB(Base, m_f_iso, m_f_vol, m_f_geo)
 };
 
 MI_EXPORT_PLUGIN(RTLSBSDF)

@@ -1,8 +1,4 @@
-#include <mitsuba/core/frame.h>
-#include <mitsuba/core/fwd.h>
-#include <mitsuba/core/math.h>
 #include <mitsuba/core/properties.h>
-#include <mitsuba/core/spectrum.h>
 #include <mitsuba/core/warp.h>
 #include <mitsuba/render/bsdf.h>
 #include <mitsuba/render/texture.h>
@@ -93,13 +89,11 @@ public:
         m_components.push_back(m_flags);
     }
 
-    void traverse(TraversalCallback *callback) override {
-        callback->put("rho_0", m_rho_0.get(),
- ParamFlags::Differentiable);
-        callback->put("g", m_g.get(), ParamFlags::Differentiable);
-        callback->put("k", m_k.get(), ParamFlags::Differentiable);
-        callback->put("rho_c", m_rho_c.get(),
- ParamFlags::Differentiable);
+    void traverse(TraversalCallback *cb) override {
+        cb->put("rho_0", m_rho_0.get(), ParamFlags::Differentiable);
+        cb->put("g", m_g.get(), ParamFlags::Differentiable);
+        cb->put("k", m_k.get(), ParamFlags::Differentiable);
+        cb->put("rho_c", m_rho_c.get(), ParamFlags::Differentiable);
     }
 
     std::pair<BSDFSample3f, Spectrum> sample(const BSDFContext &ctx,
@@ -218,6 +212,8 @@ private:
     ref<Texture> m_g;
     ref<Texture> m_k;
     ref<Texture> m_rho_c;
+
+    MI_TRAVERSE_CB(Base, m_rho_0, m_g, m_k, m_rho_c)
 };
 
 MI_EXPORT_PLUGIN(RPVBSDF)

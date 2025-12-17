@@ -1,4 +1,3 @@
-#include <array>
 #include <drjit/dynamic.h>
 #include <drjit/texture.h>
 #include <mitsuba/core/distr_1d.h>
@@ -11,7 +10,6 @@
 #include <mitsuba/render/ior.h>
 #include <mitsuba/render/microfacet.h>
 #include <mitsuba/render/texture.h>
-#include <tuple>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -116,11 +114,11 @@ public:
             m_flags |= c;
     }
 
-    void traverse(TraversalCallback *callback) override {
-        callback->put("wind_speed", m_wind_speed, ParamFlags::Differentiable);
-        callback->put("eta", m_eta, ParamFlags::Differentiable);
-        callback->put("k", m_k, ParamFlags::Differentiable);
-        callback->put("ext_ior", m_ext_eta, ParamFlags::Differentiable);
+    void traverse(TraversalCallback *cb) override {
+        cb->put("wind_speed", m_wind_speed, ParamFlags::Differentiable);
+        cb->put("eta", m_eta, ParamFlags::Differentiable);
+        cb->put("k", m_k, ParamFlags::Differentiable);
+        cb->put("ext_ior", m_ext_eta, ParamFlags::Differentiable);
     }
 
     void
@@ -340,6 +338,8 @@ private:
 
     ScalarFloat m_sigma;
     OceanProperties<Float, Spectrum> m_ocean_props;
+
+    MI_TRAVERSE_CB(Base, m_wind_speed, m_eta, m_k, m_ext_eta)
 };
 
 MI_EXPORT_PLUGIN(MishchenkoOceanBSDF)

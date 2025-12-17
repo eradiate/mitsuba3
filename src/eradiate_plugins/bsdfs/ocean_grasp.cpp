@@ -1,16 +1,13 @@
-#include <array>
 #include <drjit/dynamic.h>
 #include <drjit/texture.h>
 #include <mitsuba/core/distr_1d.h>
 #include <mitsuba/core/properties.h>
 #include <mitsuba/core/random.h>
-#include <mitsuba/core/spectrum.h>
 #include <mitsuba/core/warp.h>
 #include <mitsuba/render/bsdf.h>
 #include <mitsuba/render/microfacet.h>
 #include <mitsuba/render/texture.h>
 #include <mitsuba/eradiate/oceanprops.h>
-#include <tuple>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -147,18 +144,13 @@ public:
         parameters_changed();
     }
 
-    void traverse(TraversalCallback *callback) override {
-        callback->put("wavelength", m_wavelength,
- ParamFlags::NonDifferentiable);
-        callback->put("wind_speed", m_wind_speed.get(),
- ParamFlags::Differentiable);
-        callback->put("eta", m_eta.get(), ParamFlags::Differentiable);
-        callback->put("k", m_k.get(), ParamFlags::Differentiable);
-        callback->put("ext_ior", m_ext_ior.get(),
- ParamFlags::Differentiable);
-        callback->put("water_body_reflectance",
-                                m_water_body_reflectance.get(),
- ParamFlags::Differentiable);
+    void traverse(TraversalCallback *cb) override {
+        cb->put("wavelength", m_wavelength, ParamFlags::NonDifferentiable);
+        cb->put("wind_speed", m_wind_speed.get(), ParamFlags::Differentiable);
+        cb->put("eta", m_eta.get(), ParamFlags::Differentiable);
+        cb->put("k", m_k.get(), ParamFlags::Differentiable);
+        cb->put("ext_ior", m_ext_ior.get(), ParamFlags::Differentiable);
+        cb->put("water_body_reflectance", m_water_body_reflectance.get(), ParamFlags::Differentiable);
     }
 
     void parameters_changed(
@@ -511,12 +503,9 @@ public:
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "GRASPOcean[" << std::endl
-            << "  component = " << string::indent(m_component) << ","
-            << std::endl
-            << "  wavelength = " << string::indent(m_wavelength) << ","
-            << std::endl
-            << "  wind_speed = " << string::indent(m_wind_speed) << ","
-            << std::endl
+            << "  component = " << string::indent(m_component) << "," << std::endl
+            << "  wavelength = " << string::indent(m_wavelength) << "," << std::endl
+            << "  wind_speed = " << string::indent(m_wind_speed) << "," << std::endl
             << "  eta = " << string::indent(m_eta) << "," << std::endl
             << "  k = " << string::indent(m_k) << "," << std::endl
             << "  ext_eta = " << string::indent(m_ext_ior) << "," << std::endl
@@ -535,6 +524,15 @@ private:
     ref<Texture> m_k;
     ref<Texture> m_ext_ior;
     ref<Texture> m_water_body_reflectance;
+
+    MI_TRAVERSE_CB(
+        Base,
+        m_wind_speed,
+        m_eta,
+        m_k,
+        m_ext_ior,
+        m_water_body_reflectance
+    )
 };
 
 MI_EXPORT_PLUGIN(GRASPOceanBSDF)

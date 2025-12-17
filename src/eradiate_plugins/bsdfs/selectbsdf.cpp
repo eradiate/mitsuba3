@@ -1,10 +1,7 @@
+#include <drjit/tensor.h>
 #include <mitsuba/core/properties.h>
-#include <mitsuba/core/spectrum.h>
-#include <mitsuba/core/string.h>
 #include <mitsuba/render/bsdf.h>
 #include <mitsuba/render/texture.h>
-
-#include <drjit/tensor.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -82,13 +79,11 @@ public:
             m_flags |= m_nested_bsdf[i]->flags();
     }
 
-    void traverse(TraversalCallback *callback) override {
-        callback->put("indices", m_indices.get(),
- ParamFlags::NonDifferentiable);
+    void traverse(TraversalCallback *cb) override {
+        cb->put("indices", m_indices.get(), ParamFlags::NonDifferentiable);
         for (size_t i = 0; i < m_nested_bsdf.size(); ++i) {
-            callback->put("bsdf_" + std::to_string(i),
-                                 m_nested_bsdf[i].get(),
- ParamFlags::Differentiable);
+            cb->put("bsdf_" + std::to_string(i), m_nested_bsdf[i].get(),
+                    ParamFlags::Differentiable);
         }
     }
 
@@ -138,8 +133,7 @@ public:
 
         for (size_t i = 0; i < m_nested_bsdf.size(); ++i)
             oss << "  nested_bsdf[" << i
-                << "] = " << string::indent(m_nested_bsdf[i]) << ","
-                << std::endl;
+                << "] = " << string::indent(m_nested_bsdf[i]) << "," << std::endl;
 
         oss << "]";
         return oss.str();

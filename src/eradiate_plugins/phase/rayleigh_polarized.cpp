@@ -48,9 +48,8 @@ public:
         m_flags = +PhaseFunctionFlags::Anisotropic;
     }
 
-    void traverse(TraversalCallback *callback) override {
-        callback->put("depolarization", m_depolarization.get(),
- ParamFlags::Differentiable);
+    void traverse(TraversalCallback *cb) override {
+        cb->put("depolarization", m_depolarization.get(), ParamFlags::Differentiable);
     }
 
     MI_INLINE
@@ -182,8 +181,11 @@ public:
     }
 
     MI_DECLARE_CLASS(RayleighPolarizedPhaseFunction)
+
 private:
     ref<Volume> m_depolarization;
+
+    MI_TRAVERSE_CB(Base, m_depolarization)
 };
 
 MI_EXPORT_PLUGIN(RayleighPolarizedPhaseFunction)

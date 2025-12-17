@@ -1,7 +1,5 @@
-#include <drjit/dynamic.h>
 #include <drjit/texture.h>
 #include <mitsuba/core/fresolver.h>
-#include <mitsuba/core/properties.h>
 #include <mitsuba/core/spectrum.h>
 #include <mitsuba/core/util.h>
 #include <mitsuba/core/warp.h>
@@ -185,8 +183,7 @@ public:
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "MeasuredQuasiDiffuseBSDF[" << std::endl
-            << "  volume_grid_size = " << m_volume_grid->size() << ","
-            << std::endl
+            << "  volume_grid_size = " << m_volume_grid->size() << "," << std::endl
             << "  volume_grid_data = [ " << util::mem_string(buffer_size())
             << " of volume data ]" << std::endl
             << "]";
