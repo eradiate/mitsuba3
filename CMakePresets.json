@@ -1,16 +1,7 @@
 {
     "version": 3,
     "configurePresets": [{
-        "name": "eradiate_core",
-        "displayName": "Eradiate core configuration",
-        "description": "Eradiate kernel (mitsuba3) core build with Embree off and required variants",
-        "cacheVariables": {
-            "MI_ENABLE_EMBREE": "OFF",
-            "MI_DEFAULT_VARIANTS": "scalar_mono;scalar_mono_double;scalar_mono_polarized;scalar_mono_polarized_double;scalar_rgb;scalar_spectral;llvm_ad_rgb;llvm_ad_spectral_polarized"
-        }
-    },{
         "name": "eradiate",
-        "inherits": "eradiate_core",
         "displayName": "Eradiate default development configuration",
         "description": "Eradiate kernel (mitsuba3) build using Ninja generator",
         "generator": "Ninja",
