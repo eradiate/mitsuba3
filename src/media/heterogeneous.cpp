@@ -8,6 +8,7 @@
 #include <mitsuba/render/sampler.h>
 #include <mitsuba/render/scene.h>
 #include <mitsuba/render/volume.h>
+#include <mitsuba/render/eradiate/extremum.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -149,8 +150,8 @@ template <typename Float, typename Spectrum>
 class HeterogeneousMedium final : public Medium<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
-                    m_phase_function)
-    MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume)
+                    m_phase_function, m_extremum_structure, m_has_local_extremum)
+    MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, ExtremumStructure, ExtremumStructurePtr)
 
     HeterogeneousMedium(const Properties &props) : Base(props) {
         m_is_homogeneous = false;
@@ -161,6 +162,10 @@ public:
         m_has_spectral_extinction = props.get<bool>("has_spectral_extinction", true);
 
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
+
+        if (m_has_local_extremum && m_has_spectral_extinction) {
+            Throw("Local majorants of spectral volumes are not supported.");
+        }
     }
 
     void traverse(TraversalCallback *cb) override {
@@ -175,7 +180,7 @@ public:
     }
 
     UnpolarizedSpectrum
-    get_majorant(const MediumInteraction3f & /* mi */,
+    get_majorant(const MediumInteraction3f & /*mi*/,
                  Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
         return m_max_density;
@@ -191,7 +196,15 @@ public:
             sigmat *= m_phase_function->projected_area(mi, active);
 
         auto sigmas = sigmat * m_albedo->eval(mi, active);
-        auto sigman = m_max_density - sigmat;
+        
+        Float min, max;
+        if (m_has_local_extremum)
+            std::tie(min, max) = m_extremum_structure->eval_1(mi, active);
+        else
+            max = m_max_density;
+
+        auto sigman = max - sigmat;
+        
         return { sigmas, sigman, sigmat };
     }
 
