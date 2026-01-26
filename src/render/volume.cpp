@@ -57,6 +57,19 @@ Volume<Float, Spectrum>::max_per_channel(ScalarFloat * /*out*/) const {
     NotImplementedError("max_per_channel");
 }
 
+// #ERADIATE_CHANGE_BEGIN: Local extremum support
+MI_VARIANT std::pair<Float, Float>
+Volume<Float, Spectrum>::extremum(BoundingBox3f /*bbox*/, Mask /*local*/) const {
+    // Default implementation: fall back to global max/min
+    // Derived classes should override for better spatial queries
+    return { 0.f, max() };
+}
+
+MI_VARIANT void Volume<Float, Spectrum>::add_extremum_structure(ExtremumStructure* extremum) {
+    m_extremum_structures.push_back(extremum);
+}
+// #ERADIATE_CHANGE_END
+
 // #RAY_CHANGE_BEGIN, NM 24/05/2024 : Add util functions to the volume class
 MI_VARIANT typename Volume<Float, Spectrum>::ScalarVector3f
 Volume<Float, Spectrum>::voxel_size() const {
