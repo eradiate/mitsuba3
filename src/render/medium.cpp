@@ -21,6 +21,13 @@ MI_VARIANT Medium<Float, Spectrum>::Medium(const Properties &props)
                 Throw("Only a single phase function can be specified per medium");
             m_phase_function = phase;
         }
+// #ERADIATE_CHANGE_BEGIN: Initialize extremum structure from properties
+        // if (auto *extremum = prop.try_get<ExtremumStructure<Float, Spectrum>>()) {
+        //     if (m_extremum_structure)
+        //         Throw("Only a single extremum structure can be specified per medium");
+        //     m_extremum_structure = extremum;
+        // }
+// #ERADIATE_CHANGE_END
     }
     if (!m_phase_function) {
         // Create a default isotropic phase function
@@ -35,21 +42,27 @@ MI_VARIANT Medium<Float, Spectrum>::~Medium() { }
 
 MI_VARIANT void Medium<Float, Spectrum>::traverse(TraversalCallback *cb) {
     cb->put("phase_function", m_phase_function, ParamFlags::Differentiable);
+// #ERADIATE_CHANGE_BEGIN: Traverse extremum structure
+    // cb->put("extremum_structure", m_extremum_structure, ParamFlags::NonDifferentiable);
+// #ERADIATE_CHANGE_END
 }
 
+// #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
 MI_VARIANT
 typename Medium<Float, Spectrum>::MediumInteraction3f
 Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
                                             UInt32 channel, Mask active) const {
     MI_MASKED_FUNCTION(ProfilerPhase::MediumSample, active);
 
-    // initialize basic medium interaction fields
+    // Initialize basic medium interaction fields
     MediumInteraction3f mei = dr::zeros<MediumInteraction3f>();
     mei.wi          = -ray.d;
     mei.sh_frame    = Frame3f(mei.wi);
     mei.time        = ray.time;
     mei.wavelengths = ray.wavelengths;
+    mei.medium      = this;
 
+    // Intersect AABB
     auto [aabb_its, mint, maxt] = intersect_aabb(ray);
     aabb_its &= (dr::isfinite(mint) || dr::isfinite(maxt));
     active &= aabb_its;
@@ -58,28 +71,54 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
 
     mint = dr::maximum(0.f, mint);
     maxt = dr::minimum(ray.maxt, maxt);
+    mei.mint = mint;
 
-    auto combined_extinction = get_majorant(mei, active);
-    Float m                  = combined_extinction[0];
-    if constexpr (is_rgb_v<Spectrum>) { // Handle RGB rendering
-        dr::masked(m, channel == 1u) = combined_extinction[1];
-        dr::masked(m, channel == 2u) = combined_extinction[2];
+    Float desired_tau = -dr::log(1.f - sample);
+    Float sampled_t;
+    UnpolarizedSpectrum combined_extinction;
+
+    // Check for extremum structure (pointer check, not virtual call)
+    // const auto *extremum = nullptr; //extremum_structure();
+
+    if (false) {
+    // if (extremum != nullptr) {
+        // Use extremum structure with local majorants
+        // auto segment = extremum->sample_segment(ray, mint, maxt, desired_tau, active);
+        // sampled_t = segment.tmin;
+
+        // // Store local majorant in combined_extinction
+        // combined_extinction[0] = segment.sigma_maj;
+        // if constexpr (is_rgb_v<Spectrum>) {
+        //     combined_extinction[1] = segment.sigma_maj;
+        //     combined_extinction[2] = segment.sigma_maj;
+        // } else {
+        //     DRJIT_MARK_USED(channel);
+        // }
     } else {
-        DRJIT_MARK_USED(channel);
+        // Traditional global majorant sampling
+        combined_extinction = get_majorant(mei, active);
+        Float m = combined_extinction[0];
+        if constexpr (is_rgb_v<Spectrum>) {
+            dr::masked(m, channel == 1u) = combined_extinction[1];
+            dr::masked(m, channel == 2u) = combined_extinction[2];
+        } else {
+            DRJIT_MARK_USED(channel);
+        }
+        sampled_t = mint + (desired_tau / m);
     }
 
-    Float sampled_t = mint + (-dr::log(1 - sample) / m);
-    Mask valid_mi   = active && (sampled_t <= maxt);
-    mei.t           = dr::select(valid_mi, sampled_t, dr::Infinity<Float>);
-    mei.p           = ray(sampled_t);
-    mei.medium      = this;
-    mei.mint        = mint;
+    // Finalize interaction
+    Mask valid_mi = active && (sampled_t <= maxt);
+    mei.t = dr::select(valid_mi, sampled_t, dr::Infinity<Float>);
+    mei.p = ray(sampled_t);
 
     std::tie(mei.sigma_s, mei.sigma_n, mei.sigma_t) =
         get_scattering_coefficients(mei, valid_mi);
     mei.combined_extinction = combined_extinction;
+
     return mei;
 }
+// #ERADIATE_CHANGE_END
 
 MI_VARIANT
 std::pair<typename Medium<Float, Spectrum>::UnpolarizedSpectrum,
