@@ -60,6 +60,39 @@ public:
      */
     virtual void max_per_channel(ScalarFloat *out) const;
 
+// #ERADIATE_CHANGE_BEGIN: Local extremum support
+    /**
+     * \brief Compute local extrema over a spatial region
+     *
+     * Returns the maximum value (majorant) and minimum value (minorant)
+     * over the specified bounding box region.
+     * Only fully implemented for grid-based volumes.
+     *
+     * \param bounds  Bounding box defining the query region in world space
+     * \return (majorant, minorant) pair
+     */
+    virtual std::pair<ScalarFloat, ScalarFloat>
+    extremum(const ScalarBoundingBox3f &bounds) const;
+
+    /**
+     * \brief Compute local majorant (maximum) over a spatial region
+     *
+     * Convenience method that returns only the majorant.
+     */
+    virtual ScalarFloat majorant(const ScalarBoundingBox3f &bounds) const {
+        return extremum(bounds).first;
+    }
+
+    /**
+     * \brief Compute local minorant (minimum) over a spatial region
+     *
+     * Convenience method that returns only the minorant.
+     */
+    virtual ScalarFloat minorant(const ScalarBoundingBox3f &bounds) const {
+        return extremum(bounds).second;
+    }
+// #ERADIATE_CHANGE_END
+
     /// Returns the bounding box of the volume
     ScalarBoundingBox3f bbox() const { return m_bbox; }
 

@@ -434,6 +434,68 @@ public:
             out[i] = m_max_per_channel[i];
     }
 
+// #ERADIATE_CHANGE_BEGIN: Spatial extremum queries for grid volumes
+    std::pair<ScalarFloat, ScalarFloat>
+    extremum(const ScalarBoundingBox3f &bounds) const override {
+        if (m_accel)
+            NotImplementedError("extremum() not supported with hardware acceleration");
+
+        if (m_texture.shape()[3] != 1)
+            NotImplementedError("extremum() only supported for single-channel volumes");
+
+        // Transform bounds to local grid coordinates [0,1]³
+        ScalarBoundingBox3f local_bounds;
+        for(uint8_t i = 0; i < 8; ++i){
+            local_bounds.expand( m_to_local * bounds.corner(i) );
+        }
+        local_bounds.clip(ScalarBoundingBox3f(ScalarPoint3f(0.f), ScalarPoint3f(1.f)));
+
+        if (!local_bounds.valid())
+            return { 0.f, 0.f };
+
+        const ScalarVector3i res = resolution();
+
+        // Convert to voxel indices with proper padding for interpolation
+        int32_t padding = (m_texture.filter_mode() == dr::FilterMode::Linear) ? 1 : 0;
+ 
+        ScalarVector3i voxel_min = dr::maximum(
+            dr::floor(local_bounds.min * ScalarVector3f(res)) - ScalarVector3i(padding),
+            ScalarVector3i(0)
+        );
+        ScalarVector3i voxel_max = dr::minimum(
+            dr::ceil(local_bounds.max * ScalarVector3f(res)) + ScalarVector3i(padding),
+            res - 1
+        );
+
+        // Scan voxels in bounds and find min/max
+        ScalarFloat max_val = -dr::Infinity<ScalarFloat>;
+        ScalarFloat min_val = dr::Infinity<ScalarFloat>;
+
+        const ScalarVector3f cell_size = m_bbox.extents() / res;
+        const size_t n_channels = m_texture.shape()[3];
+        const ScalarFloat *data = m_texture.tensor().data();
+
+        // TODO: the bound is not guaranteed to be aligned to the volume's axis.
+        // in such cases, we need to check that the query and cell bound intersect.
+        // the current bbox interface only checks for overlaps for two axis-aligned
+        // bboxes, which is not the current setup.
+        for (int32_t z = voxel_min.z(); z <= voxel_max.z(); ++z) {
+            for (int32_t y = voxel_min.y(); y <= voxel_max.y(); ++y) {
+                for (int32_t x = voxel_min.x(); x <= voxel_max.x(); ++x) {
+                    size_t idx = x * n_channels 
+                                 + y * n_channels * res.x() 
+                                 + z * n_channels * res.x() * res.y();
+                    ScalarFloat val = data[idx];
+                    max_val = dr::maximum(max_val, val);
+                    min_val = dr::minimum(min_val, val);
+                }
+            }
+        }
+
+        return { max_val, min_val };
+    }
+// #ERADIATE_CHANGE_END
+
     ScalarVector3i resolution() const override {
         const size_t *shape = m_texture.shape();
         return { (int) shape[2], (int) shape[1], (int) shape[0] };
