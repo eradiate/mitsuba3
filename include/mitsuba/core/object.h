@@ -65,7 +65,12 @@ enum class ObjectType : uint32_t {
     PhaseFunction,
 
     /// A rendering algorithm aka. Integrator
-    Integrator
+    Integrator,
+
+// #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
+    /// A medium acceleration structure.
+    ExtremumStructure
+// #ERADIATE_CHANGE_END
 };
 
 /**

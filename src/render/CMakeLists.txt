@@ -1,5 +1,8 @@
 set(INC_DIR "../../include/mitsuba/render")
 
+set(ER_INC "../../include/mitsuba/render/eradiate")
+set(ER_SRC "./eradiate")
+
 set(LIBRENDER_EXTRA_SRC "")
 
 if (MI_ENABLE_CUDA)
@@ -76,6 +79,9 @@ add_library(mitsuba-render OBJECT
   shapegroup.cpp   ${INC_DIR}/shapegroup.h
   volume.cpp       ${INC_DIR}/volume.h
   volumegrid.cpp   ${INC_DIR}/volumegrid.h
+
+  ${ER_SRC}/extremum.cpp    ${ER_INC}/extremum.h
+
   ${LIBRENDER_EXTRA_SRC}
 )
 
