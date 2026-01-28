@@ -13,6 +13,8 @@
 #include <mitsuba/render/texture.h>
 #include <mitsuba/render/volume.h>
 
+#include <mitsuba/render/eradiate/extremum.h>
+
 #include <mitsuba/python/python.h>
 
 #define PY_TRY_CAST(Type)                                                      \
@@ -22,7 +24,7 @@
 /// Helper routine to cast Mitsuba plugins to their underlying interfaces
 static nb::object caster(Object *o) {
     MI_PY_IMPORT_TYPES()
-
+    
     // Try casting, starting from the most precise types
     PY_TRY_CAST(Scene);
     PY_TRY_CAST(Mesh);
@@ -49,6 +51,8 @@ static nb::object caster(Object *o) {
 
     PY_TRY_CAST(PhaseFunction);
     PY_TRY_CAST(Medium);
+
+    PY_TRY_CAST(ExtremumStructure);
 
     return nb::object();
 }
@@ -111,6 +115,8 @@ MI_PY_DECLARE(srgb);
 MI_PY_DECLARE(Texture);
 MI_PY_DECLARE(Volume);
 MI_PY_DECLARE(VolumeGrid);
+MI_PY_DECLARE(ExtremumSegment);
+MI_PY_DECLARE(ExtremumStructure);
 
 using Caster = nb::object(*)(mitsuba::Object *);
 Caster cast_object = nullptr;
@@ -224,6 +230,8 @@ NB_MODULE(MI_VARIANT_NAME, m) {
     MI_PY_IMPORT(Texture);
     MI_PY_IMPORT(Volume);
     MI_PY_IMPORT(VolumeGrid);
+    MI_PY_IMPORT(ExtremumSegment);
+    MI_PY_IMPORT(ExtremumStructure);
 
     /* Callback function cleanup static variant-specific data structures, this
      * should be called when the interpreter is exiting */
