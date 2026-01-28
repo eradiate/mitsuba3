@@ -45,6 +45,12 @@ template <typename Float, typename Spectrum> struct MediumInteraction;
 template <typename Float, typename Spectrum> struct SurfaceInteraction;
 template <typename Float, typename Shape>    struct PreliminaryIntersection;
 
+// #ERADIATE_CHANGE_BEGIN: Local extremum support
+template <typename Float, typename Spectrum> class ExtremumStructure;
+
+template <typename Float, typename Spectrum> struct ExtremumSegment;
+// #ERADIATE_CHANGE_END
+
 template <typename Float_, typename Spectrum_> struct RenderAliases {
     using Float                     = Float_;
     using Spectrum                  = Spectrum_;
@@ -105,6 +111,15 @@ template <typename Float_, typename Spectrum_> struct RenderAliases {
     using SensorPtr              = dr::replace_scalar_t<Float, const Sensor *>;
     using EmitterPtr             = dr::replace_scalar_t<Float, const Emitter *>;
     using TexturePtr             = dr::replace_scalar_t<Float, const Texture *>;
+
+// #ERADIATE_CHANGE_BEGIN: Local extremum support
+    using ExtremumStructure      = mitsuba::ExtremumStructure<Float, Spectrum>;
+    
+    using ExtremumStructurePtr   = dr::replace_scalar_t<Float, const ExtremumStructure *>;
+    
+    using ExtremumSegment        = mitsuba::ExtremumSegment<Float, Spectrum>;
+// #ERADIATE_CHANGE_END
+
 };
 
 /**
@@ -153,6 +168,9 @@ template <typename Float_, typename Spectrum_> struct RenderAliases {
     using PreliminaryIntersection3f = typename RenderAliases::PreliminaryIntersection3f;           \
     using BSDFSample3f              = typename RenderAliases::BSDFSample3f;                        \
     using SilhouetteSample3f        = typename RenderAliases::SilhouetteSample3f;                  \
+/* #ERADIATE_CHANGE_BEGIN: Local extremum support */                                               \
+    using ExtremumSegment           = typename RenderAliases::ExtremumSegment;                     \
+/* #ERADIATE_CHANGE_END */                                                                         \
     DRJIT_MAP(MI_IMPORT_TYPES_MACRO, __VA_ARGS__)
 
 #define MI_IMPORT_OBJECT_TYPES()                                                                   \
@@ -186,6 +204,9 @@ template <typename Float_, typename Spectrum_> struct RenderAliases {
     using ShapePtr               = typename RenderAliases::ShapePtr;                               \
     using MeshPtr                = typename RenderAliases::MeshPtr;                                \
     using EmitterPtr             = typename RenderAliases::EmitterPtr;                             \
-    using SensorPtr              = typename RenderAliases::SensorPtr;
-
+    using SensorPtr              = typename RenderAliases::SensorPtr;                              \
+/* #ERADIATE_CHANGE_BEGIN: Local extremum support */                                               \
+    using ExtremumStructure      = typename RenderAliases::ExtremumStructure;                      \
+    using ExtremumStructurePtr   = typename RenderAliases::ExtremumStructurePtr;                   \
+/* #ERADIATE_CHANGE_END */                                                                         
 NAMESPACE_END(mitsuba)

@@ -13,7 +13,7 @@ NAMESPACE_BEGIN(mitsuba)
  * This structure stores the entry/exit distances of a segment along a ray,
  * along with the local majorant and minorant within that segment.
  */
-template <typename Float>
+template <typename Float, typename Spectrum>
 struct ExtremumSegment {
     /// Segment entry distance along ray
     Float tmin;
@@ -42,7 +42,6 @@ template <typename Float, typename Spectrum>
 class MI_EXPORT_LIB ExtremumStructure : public JitObject<ExtremumStructure<Float, Spectrum>> {
 public:
     MI_IMPORT_TYPES()
-    using ExtremumSegmentType = ExtremumSegment<Float>;
 
     /// Destructor
     ~ExtremumStructure();
@@ -65,7 +64,7 @@ public:
      *         bounds, and local majorant/minorant values. If desired_tau cannot
      *         be reached, tmin is set to Infinity.
      */
-    virtual ExtremumSegmentType sample_segment(
+    virtual ExtremumSegment sample_segment(
         const Ray3f &ray,
         Float mint,
         Float maxt,

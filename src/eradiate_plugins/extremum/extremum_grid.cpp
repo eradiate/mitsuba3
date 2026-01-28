@@ -50,7 +50,7 @@ public:
     MI_IMPORT_BASE(ExtremumStructure, m_bbox)
     MI_IMPORT_TYPES(Volume)
 
-    using Segment = ExtremumSegment<Float>;
+    using Segment = ExtremumSegment;
     using FloatStorage = DynamicBuffer<Float>;
 
     ExtremumGrid(const Properties &props) : Base(props) {
