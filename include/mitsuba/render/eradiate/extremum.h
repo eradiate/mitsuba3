@@ -15,6 +15,8 @@ NAMESPACE_BEGIN(mitsuba)
  */
 template <typename Float, typename Spectrum>
 struct ExtremumSegment {
+    using Mask = dr::mask_t<Float>;
+
     /// Segment entry distance along ray
     Float tmin;
     /// Segment exit distance along ray
@@ -25,8 +27,81 @@ struct ExtremumSegment {
     Float sigma_min;
     /// Accumulated Optical Depth;
     Float tau_acc;
-    DRJIT_STRUCT(ExtremumSegment, tmin, tmax, sigma_maj, sigma_min, tau_acc)
+
+    /** 
+     * \brief Create a new invalid extremum segment 
+     * 
+     * Initializes the minimum and maximum segment distances to \f$\infty\f$ 
+     * and \f$-\infty\f$, respectively.
+     */
+    ExtremumSegment() { reset(); }
+
+    /// Create an extremum segment from its fields.
+    ExtremumSegment(
+        Float tmin, Float tmax, 
+        Float sigma_maj, Float sigma_min, 
+        Float tau_acc) 
+        : tmin(tmin), tmax(tmax), 
+          sigma_maj(sigma_maj), sigma_min(sigma_min), 
+          tau_acc(tau_acc)  {  }
+
+    /**
+     * This callback method is invoked by dr::zeros<>, and takes care of fields that deviate
+     * from the standard zero-initialization convention. In this particular class, 
+     * the ``tmin`` and ``tmax`` fields should be set to + and - infinity respectively to 
+     * to mark invalid intersection records.
+     */
+    void zero_(size_t size = 1) {                                                                                                                                                                            
+        tmin        = dr::full<Float>(dr::Infinity<Float>, size);
+        tmax        = dr::full<Float>(-dr::Infinity<Float>, size);
+        sigma_min   = dr::zeros<Float>(size);
+        sigma_maj   = dr::zeros<Float>(size);
+        tau_acc     = dr::zeros<Float>(size);   
+    }  
+
+    /**
+     * \brief Check whether this is a valid segment
+     * 
+     * A segment is considered valid when 
+     * \code
+     * segment.tmin < segment.tmax
+     * \endcode
+     */
+    Mask valid() const {
+        return tmin <= tmax;
+    }
+
+    /**
+     * \brief Mark the extremum segment as invalid.
+     *
+     * This operation sets segment's minimum
+     * and maximum distances to \f$\infty\f$ and \f$-\infty\f$,
+     * respectively.
+     */
+    void reset(){
+        tmin = dr::Infinity<Float>;
+        tmax = -dr::Infinity<Float>;
+    }
+
+    DRJIT_STRUCT_NODEF(ExtremumSegment, tmin, tmax, sigma_maj, sigma_min, tau_acc)
 };
+
+// /// Print a string representation of the ExtremumSegment
+// template <typename Float, typename Spectrum>
+// std::ostream &operator<<(std::ostream &os, const ExtremumSegment<Float, Spectrum> &es) {
+//     os << "ExtremumSegment";
+//     if (dr::all(!es.valid()))
+//         os << "[invalid]";
+//     else
+//         os << "[" << std::endl
+//            << "  min = " << es.tmin << "," << std::endl
+//            << "  max = " << es.tmax << std::endl
+//            << "  sigma_min = " << es.sigma_min << std::endl
+//            << "  sigma_maj = " << es.sigma_maj << std::endl
+//            << "  tau_acc = " << es.tau_acc << std::endl
+//            << "]";
+//     return os;
+// }
 
 /**
  * \brief Abstract base class for extremum structures

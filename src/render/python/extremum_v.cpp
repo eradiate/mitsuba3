@@ -13,8 +13,12 @@ MI_PY_EXPORT(ExtremumSegment) {
         .def(nb::init<>())
         .def(nb::init<const ExtremumSegment &>(), "other"_a, "Copy constructor")
         .def(nb::init<Float, Float, Float, Float, Float>(),
-                 D(ExtremumSegment, ExtremumSegment, 3),
+                 D(ExtremumSegment, ExtremumSegment, 2),
                  "tmin"_a, "tmax"_a, "sigma_maj"_a, "sigma_min"_a, "tau_acc"_a)
+        .def("valid",        &ExtremumSegment::valid,     D(ExtremumSegment, valid))
+        .def("reset",        &ExtremumSegment::reset,     D(ExtremumSegment, reset))
+        .def("zero_",        &ExtremumSegment::zero_,     "size"_a = 1)
+        .def("zero_",        &ExtremumSegment::zero_,     D(ExtremumSegment, zero))
         .def_rw("tmin",      &ExtremumSegment::tmin,      D(ExtremumSegment, tmin))
         .def_rw("tmax",      &ExtremumSegment::tmax,      D(ExtremumSegment, tmax))
         .def_rw("sigma_maj", &ExtremumSegment::sigma_maj, D(ExtremumSegment, sigma_maj))

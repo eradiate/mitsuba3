@@ -2873,11 +2873,17 @@ R"doc(Segment along a ray with local extremum values
 This structure stores the entry/exit distances of a segment along a
 ray, along with the local majorant and minorant within that segment.)doc";
 
-static const char *__doc_mitsuba_ExtremumSegment_ExtremumSegment = R"doc()doc";
+static const char *__doc_mitsuba_ExtremumSegment_ExtremumSegment =
+R"doc(Create a new invalid extremum segment
 
-static const char *__doc_mitsuba_ExtremumSegment_ExtremumSegment_2 = R"doc()doc";
+Initializes the minimum and maximum segment distances to
+:math:`\infty` and :math:`-\infty`, respectively.)doc";
+
+static const char *__doc_mitsuba_ExtremumSegment_ExtremumSegment_2 = R"doc(Create an extremum segment from its fields.)doc";
 
 static const char *__doc_mitsuba_ExtremumSegment_ExtremumSegment_3 = R"doc()doc";
+
+static const char *__doc_mitsuba_ExtremumSegment_ExtremumSegment_4 = R"doc()doc";
 
 static const char *__doc_mitsuba_ExtremumSegment_fields = R"doc()doc";
 
@@ -2891,6 +2897,12 @@ static const char *__doc_mitsuba_ExtremumSegment_operator_assign = R"doc()doc";
 
 static const char *__doc_mitsuba_ExtremumSegment_operator_assign_2 = R"doc()doc";
 
+static const char *__doc_mitsuba_ExtremumSegment_reset =
+R"doc(Mark the extremum segment as invalid.
+
+This operation sets segment's minimum and maximum distances to
+:math:`\infty` and :math:`-\infty`, respectively.)doc";
+
 static const char *__doc_mitsuba_ExtremumSegment_sigma_maj = R"doc(Local majorant (maximum extinction) in this segment)doc";
 
 static const char *__doc_mitsuba_ExtremumSegment_sigma_min = R"doc(Local minorant (minimum extinction) in this segment)doc";
@@ -2900,6 +2912,22 @@ static const char *__doc_mitsuba_ExtremumSegment_tau_acc = R"doc(Accumulated Opt
 static const char *__doc_mitsuba_ExtremumSegment_tmax = R"doc(Segment exit distance along ray)doc";
 
 static const char *__doc_mitsuba_ExtremumSegment_tmin = R"doc(Segment entry distance along ray)doc";
+
+static const char *__doc_mitsuba_ExtremumSegment_valid =
+R"doc(Check whether this is a valid segment
+
+A segment is considered valid when
+
+```
+segment.tmin < segment.tmax
+```)doc";
+
+static const char *__doc_mitsuba_ExtremumSegment_zero =
+R"doc(This callback method is invoked by dr::zeros<>, and takes care of
+fields that deviate from the standard zero-initialization convention.
+In this particular class, the ``tmin`` and ``tmax`` fields should be
+set to + and - infinity respectively to to mark invalid intersection
+records.)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure =
 R"doc(Abstract base class for extremum structures

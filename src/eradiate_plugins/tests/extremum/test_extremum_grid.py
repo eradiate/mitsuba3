@@ -24,7 +24,7 @@ def generate_extremum_grid(
     return extremum_struct, extremum_grid
     
 
-def test_extremum_grid_high_res(variant_scalar_rgb):
+def test_high_res(variant_scalar_rgb):
     
     n_x = 4
     n_y = 8
@@ -40,7 +40,7 @@ def test_extremum_grid_high_res(variant_scalar_rgb):
     assert np.allclose( data, extremum_grid[ :, :, :, 1] )
 
 
-def test_extremum_grid_half_res(variant_scalar_rgb):
+def test_half_res(variant_scalar_rgb):
     
     n_x = 4
     n_y = 8
@@ -56,7 +56,7 @@ def test_extremum_grid_half_res(variant_scalar_rgb):
     assert np.allclose( data[1::2,1::2,1::2], extremum_grid[ :, :, :, 1] )
 
 
-def test_extremum_grid_not_multiple(variant_scalar_rgb):
+def test_not_multiple(variant_scalar_rgb):
     n_x = 4
     n_y = 9
     n_z = 1
@@ -73,7 +73,7 @@ def test_extremum_grid_not_multiple(variant_scalar_rgb):
     assert np.allclose(minorant_reference, extremum_grid[:,:,:,0])
     assert np.allclose(majorant_reference, extremum_grid[:,:,:,1])
 
-def test_extremum_grid_trilinear(variant_scalar_rgb):
+def test_trilinear(variant_scalar_rgb):
     n_x = 3
     n_y = 6
     n_z = 1
@@ -90,7 +90,14 @@ def test_extremum_grid_trilinear(variant_scalar_rgb):
     assert np.allclose(minorant_reference, extremum_grid[:,:,:,0])
     assert np.allclose(majorant_reference, extremum_grid[:,:,:,1])
 
-def test_extremum_grid_segment_horizontal(variants_any_scalar, variants_any_llvm):
+def assert_compare_segment(ref, other):
+    assert np.allclose(ref.tmin, other.tmin)
+    assert np.allclose(ref.tmax, other.tmax)
+    assert np.allclose(ref.sigma_min, other.sigma_min)
+    assert np.allclose(ref.sigma_maj, other.sigma_maj)
+    assert np.allclose(ref.tau_acc, other.tau_acc)
+
+def test_sample_horizontal_homogeneous(variants_any_scalar, variants_any_llvm):
     n_x = 4
     n_y = 3
     n_z = 1
@@ -106,21 +113,97 @@ def test_extremum_grid_segment_horizontal(variants_any_scalar, variants_any_llvm
         d=mi.ScalarVector3f(1.,0.,0.),
     )
     mint = 0.
-    maxt = 2.
+    maxt = 4.
     desired_tau = 0.2
     active = True
 
     res = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
     ref_segment = mi.ExtremumSegment(
-        tmin=mi.Float(0.25),
-        tmax=mi.Float(0.5),
-        sigma_maj=mi.Float(0.5),
-        sigma_min=mi.Float(0.5),
-        tau_acc=mi.Float(0.125),
+        tmin=0.25, tmax=0.5, sigma_maj=0.5, sigma_min=0.5, tau_acc=0.125,
     )
-    print(res)
-    assert np.allclose(ref_segment.tmin, res.tmin)
-    assert np.allclose(ref_segment.tmax, res.tmax)
-    assert np.allclose(ref_segment.sigma_min, res.sigma_min)
-    assert np.allclose(ref_segment.sigma_maj, res.sigma_maj)
-    assert np.allclose(ref_segment.tau_acc, res.tau_acc)
+    # Test ray starting at segment start
+    assert_compare_segment(ref_segment, res)
+
+    ray = mi.Ray3f(
+        o=mi.ScalarVector3f(-1.,0.5,0.5),
+        d=mi.ScalarVector3f(1.,0.,0.),
+    )
+    ref_segment = mi.ExtremumSegment(
+        tmin=1.25, tmax=1.5, sigma_maj=0.5, sigma_min=0.5, tau_acc=0.125,
+    )
+    res = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    # Test ray starting outside of the grid
+    assert_compare_segment(ref_segment, res)
+
+    ray = mi.Ray3f(
+        o=mi.ScalarVector3f(0.125,0.5,0.5),
+        d=mi.ScalarVector3f(1.,0.,0.),
+    )
+    ref_segment = mi.ExtremumSegment(
+        tmin=0.375, tmax=0.625, sigma_maj=0.5, sigma_min=0.5, tau_acc=0.1875,
+    )
+    res = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    # Test ray starting outside of the grid
+    assert_compare_segment(ref_segment, res)
+
+    desired_tau = 0.8
+    res = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    # Test ray exiting grid
+    assert not res.valid()
+
+def test_sample_horizontal_heterogeneous(variants_any_scalar, variants_any_llvm):
+    n_x = 8
+    n_y = 6
+    n_z = 1
+    mult = 0.1
+
+    data = np.linspace(1,n_x,n_x).reshape(-1,1,1)*mult
+    data = np.ones((n_x, n_y, n_z)) * data
+    volume_grid = mi.VolumeGrid(data.transpose(2,1,0))
+
+    extremum_resolution = mi.ScalarVector3i(4, 3, 1)
+    extremum_struct, _ = generate_extremum_grid(volume_grid, extremum_resolution, "nearest")
+
+    ray = mi.Ray3f(
+        o=mi.ScalarVector3f(0.,0.5,0.5),
+        d=mi.ScalarVector3f(1.,0.,0.),
+    )
+    mint = 0.
+    maxt = 10.
+    desired_tau = 0.2
+    active = True
+
+    res = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    ref_segment = mi.ExtremumSegment(
+        tmin=0.5, tmax=0.75, sigma_maj=0.6, sigma_min=0.5, tau_acc=0.15,
+    )
+    # Test ray starting at segment start
+    assert_compare_segment(ref_segment, res)
+
+def test_sample_diagonal(variants_any_scalar, variants_any_llvm):
+    data_res = mi.ScalarVector3i(2,2,2)
+    extremum_res = mi.ScalarVector3i(2, 2, 2)
+    mult = 0.5
+
+    data = np.linspace(1,data_res.x,data_res.x).reshape(-1,1,1)*mult
+    data = np.ones((data_res.x, data_res.y, data_res.y)) * data
+    volume_grid = mi.VolumeGrid(data.transpose(2,1,0))
+
+    extremum_struct, _ = generate_extremum_grid(volume_grid, extremum_res, "nearest")
+
+    # perfect diagonal direction
+    ray = mi.Ray3f(
+        o=mi.ScalarVector3f(0.,0.,0.),
+        d=mi.ScalarVector3f(0.5,0.5,0.5),
+    )
+    mint = 0.
+    maxt = 10.
+    desired_tau = 0.6
+    active = True
+
+    res = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    ref_segment = mi.ExtremumSegment(
+        tmin=1., tmax=2., sigma_maj=1., sigma_min=1., tau_acc=0.5,
+    )
+    # Test ray starting at segment start
+    assert_compare_segment(ref_segment, res)

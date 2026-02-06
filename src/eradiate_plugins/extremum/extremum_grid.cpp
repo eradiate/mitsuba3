@@ -6,6 +6,13 @@
 
 NAMESPACE_BEGIN(mitsuba)
 
+/*
+@TODO:
+- currently only works on axis aligned volumes, see if we can extend it.
+- currently works in 1D, see how we can extend to multiple channels.
+- grid building limited to one volume, consider extending to multiple.
+*/
+
 /**!
 .. _extremum-extremum_grid:
 
@@ -127,7 +134,7 @@ public:
 
         // Intersect AABB
         auto [aabb_its, local_mint, local_maxt] = m_bbox.ray_intersect(ray);
-        aabb_its &= (dr::isfinite(mint) || dr::isfinite(maxt));
+        aabb_its &= (dr::isfinite(local_mint) || dr::isfinite(local_maxt));
         active &= aabb_its;
         dr::masked(local_mint, !active) = 0.f;
         dr::masked(local_maxt, !active) = dr::Infinity<Float>;
@@ -195,7 +202,6 @@ public:
             // Determine which axis advances
             Vector3f tmax_update = dr::zeros<Vector3f>();
             Mask assigned = false;
-            // TODO: what about if we start in the middle of the medium?
             for (size_t k = 0; k < 3; ++k) {
                 Mask hit_axis = (dda_tmax[k] == t_next) && !assigned;
                 tmax_update[k] = dr::select(hit_axis, dda_tdelta[k], 0.f);
@@ -205,24 +211,13 @@ public:
             
             // Lookup local majorant at cell center
             Float t_mid = 0.5f * (dda_t + t_next);
-            // MediumInteraction3f lookup_mei = dr::zeros<MediumInteraction3f>();
-            // lookup_mei.t = t_mid;
-            // lookup_mei.p = ray(t_mid);
             Log(Debug, "assigned: %f, tmax_update: %f", assigned, tmax_update);
             Log(Debug, "t_mid: %f, ray(t_mid): %f", t_mid, ray(t_mid));
 
             // Retrieve index from cell center position.
             const Vector3f pos_i = dr::floor2int<Vector3i>((m_to_local * ray(t_mid)) * Vector3f(m_resolution));
-            // UInt32 index( 2 * dr::fmadd( 
-            //             dr::fmadd( UInt32(pos_i.z()), m_resolution.y(), UInt32(pos_i.y()) ), 
-            //             m_resolution.x(), 
-            //             UInt32(pos_i.x())
-            //         ));
-            // UInt32 index( 2* dr::fmadd( 
-            //             dr::fmadd( UInt32(pos_i.x()), m_resolution.y(), UInt32(pos_i.y()) ), 
-            //             m_resolution.z(), 
-            //             UInt32(pos_i.z())
-            //         ));
+            
+            // Note: not multiplying the index by 2 because we gather using Vector2f. 
             UInt32 index( dr::fmadd( 
                         dr::fmadd( UInt32(pos_i.x()), m_resolution.y(), UInt32(pos_i.y()) ), 
                         m_resolution.z(), 
@@ -233,7 +228,6 @@ public:
             Vector2f local_extremum = dr::gather<Vector2f>(m_extremum_grid, index);
             const Float local_minorant = local_extremum.x();
             const Float local_majorant = local_extremum.y();                    
-            // const Float local_majorant = m_extremum_grid->eval_1(lookup_mei, active);
             Log(Debug, "local_minorant: %f, local_majorant: %f", local_minorant, local_majorant);
 
             // Accumulate optical depth
@@ -244,24 +238,14 @@ public:
             Mask stops_here = active && (local_majorant > 0.f) &&
                              (tau_next >= desired_tau) && (t_next <= maxt);
 
-            // This already computes the required distance.
-            // but it also means we are doing it unnecessarily every loop, we could take it out
-            // but it also means that we have to return the accumulated tau so far, could we return
-            // the actual distance??
-            // Compute precise intersection point
-            // Float t_precise = dda_t +
-            //     (desired_tau - tau_acc) / dr::maximum(local_majorant, dr::Epsilon<Float>);
-            
             Log(Debug, "tau_next: %f", tau_next);
             // Update reached status
             reached |= stops_here;
 
             // Store result for lanes that reached target
-            dr::masked(result.tmin, stops_here) = dda_t;
-            dr::masked(result.tmax, stops_here) = t_next;
-            dr::masked(result.sigma_min, stops_here) = local_minorant;
-            dr::masked(result.sigma_maj, stops_here) = local_majorant;
-            dr::masked(result.tau_acc, stops_here) = tau_acc;
+            dr::masked(result, stops_here) = ExtremumSegment(
+                dda_t, t_next, local_majorant, local_minorant, tau_acc
+            );
 
             // Advance DDA state
             dr::masked(dda_t, active && !reached) = t_next;
@@ -273,10 +257,13 @@ public:
         },
         "DDA Travesal");
 
+        // Here we choose to not compute the precise interaction point  
+        // in this function and defer it to the medium. This is for to
+        // allow for more flexibility on the sampling method. 
         // Float t_precise = ls.dda_t +
         //         (desired_tau - ls.tau_acc) / dr::maximum(local_majorant, dr::Epsilon<Float>);
 
-        // For lanes that didn't reach, set tmin to infinity
+        // For lanes that didn't reach, set tmin to infinity to invalidate the segment
         dr::masked(ls.result.tmin, !ls.reached) = dr::Infinity<Float>;
 
         return ls.result;
@@ -312,8 +299,6 @@ private:
     void build_grid(const Volume *sigma_t, ScalarFloat scale) {
         m_bbox = sigma_t->bbox();
 
-        
-
         const ScalarVector3f cell_size = m_bbox.extents() / ScalarVector3f(m_resolution);
 
         // Allocate extremum grid data
@@ -342,8 +327,6 @@ private:
                     min = scale * min;
                     maj = scale * maj;
 
-                    
-
                     // Store in linear array (Z-slowest, X-fastest)
                     // size_t idx = x * 2
                     //              + y * 2 * m_resolution.x() 
@@ -365,31 +348,6 @@ private:
 
 
         m_extremum_grid = dr::load<FloatStorage>(extremums.data(), n*2);
-        // // Create grid volume from computed majorants
-        // Properties grid_props("gridvolume");
-        // grid_props.set("raw", true);  // No color conversion
-
-        // // Create tensor from majorants
-        // size_t shape[4] = {
-        //     (size_t) m_resolution.z(),
-        //     (size_t) m_resolution.y(),
-        //     (size_t) m_resolution.x(),
-        //     2  // Minorant and Majorant
-        // };
-
-        // TensorXf tensor(majorants.data(), 4, shape);
-        // grid_props.set_any("data", tensor);
-
-        // // Set transform to match sigma_t bbox
-        // ScalarAffineTransform4f to_world = ScalarAffineTransform4f::scale(m_bbox.extents());
-        // to_world = to_world * ScalarAffineTransform4f::translate(m_bbox.min);
-        // grid_props.set("to_world", to_world);
-
-        // // Disable filtering (use nearest neighbor for grid cells)
-        // grid_props.set("filter_type", "nearest");
-
-        // m_extremum_grid = PluginManager::instance()->create_object<Volume>(grid_props);
-
         Log(Info, "Extremum grid constructed successfully");
     }
 
