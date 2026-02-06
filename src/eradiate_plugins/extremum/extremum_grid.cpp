@@ -104,6 +104,7 @@ public:
 
         } else if (props.has_property("resolution")) {
             m_resolution = props.get<ScalarVector3i>("resolution");
+            Log(Debug, "resolution: %f", m_resolution);
         }
 
         // Build extremum grid
@@ -124,18 +125,32 @@ public:
 
         Segment result = dr::zeros<Segment>();
 
+        // Intersect AABB
+        auto [aabb_its, local_mint, local_maxt] = m_bbox.ray_intersect(ray);
+        aabb_its &= (dr::isfinite(mint) || dr::isfinite(maxt));
+        active &= aabb_its;
+        dr::masked(local_mint, !active) = 0.f;
+        dr::masked(local_maxt, !active) = dr::Infinity<Float>;
+
+        mint = dr::maximum(local_mint, mint);
+        maxt = dr::minimum(local_maxt, maxt);
+
         // Prepare DDA traversal
         Float dda_t; 
         Vector3f dda_tmax, dda_tdelta;
         Mask valid;
         std::tie(dda_t, dda_tmax, dda_tdelta, valid) =
             prepare_dda_traversal(ray, mint, maxt, active);
-
+            
         active &= valid;
+
+        Log(Debug, "dda_t: %f, dda_tmax: %f, ddat_tdelta: %f, valid: %f", dda_t, dda_tmax, dda_tdelta, valid);
 
         // Traverse grid with DDA until desired_tau is reached
         Float tau_acc = 0.f;
         Mask reached = false;
+
+        Log(Debug, "Start Loop");
 
         struct LoopState {
             Segment result;
@@ -169,10 +184,13 @@ public:
             Float& tau_acc = ls.tau_acc;
             Float& dda_t = ls.dda_t;
             Vector3f& dda_tmax = ls.dda_tmax; 
-
+            Log(Debug, "============================");
+            Log(Debug, "reached: %f, tau_acc: %f, dda_t: %f", reached, tau_acc, dda_t);
             // Find next voxel boundary (minimum of dda_tmax components)
             Float t_next = dr::minimum(dr::minimum(dda_tmax.x(), dda_tmax.y()), dda_tmax.z());
             t_next = dr::minimum(t_next, maxt);
+
+            Log(Debug, "t_next: %f", t_next);
 
             // Determine which axis advances
             Vector3f tmax_update = dr::zeros<Vector3f>();
@@ -184,25 +202,39 @@ public:
                 assigned |= hit_axis;
             }
 
+            
             // Lookup local majorant at cell center
             Float t_mid = 0.5f * (dda_t + t_next);
             // MediumInteraction3f lookup_mei = dr::zeros<MediumInteraction3f>();
             // lookup_mei.t = t_mid;
             // lookup_mei.p = ray(t_mid);
+            Log(Debug, "assigned: %f, tmax_update: %f", assigned, tmax_update);
+            Log(Debug, "t_mid: %f, ray(t_mid): %f", t_mid, ray(t_mid));
 
             // Retrieve index from cell center position.
-            const Vector3f pos = (m_to_local * ray(t_mid)) * Vector3f(m_resolution);
-            const Vector3i pos_i = dr::floor2int<Vector3i>(pos);
-            UInt32 index( 2 * dr::fmadd( 
-                        dr::fmadd( UInt32(pos_i.z()), m_resolution.y(), UInt32(pos_i.y()) ), 
-                        m_resolution.x(), 
-                        UInt32(pos_i.x())
+            const Vector3f pos_i = dr::floor2int<Vector3i>((m_to_local * ray(t_mid)) * Vector3f(m_resolution));
+            // UInt32 index( 2 * dr::fmadd( 
+            //             dr::fmadd( UInt32(pos_i.z()), m_resolution.y(), UInt32(pos_i.y()) ), 
+            //             m_resolution.x(), 
+            //             UInt32(pos_i.x())
+            //         ));
+            // UInt32 index( 2* dr::fmadd( 
+            //             dr::fmadd( UInt32(pos_i.x()), m_resolution.y(), UInt32(pos_i.y()) ), 
+            //             m_resolution.z(), 
+            //             UInt32(pos_i.z())
+            //         ));
+            UInt32 index( dr::fmadd( 
+                        dr::fmadd( UInt32(pos_i.x()), m_resolution.y(), UInt32(pos_i.y()) ), 
+                        m_resolution.z(), 
+                        UInt32(pos_i.z())
                     ));
+            Log(Debug, "pos_i: %f, index: %f", pos_i, index);
 
-            dr::Array<Float, 2> local_extremum = dr::gather<dr::Array<Float, 2>>(m_extremum_grid, index);
-            const Float local_minorant = local_extremum[0];
-            const Float local_majorant = local_extremum[1];                    
+            Vector2f local_extremum = dr::gather<Vector2f>(m_extremum_grid, index);
+            const Float local_minorant = local_extremum.x();
+            const Float local_majorant = local_extremum.y();                    
             // const Float local_majorant = m_extremum_grid->eval_1(lookup_mei, active);
+            Log(Debug, "local_minorant: %f, local_majorant: %f", local_minorant, local_majorant);
 
             // Accumulate optical depth
             Float segment_length = t_next - dda_t;
@@ -212,18 +244,24 @@ public:
             Mask stops_here = active && (local_majorant > 0.f) &&
                              (tau_next >= desired_tau) && (t_next <= maxt);
 
+            // This already computes the required distance.
+            // but it also means we are doing it unnecessarily every loop, we could take it out
+            // but it also means that we have to return the accumulated tau so far, could we return
+            // the actual distance??
             // Compute precise intersection point
-            Float t_precise = dda_t +
-                (desired_tau - tau_acc) / dr::maximum(local_majorant, dr::Epsilon<Float>);
-
+            // Float t_precise = dda_t +
+            //     (desired_tau - tau_acc) / dr::maximum(local_majorant, dr::Epsilon<Float>);
+            
+            Log(Debug, "tau_next: %f", tau_next);
             // Update reached status
             reached |= stops_here;
 
             // Store result for lanes that reached target
-            dr::masked(result.tmin, stops_here) = t_precise;
+            dr::masked(result.tmin, stops_here) = dda_t;
             dr::masked(result.tmax, stops_here) = t_next;
             dr::masked(result.sigma_min, stops_here) = local_minorant;
             dr::masked(result.sigma_maj, stops_here) = local_majorant;
+            dr::masked(result.tau_acc, stops_here) = tau_acc;
 
             // Advance DDA state
             dr::masked(dda_t, active && !reached) = t_next;
@@ -235,8 +273,11 @@ public:
         },
         "DDA Travesal");
 
+        // Float t_precise = ls.dda_t +
+        //         (desired_tau - ls.tau_acc) / dr::maximum(local_majorant, dr::Epsilon<Float>);
+
         // For lanes that didn't reach, set tmin to infinity
-        dr::masked(ls.result.tmin, !reached) = dr::Infinity<Float>;
+        dr::masked(ls.result.tmin, !ls.reached) = dr::Infinity<Float>;
 
         return ls.result;
     }
@@ -287,7 +328,10 @@ private:
                     ScalarPoint3f cell_min = m_bbox.min +
                         ScalarVector3f(x, y, z) * cell_size;
                     ScalarPoint3f cell_max = cell_min + cell_size;
-                    ScalarBoundingBox3f cell_bounds(cell_min, cell_max);
+                    ScalarBoundingBox3f cell_bounds(
+                        cell_min + dr::Epsilon<Float>, 
+                        cell_max - dr::Epsilon<Float>
+                    );
 
                     // Query volume for local extremum
                     // !! The extremum function transforms the cell bound to 
@@ -298,10 +342,21 @@ private:
                     min = scale * min;
                     maj = scale * maj;
 
+                    
+
                     // Store in linear array (Z-slowest, X-fastest)
-                    size_t idx = x * 2
-                                 + y * 2 * m_resolution.x() 
-                                 + z * 2 * m_resolution.x() * m_resolution.y();
+                    // size_t idx = x * 2
+                    //              + y * 2 * m_resolution.x() 
+                    //              + z * 2 * m_resolution.x() * m_resolution.y();
+                    size_t idx = z * 2
+                                 + y * 2 * m_resolution.z() 
+                                 + x * 2 * m_resolution.z() * m_resolution.y();
+
+                    Log(Debug, "x,y,z: %f, %f, %f", x, y, z);
+                    Log(Debug, "cell_bounds: %f",cell_bounds);
+                    Log(Debug, "idx: %f",idx);
+                    Log(Debug, "min, maj: %f, %f",min,maj);
+
                     extremums[idx] = min;
                     extremums[idx+1] = maj;
                 }
@@ -349,30 +404,33 @@ private:
      */
     std::tuple<Float, Vector3f, Vector3f, Mask>
     prepare_dda_traversal(const Ray3f &ray, Float mint, Float maxt, Mask active) const {
+        
+        Log(Debug, "prepare ray traversals");
+        //TODO: account for intersection with volume geometry
+
         // Transform ray to local grid coordinates [0,1]³
         const ScalarVector3f extents = m_bbox.extents();
-
         Ray3f local_ray(
             (ray.o - m_bbox.min) / extents,  // Normalize origin
             ray.d / extents,                  // Normalize direction
             ray.time,
             ray.wavelengths
         );
-
         const Vector3f local_voxel_size = 1.f / Vector3f(m_resolution);
 
         // Compute current and last voxel indices
         Vector3i current_voxel = dr::floor(local_ray(mint) / local_voxel_size);
         Vector3i last_voxel = dr::floor(local_ray(maxt) / local_voxel_size);
 
-        // Clamp to valid range
         current_voxel = dr::clip(current_voxel, 0, m_resolution - 1);
         last_voxel = dr::clip(last_voxel, 0, m_resolution - 1);
+
+        Log(Debug, "local_ray: %f, local_voxel_size: %f", local_ray, local_voxel_size);
+        Log(Debug, "current_voxel: %f, last_voxel: %f", current_voxel, last_voxel);
 
         // Traversal direction
         Vector3i step = dr::select(local_ray.d >= 0.f, 1, -1);
 
-        // Next voxel boundaries
         Vector3f next_voxel_boundary =
             Vector3f(current_voxel + step) * local_voxel_size;
 
@@ -382,6 +440,8 @@ private:
             local_voxel_size,
             0.f
         );
+
+        Log(Debug, "step: %f, next_voxel_boundary: %f", step, next_voxel_boundary);
 
         // Compute DDA parameters
         auto ray_nonzero = local_ray.d != 0.f;
@@ -399,9 +459,14 @@ private:
             dr::Infinity<Float>
         );
 
+        Log(Debug, "dr::isfinite(dda_tmax): %f", dda_tmax);
+        Log(Debug, "dr::isfinite(dda_tdelta): %f", dda_tdelta);
+        Log(Debug, "valid %f", dr::all(dr::isfinite(dda_tmax) || dr::isfinite(dda_tdelta)));
+
         // Current ray parameter throughout DDA traversal
         Float dda_t = mint;
-        Mask valid = active && dr::all(dr::isfinite(dda_tmax) || dr::isfinite(dda_tdelta));
+        // Mask valid = active && dr::all(dr::isfinite(dda_tmax) || dr::isfinite(dda_tdelta));
+        Mask valid = active;
 
         return { dda_t, dda_tmax, dda_tdelta, valid };
     }

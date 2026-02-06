@@ -2895,6 +2895,8 @@ static const char *__doc_mitsuba_ExtremumSegment_sigma_maj = R"doc(Local majoran
 
 static const char *__doc_mitsuba_ExtremumSegment_sigma_min = R"doc(Local minorant (minimum extinction) in this segment)doc";
 
+static const char *__doc_mitsuba_ExtremumSegment_tau_acc = R"doc(Accumulated Optical Depth;)doc";
+
 static const char *__doc_mitsuba_ExtremumSegment_tmax = R"doc(Segment exit distance along ray)doc";
 
 static const char *__doc_mitsuba_ExtremumSegment_tmin = R"doc(Segment entry distance along ray)doc";

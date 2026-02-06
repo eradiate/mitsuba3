@@ -23,8 +23,9 @@ struct ExtremumSegment {
     Float sigma_maj;
     /// Local minorant (minimum extinction) in this segment
     Float sigma_min;
-
-    DRJIT_STRUCT(ExtremumSegment, tmin, tmax, sigma_maj, sigma_min)
+    /// Accumulated Optical Depth;
+    Float tau_acc;
+    DRJIT_STRUCT(ExtremumSegment, tmin, tmax, sigma_maj, sigma_min, tau_acc)
 };
 
 /**

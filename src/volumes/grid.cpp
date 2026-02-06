@@ -449,7 +449,7 @@ public:
             local_bounds.expand( m_to_local * bounds.corner(i) );
         }
         local_bounds.clip(ScalarBoundingBox3f(ScalarPoint3f(0.f), ScalarPoint3f(1.f)));
-
+        
         if (!local_bounds.valid())
             return { 0.f, 0.f };
 
@@ -463,9 +463,11 @@ public:
             ScalarVector3i(0)
         );
         ScalarVector3i voxel_max = dr::minimum(
-            dr::ceil(local_bounds.max * ScalarVector3f(res)) + ScalarVector3i(padding),
+            dr::floor(local_bounds.max * ScalarVector3f(res)) + ScalarVector3i(padding),
             res - 1
         );
+
+        Log(Debug, "res: %f, voxel_min: %f, voxel_max: %f", res, voxel_min, voxel_max);
 
         // Scan voxels in bounds and find min/max
         ScalarFloat max_val = -dr::Infinity<ScalarFloat>;
@@ -482,12 +484,15 @@ public:
         for (int32_t z = voxel_min.z(); z <= voxel_max.z(); ++z) {
             for (int32_t y = voxel_min.y(); y <= voxel_max.y(); ++y) {
                 for (int32_t x = voxel_min.x(); x <= voxel_max.x(); ++x) {
+                    
                     size_t idx = x * n_channels 
                                  + y * n_channels * res.x() 
                                  + z * n_channels * res.x() * res.y();
                     ScalarFloat val = data[idx];
                     max_val = dr::maximum(max_val, val);
                     min_val = dr::minimum(min_val, val);
+                    Log(Debug, "visited x,y,z: %f, %f, %f", x,y,z);
+                    Log(Debug, "max_val, min_val: %f, %f", min_val, max_val);
                 }
             }
         }

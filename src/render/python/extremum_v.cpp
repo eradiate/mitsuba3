@@ -12,13 +12,17 @@ MI_PY_EXPORT(ExtremumSegment) {
     auto es = nb::class_<ExtremumSegment>(m, "ExtremumSegment", D(ExtremumSegment))
         .def(nb::init<>())
         .def(nb::init<const ExtremumSegment &>(), "other"_a, "Copy constructor")
+        .def(nb::init<Float, Float, Float, Float, Float>(),
+                 D(ExtremumSegment, ExtremumSegment, 3),
+                 "tmin"_a, "tmax"_a, "sigma_maj"_a, "sigma_min"_a, "tau_acc"_a)
         .def_rw("tmin",      &ExtremumSegment::tmin,      D(ExtremumSegment, tmin))
         .def_rw("tmax",      &ExtremumSegment::tmax,      D(ExtremumSegment, tmax))
         .def_rw("sigma_maj", &ExtremumSegment::sigma_maj, D(ExtremumSegment, sigma_maj))
         .def_rw("sigma_min", &ExtremumSegment::sigma_min, D(ExtremumSegment, sigma_min))
+        .def_rw("tau_acc",   &ExtremumSegment::tau_acc,   D(ExtremumSegment, tau_acc))
         .def_repr(ExtremumSegment);
 
-    MI_PY_DRJIT_STRUCT(es, ExtremumSegment, tmin, tmax, sigma_maj, sigma_min);
+    MI_PY_DRJIT_STRUCT(es, ExtremumSegment, tmin, tmax, sigma_maj, sigma_min, tau_acc);
 }
 
 /// Trampoline for derived types implemented in Python
