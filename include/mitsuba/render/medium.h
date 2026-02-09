@@ -11,11 +11,7 @@ NAMESPACE_BEGIN(mitsuba)
 template <typename Float, typename Spectrum>
 class MI_EXPORT_LIB Medium : public JitObject<Medium<Float, Spectrum>> {
 public:
-    MI_IMPORT_TYPES(PhaseFunction, Sampler, Scene, Texture);
-
-    // #ERADIATE_CHANGE_BEGIN: Forward declaration for extremum structure
-    // using ExtremumStructure = typename ExtremumStructure<Float, Spectrum>;
-    // #ERADIATE_CHANGE_END
+    MI_IMPORT_TYPES(PhaseFunction, Sampler, Scene, Texture, ExtremumStructure);
 
     /// Destructor
     ~Medium();
@@ -106,14 +102,14 @@ public:
 
 // #ERADIATE_CHANGE_BEGIN: Extremum structure accessor
     /// Returns the extremum structure for local majorant acceleration (nullptr if not used)
-    // MI_INLINE const ExtremumStructure* extremum_structure() const {
-    //     return m_extremum_structure.get();
-    // }
+    MI_INLINE const ExtremumStructure* extremum_structure() const {
+        return m_extremum_structure.get();
+    }
 
     /// Check if medium uses extremum structure
-    // MI_INLINE bool has_extremum_structure() const {
-    //     return m_extremum_structure != nullptr;
-    // }
+    MI_INLINE bool has_extremum_structure() const {
+        return m_extremum_structure.get() != nullptr;
+    }
 // #ERADIATE_CHANGE_END
 
     void traverse(TraversalCallback *callback) override;
@@ -133,11 +129,11 @@ protected:
     bool m_is_homogeneous;
     bool m_has_spectral_extinction;
 // #ERADIATE_CHANGE_BEGIN: Extremum structure support
-    // ref<ExtremumStructure> m_extremum_structure;
+    ref<ExtremumStructure> m_extremum_structure;
 // #ERADIATE_CHANGE_END
 
-    // MI_DECLARE_TRAVERSE_CB(m_phase_function, m_extremum_structure)
-    MI_DECLARE_TRAVERSE_CB(m_phase_function)
+    MI_DECLARE_TRAVERSE_CB(m_phase_function, m_extremum_structure)
+    // MI_DECLARE_TRAVERSE_CB(m_phase_function)
 };
 
 MI_EXTERN_CLASS(Medium)

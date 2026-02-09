@@ -4,6 +4,7 @@
 #include <mitsuba/render/phase.h>
 #include <mitsuba/render/scene.h>
 #include <mitsuba/render/texture.h>
+#include <mitsuba/render/eradiate/extremum.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -22,11 +23,11 @@ MI_VARIANT Medium<Float, Spectrum>::Medium(const Properties &props)
             m_phase_function = phase;
         }
 // #ERADIATE_CHANGE_BEGIN: Initialize extremum structure from properties
-        // if (auto *extremum = prop.try_get<ExtremumStructure<Float, Spectrum>>()) {
-        //     if (m_extremum_structure)
-        //         Throw("Only a single extremum structure can be specified per medium");
-        //     m_extremum_structure = extremum;
-        // }
+        if (auto *extremum = prop.try_get<ExtremumStructure>()) {
+            if (m_extremum_structure)
+                Throw("Only a single extremum structure can be specified per medium");
+            m_extremum_structure = extremum;
+        }
 // #ERADIATE_CHANGE_END
     }
     if (!m_phase_function) {
@@ -43,7 +44,7 @@ MI_VARIANT Medium<Float, Spectrum>::~Medium() { }
 MI_VARIANT void Medium<Float, Spectrum>::traverse(TraversalCallback *cb) {
     cb->put("phase_function", m_phase_function, ParamFlags::Differentiable);
 // #ERADIATE_CHANGE_BEGIN: Traverse extremum structure
-    // cb->put("extremum_structure", m_extremum_structure, ParamFlags::NonDifferentiable);
+    cb->put("extremum_structure", m_extremum_structure, ParamFlags::NonDifferentiable);
 // #ERADIATE_CHANGE_END
 }
 
@@ -77,23 +78,20 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
     Float sampled_t;
     UnpolarizedSpectrum combined_extinction;
 
-    // Check for extremum structure (pointer check, not virtual call)
-    // const auto *extremum = nullptr; //extremum_structure();
-
-    if (false) {
-    // if (extremum != nullptr) {
+    if (m_extremum_structure != nullptr) {
         // Use extremum structure with local majorants
-        // auto segment = extremum->sample_segment(ray, mint, maxt, desired_tau, active);
-        // sampled_t = segment.tmin;
+        auto segment = m_extremum_structure->sample_segment(ray, mint, maxt, desired_tau, active);
+        sampled_t = segment.tmin +
+                (desired_tau - segment.tau_acc) / dr::maximum(segment.sigma_maj, dr::Epsilon<Float>);
 
-        // // Store local majorant in combined_extinction
-        // combined_extinction[0] = segment.sigma_maj;
-        // if constexpr (is_rgb_v<Spectrum>) {
-        //     combined_extinction[1] = segment.sigma_maj;
-        //     combined_extinction[2] = segment.sigma_maj;
-        // } else {
-        //     DRJIT_MARK_USED(channel);
-        // }
+        // Store local majorant in combined_extinction
+        combined_extinction[0] = segment.sigma_maj;
+        if constexpr (is_rgb_v<Spectrum>) {
+            combined_extinction[1] = segment.sigma_maj;
+            combined_extinction[2] = segment.sigma_maj;
+        } else {
+            DRJIT_MARK_USED(channel);
+        }
     } else {
         // Traditional global majorant sampling
         combined_extinction = get_majorant(mei, active);
