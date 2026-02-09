@@ -14,6 +14,7 @@
 #include <mitsuba/render/volume.h>
 
 #include <mitsuba/render/eradiate/extremum.h>
+#include <mitsuba/render/eradiate/geometry.h>
 
 #include <mitsuba/python/python.h>
 
@@ -117,6 +118,7 @@ MI_PY_DECLARE(Volume);
 MI_PY_DECLARE(VolumeGrid);
 MI_PY_DECLARE(ExtremumSegment);
 MI_PY_DECLARE(ExtremumStructure);
+MI_PY_DECLARE(OrientedBoundingBox);
 
 using Caster = nb::object(*)(mitsuba::Object *);
 Caster cast_object = nullptr;
@@ -232,6 +234,7 @@ NB_MODULE(MI_VARIANT_NAME, m) {
     MI_PY_IMPORT(VolumeGrid);
     MI_PY_IMPORT(ExtremumSegment);
     MI_PY_IMPORT(ExtremumStructure);
+    MI_PY_IMPORT(OrientedBoundingBox);
 
     /* Callback function cleanup static variant-specific data structures, this
      * should be called when the interpreter is exiting */
