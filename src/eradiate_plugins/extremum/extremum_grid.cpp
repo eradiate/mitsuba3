@@ -6,12 +6,14 @@
 
 NAMESPACE_BEGIN(mitsuba)
 
-/*
-@TODO:
-- currently only works on axis aligned volumes, see if we can extend it.
-- currently works in 1D, see how we can extend to multiple channels.
-- grid building limited to one volume, consider extending to multiple.
-*/
+
+// @TODO:
+// - currently only works on axis aligned volumes, see if we can extend it.
+// - currently works in 1D, see how we can extend to multiple channels.
+// - grid building limited to one volume, consider extending to multiple.
+// - allow for volumes with accel=True
+// - work on adaptive resolution
+
 
 /**!
 .. _extremum-extremum_grid:

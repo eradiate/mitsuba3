@@ -7,6 +7,8 @@
 
 NAMESPACE_BEGIN(mitsuba)
 
+// @TODO: rename sigma_maj and sigma_min to maj and min
+
 /**
  * \brief Segment along a ray with local extremum values
  *

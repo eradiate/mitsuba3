@@ -207,3 +207,8 @@ def test_sample_diagonal(variants_any_scalar, variants_any_llvm):
     )
     # Test ray starting at segment start
     assert_compare_segment(ref_segment, res)
+
+
+
+# Start adding tests for extremum and medium integration...
+# Case with valid sample, case with invalid segment...
