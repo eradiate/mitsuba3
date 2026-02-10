@@ -9,25 +9,25 @@ def make_obb(bbox_min, bbox_max, to_world):
     )
     return mi.OrientedBoundingBox3f(bbox, to_world)
 
-def test_identical(variant_scalar_rgb):
+def test_identical(variant_scalar_rgb, variants_any_llvm):
     """Same box should overlap itself"""
     trafo = mi.Transform4f.rotate([0, 0, 1], 30)
     obb = make_obb([-1, -1, -1], [1, 1, 1], trafo)
     assert obb.overlaps(obb)
 
-def test_identity_both(variant_scalar_rgb):
+def test_identity_both(variant_scalar_rgb, variants_any_llvm):
     """Two identity OBBs"""
     obb_a = make_obb([0, 0, 0], [2, 2, 2], mi.Transform4f())
     obb_b = make_obb([1, 1, 1], [3, 3, 3], mi.Transform4f())
     assert obb_a.overlaps(obb_b)
 
-def test_identity_separated(variant_scalar_rgb):
+def test_identity_separated(variant_scalar_rgb, variants_any_llvm):
     """Two identity OBBs, separated"""
     obb_a = make_obb([0, 0, 0], [1, 1, 1], mi.Transform4f())
     obb_b = make_obb([2, 2, 2], [3, 3, 3], mi.Transform4f())
     assert not obb_a.overlaps(obb_b)
 
-def test_rotated_overlapping(variant_scalar_rgb):
+def test_rotated_overlapping(variant_scalar_rgb, variants_any_llvm):
     """Two rotated boxes that overlap"""
     trafo_a = mi.Transform4f.rotate([0, 0, 1], 30)
     trafo_b = mi.Transform4f.rotate([0, 0, 1], -30)

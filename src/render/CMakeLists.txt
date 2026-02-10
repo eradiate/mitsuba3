@@ -81,8 +81,7 @@ add_library(mitsuba-render OBJECT
   volumegrid.cpp   ${INC_DIR}/volumegrid.h
 
   ${ER_SRC}/extremum.cpp    ${ER_INC}/extremum.h
-                            ${ER_INC}/geometry.h
-
+                            
   ${LIBRENDER_EXTRA_SRC}
 )
 

@@ -92,6 +92,14 @@ struct OrientedBoundingBox {
         proj = C*t;
         result &= dr::all(proj <= ra_v + rb_v);
 
+        // When both OBBs are axis-aligned, C ≈ I and cross-product axes are
+        // degenerate (zero or duplicate of face normals). Skip them.
+        if constexpr (!dr::is_array_v<Float>) {
+            Matrix3f identity = dr::identity<Matrix3f>();
+            if ( dr::all_nested( dr::abs(C - identity) < 1e-6f ) )
+                return result;
+        }
+
         // Test axes: 9 edge-edge cross products (A_i x B_j)
         // A0 x B0
         ra = a.entry(1) * absC.entry(2, 0) + a.entry(2) * absC.entry(1, 0);

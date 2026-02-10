@@ -13,8 +13,11 @@
 #include <mitsuba/render/texture.h>
 #include <mitsuba/render/volume.h>
 
+// ERADIATE_CHANGE_BEGIN
+#include <mitsuba/core/eradiate/obb.h>
+
 #include <mitsuba/render/eradiate/extremum.h>
-#include <mitsuba/render/eradiate/geometry.h>
+// ERADIATE_CHANGE_END
 
 #include <mitsuba/python/python.h>
 
@@ -82,6 +85,7 @@ MI_PY_DECLARE(Transform);
 MI_PY_DECLARE(vector);
 MI_PY_DECLARE(warp);
 MI_PY_DECLARE(quad);
+MI_PY_DECLARE(OrientedBoundingBox);
 
 // render
 MI_PY_DECLARE(BSDFSample);
@@ -118,7 +122,6 @@ MI_PY_DECLARE(Volume);
 MI_PY_DECLARE(VolumeGrid);
 MI_PY_DECLARE(ExtremumSegment);
 MI_PY_DECLARE(ExtremumStructure);
-MI_PY_DECLARE(OrientedBoundingBox);
 
 using Caster = nb::object(*)(mitsuba::Object *);
 Caster cast_object = nullptr;
@@ -199,6 +202,7 @@ NB_MODULE(MI_VARIANT_NAME, m) {
     MI_PY_IMPORT(vector);
     MI_PY_IMPORT_SUBMODULE(quad);
     MI_PY_IMPORT_SUBMODULE(warp);
+    MI_PY_IMPORT(OrientedBoundingBox);
 
     MI_PY_IMPORT(Scene);
     MI_PY_IMPORT(Shape);
@@ -234,7 +238,6 @@ NB_MODULE(MI_VARIANT_NAME, m) {
     MI_PY_IMPORT(VolumeGrid);
     MI_PY_IMPORT(ExtremumSegment);
     MI_PY_IMPORT(ExtremumStructure);
-    MI_PY_IMPORT(OrientedBoundingBox);
 
     /* Callback function cleanup static variant-specific data structures, this
      * should be called when the interpreter is exiting */

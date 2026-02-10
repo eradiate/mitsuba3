@@ -9,6 +9,9 @@ include_directories(
 
 set(INC_DIR "../../include/mitsuba/core")
 
+set(ER_INC "../../include/mitsuba/core/eradiate")
+set(ER_SRC "./eradiate")
+
 add_library(mitsuba-core OBJECT
   ${INC_DIR}/../mitsuba.h
   ${INC_DIR}/frame.h
@@ -62,6 +65,8 @@ add_library(mitsuba-core OBJECT
                     ${INC_DIR}/quad.h
 
   dither-matrix256.cpp
+
+                    ${ER_INC}/obb.h
 )
 
 set_property(

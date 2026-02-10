@@ -1,4 +1,4 @@
-#include <mitsuba/render/eradiate/geometry.h>
+#include <mitsuba/core/eradiate/obb.h>
 #include <mitsuba/python/python.h>
 
 template <typename OBB>
