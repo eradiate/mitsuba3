@@ -68,19 +68,19 @@ public:
      * over the specified bounding box region.
      * Only fully implemented for grid-based volumes.
      *
-     * \param bounds  Bounding box defining the query region in world space
+     * \param bounds  Bounding box defining the query region in local space
      * \return (majorant, minorant) pair
      */
     virtual std::pair<ScalarFloat, ScalarFloat>
-    extremum(const ScalarBoundingBox3f &bounds) const;
+    extremum(ScalarBoundingBox3f local_bounds) const;
 
     /**
      * \brief Compute local majorant (maximum) over a spatial region
      *
      * Convenience method that returns only the majorant.
      */
-    virtual ScalarFloat majorant(const ScalarBoundingBox3f &bounds) const {
-        return extremum(bounds).first;
+    virtual ScalarFloat majorant(const ScalarBoundingBox3f &local_bounds) const {
+        return extremum(local_bounds).first;
     }
 
     /**
@@ -88,8 +88,8 @@ public:
      *
      * Convenience method that returns only the minorant.
      */
-    virtual ScalarFloat minorant(const ScalarBoundingBox3f &bounds) const {
-        return extremum(bounds).second;
+    virtual ScalarFloat minorant(const ScalarBoundingBox3f &local_bounds) const {
+        return extremum(local_bounds).second;
     }
 // #ERADIATE_CHANGE_END
 

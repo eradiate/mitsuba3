@@ -8,7 +8,10 @@ NAMESPACE_BEGIN(mitsuba)
 
 
 // @TODO:
-// - currently only works on axis aligned volumes, see if we can extend it.
+// - currently only works on axis aligned volumes, see if we can extend it :
+//   For now, we will assume the volume to be axis aligned as it simplifies many
+//   issues related to building grid outside of the volume extent (wraping mode).
+//   Wraping mode is not available to the user.
 // - currently works in 1D, see how we can extend to multiple channels.
 // - grid building limited to one volume, consider extending to multiple.
 // - allow for volumes with accel=True
@@ -300,8 +303,10 @@ private:
      */
     void build_grid(const Volume *sigma_t, ScalarFloat scale) {
         m_bbox = sigma_t->bbox();
-
-        const ScalarVector3f cell_size = m_bbox.extents() / ScalarVector3f(m_resolution);
+        // const ScalarVector3f cell_size = m_bbox.extents() / ScalarVector3f(m_resolution);
+        const ScalarVector3f cell_size = 1.f / ScalarVector3f(m_resolution);
+        Log(Debug, "Building grid =======");
+        Log(Debug, "m_bbox: %f, cell_size: %f", m_bbox, cell_size);
 
         // Allocate extremum grid data
         size_t n = dr::prod(m_resolution);
@@ -312,13 +317,24 @@ private:
             for (int32_t y = 0; y < m_resolution.y(); ++y) {
                 for (int32_t x = 0; x < m_resolution.x(); ++x) {
                     // Compute cell bounding box in world space
-                    ScalarPoint3f cell_min = m_bbox.min +
-                        ScalarVector3f(x, y, z) * cell_size;
+                    // ScalarPoint3f cell_min = m_bbox.min +
+                    //     ScalarVector3f(x, y, z) * cell_size;
+                    // ScalarPoint3f cell_max = cell_min + cell_size;
+
+                    // Compute cell bounding box in local space
+                    ScalarPoint3f cell_min = ScalarVector3f(x, y, z) * cell_size;
                     ScalarPoint3f cell_max = cell_min + cell_size;
                     ScalarBoundingBox3f cell_bounds(
-                        cell_min + dr::Epsilon<Float>, 
-                        cell_max - dr::Epsilon<Float>
+                        cell_min + math::RayEpsilon<Float>, 
+                        cell_max - math::RayEpsilon<Float>
                     );
+
+                    Log(Debug, "[SuperGrid] x,y,z: %f, %f, %f -------", x, y, z);
+                    Log(Debug, "[SuperGrid] cell_bounds: %f, %f",cell_bounds.min, cell_bounds.max);
+                    // ScalarBoundingBox3f cell_bounds(
+                    //     cell_min , 
+                    //     cell_max 
+                    // );
 
                     // Query volume for local extremum
                     // !! The extremum function transforms the cell bound to 
@@ -333,14 +349,14 @@ private:
                     // size_t idx = x * 2
                     //              + y * 2 * m_resolution.x() 
                     //              + z * 2 * m_resolution.x() * m_resolution.y();
+                    // Store in linear array (X-slowest, Z-fastest)
                     size_t idx = z * 2
                                  + y * 2 * m_resolution.z() 
                                  + x * 2 * m_resolution.z() * m_resolution.y();
 
-                    Log(Debug, "x,y,z: %f, %f, %f", x, y, z);
-                    Log(Debug, "cell_bounds: %f",cell_bounds);
-                    Log(Debug, "idx: %f",idx);
-                    Log(Debug, "min, maj: %f, %f",min,maj);
+                    
+                    Log(Debug, "[SuperGrid] idx: %f",idx);
+                    Log(Debug, "[SuperGrid] min, maj: %f, %f",min,maj);
 
                     extremums[idx] = min;
                     extremums[idx+1] = maj;

@@ -60,7 +60,7 @@ Volume<Float, Spectrum>::max_per_channel(ScalarFloat * /*out*/) const {
 // #ERADIATE_CHANGE_BEGIN: Local extremum support
 MI_VARIANT std::pair<typename Volume<Float, Spectrum>::ScalarFloat,
                      typename Volume<Float, Spectrum>::ScalarFloat>
-Volume<Float, Spectrum>::extremum(const ScalarBoundingBox3f &/*bounds*/) const {
+Volume<Float, Spectrum>::extremum(ScalarBoundingBox3f /*local_bounds*/) const {
     // Default implementation: fall back to global max/min
     // Derived classes should override for better spatial queries
     return { max(), 0.f };

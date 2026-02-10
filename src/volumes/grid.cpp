@@ -436,24 +436,28 @@ public:
 
 // #ERADIATE_CHANGE_BEGIN: Spatial extremum queries for grid volumes
     std::pair<ScalarFloat, ScalarFloat>
-    extremum(const ScalarBoundingBox3f &bounds) const override {
+    extremum(ScalarBoundingBox3f local_bounds) const override {
         if (m_accel)
             NotImplementedError("extremum() not supported with hardware acceleration");
 
         if (m_texture.shape()[3] != 1)
             NotImplementedError("extremum() only supported for single-channel volumes");
 
+        // for now assume bounds to be in world transform
+        // OrientedBoundingBox<ScalarFloat> bounds_obb(bounds, ScalarAffineTransform4f());
+        
         // Transform bounds to local grid coordinates [0,1]³
-        ScalarBoundingBox3f local_bounds;
-        for(uint8_t i = 0; i < 8; ++i){
-            local_bounds.expand( m_to_local * bounds.corner(i) );
-        }
+        // ScalarBoundingBox3f local_bounds;
+        // for(uint8_t i = 0; i < 8; ++i){
+        //     local_bounds.expand( m_to_local * bounds.corner(i) );
+        // }
         local_bounds.clip(ScalarBoundingBox3f(ScalarPoint3f(0.f), ScalarPoint3f(1.f)));
         
         if (!local_bounds.valid())
             return { 0.f, 0.f };
 
-        const ScalarVector3i res = resolution();
+        const ScalarVector3i res  = resolution();
+        const ScalarVector3f step = dr::rcp(ScalarVector3f(res));
 
         // Convert to voxel indices with proper padding for interpolation
         int32_t padding = (m_texture.filter_mode() == dr::FilterMode::Linear) ? 1 : 0;
@@ -467,13 +471,13 @@ public:
             res - 1
         );
 
+        Log(Debug, "transformed bound: %f, %f", local_bounds.min, local_bounds.max);
         Log(Debug, "res: %f, voxel_min: %f, voxel_max: %f", res, voxel_min, voxel_max);
 
         // Scan voxels in bounds and find min/max
         ScalarFloat max_val = -dr::Infinity<ScalarFloat>;
         ScalarFloat min_val = dr::Infinity<ScalarFloat>;
 
-        const ScalarVector3f cell_size = m_bbox.extents() / res;
         const size_t n_channels = m_texture.shape()[3];
         const ScalarFloat *data = m_texture.tensor().data();
 
@@ -485,6 +489,13 @@ public:
             for (int32_t y = voxel_min.y(); y <= voxel_max.y(); ++y) {
                 for (int32_t x = voxel_min.x(); x <= voxel_max.x(); ++x) {
                     
+                    ScalarBoundingBox3f cell_bbox( 
+                        step * (ScalarVector3f(x,y,z) - padding), 
+                        step * ( ScalarVector3f(x,y,z) + 1.f + padding) );
+                    // OrientedBoundingBox<ScalarFloat> cell_obb( cell_bbox, m_to_local.inverse() );
+                    // ScalarMask overlaps = bounds_obb.overlaps(cell_obb);
+                    // ScalarMask overlaps = true;
+
                     size_t idx = x * n_channels 
                                  + y * n_channels * res.x() 
                                  + z * n_channels * res.x() * res.y();

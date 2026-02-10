@@ -6,12 +6,17 @@ def generate_extremum_grid(
         volume_grid, 
         extremum_res,
         filter_type,
+        transform=None,
 ):
+    if transform is None:
+        transform = mi.ScalarAffineTransform4f()
+
     volume = mi.load_dict({
         "type":"gridvolume", 
         "grid":volume_grid,
         "filter_type":filter_type,
         "accel":False,
+        "to_world":transform,
     })
     extremum_struct = mi.load_dict({
         "type": "extremum_grid",
@@ -24,7 +29,7 @@ def generate_extremum_grid(
     return extremum_struct, extremum_grid
     
 
-def test_high_res(variant_scalar_rgb):
+def test_build_high_res(variant_scalar_rgb):
     
     n_x = 4
     n_y = 8
@@ -40,7 +45,7 @@ def test_high_res(variant_scalar_rgb):
     assert np.allclose( data, extremum_grid[ :, :, :, 1] )
 
 
-def test_half_res(variant_scalar_rgb):
+def test_build_half_res(variant_scalar_rgb):
     
     n_x = 4
     n_y = 8
@@ -56,7 +61,7 @@ def test_half_res(variant_scalar_rgb):
     assert np.allclose( data[1::2,1::2,1::2], extremum_grid[ :, :, :, 1] )
 
 
-def test_not_multiple(variant_scalar_rgb):
+def test_build_not_multiple(variant_scalar_rgb):
     n_x = 4
     n_y = 9
     n_z = 1
@@ -73,7 +78,7 @@ def test_not_multiple(variant_scalar_rgb):
     assert np.allclose(minorant_reference, extremum_grid[:,:,:,0])
     assert np.allclose(majorant_reference, extremum_grid[:,:,:,1])
 
-def test_trilinear(variant_scalar_rgb):
+def test_build_trilinear(variant_scalar_rgb):
     n_x = 3
     n_y = 6
     n_z = 1
@@ -89,6 +94,27 @@ def test_trilinear(variant_scalar_rgb):
 
     assert np.allclose(minorant_reference, extremum_grid[:,:,:,0])
     assert np.allclose(majorant_reference, extremum_grid[:,:,:,1])
+
+def test_build_rotated(variant_scalar_rgb):
+    n_x = 3
+    n_y = 4
+    n_z = 1
+    n_prod = n_x*n_y*n_z
+    data = np.linspace(1, n_prod, n_prod).reshape( n_x, n_y, n_z)
+    volume_grid = mi.VolumeGrid(data.transpose(2,1,0))
+
+    extremum_resolution = mi.ScalarVector3i(3, 4, 1)
+    _, extremum_grid = generate_extremum_grid(
+        volume_grid, 
+        extremum_resolution, 
+        "nearest",
+        transform=mi.ScalarAffineTransform4f.rotate([0,0,1], 180)
+    )
+
+    assert np.allclose(data.squeeze(), extremum_grid[:,:,:,1].squeeze())
+
+def test_build_scaled(variant_scalar_rgb):
+    pass
 
 def assert_compare_segment(ref, other):
     assert np.allclose(ref.tmin, other.tmin)
