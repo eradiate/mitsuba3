@@ -435,77 +435,122 @@ public:
     }
 
 // #ERADIATE_CHANGE_BEGIN: Spatial extremum queries for grid volumes
-    std::pair<ScalarFloat, ScalarFloat>
-    extremum(ScalarBoundingBox3f local_bounds) const override {
+     const ScalarFloat* data() const override {
+        return m_texture.tensor().data();
+    }
+
+    const DynamicBuffer<Float>* array() const override {
+        return &m_texture.tensor().array();
+    }
+
+    std::pair<Float, Float>
+    extremum(
+        const DynamicBuffer<Float>* array, 
+        BoundingBox3f local_bounds) const override {
         if (m_accel)
             NotImplementedError("extremum() not supported with hardware acceleration");
 
         if (m_texture.shape()[3] != 1)
             NotImplementedError("extremum() only supported for single-channel volumes");
 
-        // for now assume bounds to be in world transform
-        // OrientedBoundingBox<ScalarFloat> bounds_obb(bounds, ScalarAffineTransform4f());
+        local_bounds.clip(BoundingBox3f(Point3f(0.f), Point3f(1.f)));
         
-        // Transform bounds to local grid coordinates [0,1]³
-        // ScalarBoundingBox3f local_bounds;
-        // for(uint8_t i = 0; i < 8; ++i){
-        //     local_bounds.expand( m_to_local * bounds.corner(i) );
-        // }
-        local_bounds.clip(ScalarBoundingBox3f(ScalarPoint3f(0.f), ScalarPoint3f(1.f)));
-        
-        if (!local_bounds.valid())
+        // early exit in scalar mode
+        if (dr::any_or<false>(!local_bounds.valid()))
             return { 0.f, 0.f };
+        
+        Mask active = local_bounds.valid();
 
-        const ScalarVector3i res  = resolution();
-        const ScalarVector3f step = dr::rcp(ScalarVector3f(res));
+        const Vector3i res  = resolution();
 
         // Convert to voxel indices with proper padding for interpolation
         int32_t padding = (m_texture.filter_mode() == dr::FilterMode::Linear) ? 1 : 0;
  
-        ScalarVector3i voxel_min = dr::maximum(
-            dr::floor(local_bounds.min * ScalarVector3f(res)) - ScalarVector3i(padding),
-            ScalarVector3i(0)
+        Vector3i voxel_min = dr::maximum(
+            dr::floor(local_bounds.min * Vector3f(res)) - Vector3i(padding),
+            Vector3i(0)
         );
-        ScalarVector3i voxel_max = dr::minimum(
-            dr::floor(local_bounds.max * ScalarVector3f(res)) + ScalarVector3i(padding),
+        Vector3i voxel_max = dr::minimum(
+            dr::floor(local_bounds.max * Vector3f(res)) + Vector3i(padding),
             res - 1
         );
 
-        Log(Debug, "transformed bound: %f, %f", local_bounds.min, local_bounds.max);
-        Log(Debug, "res: %f, voxel_min: %f, voxel_max: %f", res, voxel_min, voxel_max);
+        UInt32 n = dr::prod((voxel_max - voxel_min) + 1);
+        Vector3i range = (voxel_max - voxel_min) + 1;
 
         // Scan voxels in bounds and find min/max
-        ScalarFloat max_val = -dr::Infinity<ScalarFloat>;
-        ScalarFloat min_val = dr::Infinity<ScalarFloat>;
-
-        const size_t n_channels = m_texture.shape()[3];
-        const ScalarFloat *data = m_texture.tensor().data();
-
-        // TODO: the bound is not guaranteed to be aligned to the volume's axis.
-        // in such cases, we need to check that the query and cell bound intersect.
-        // the current bbox interface only checks for overlaps for two axis-aligned
-        // bboxes, which is not the current setup.
-        for (int32_t z = voxel_min.z(); z <= voxel_max.z(); ++z) {
-            for (int32_t y = voxel_min.y(); y <= voxel_max.y(); ++y) {
-                for (int32_t x = voxel_min.x(); x <= voxel_max.x(); ++x) {
-                    
-                    ScalarBoundingBox3f cell_bbox( 
-                        step * (ScalarVector3f(x,y,z) - padding), 
-                        step * ( ScalarVector3f(x,y,z) + 1.f + padding) );
-                    // OrientedBoundingBox<ScalarFloat> cell_obb( cell_bbox, m_to_local.inverse() );
-                    // ScalarMask overlaps = bounds_obb.overlaps(cell_obb);
-                    // ScalarMask overlaps = true;
-
-                    size_t idx = x * n_channels 
-                                 + y * n_channels * res.x() 
-                                 + z * n_channels * res.x() * res.y();
-                    ScalarFloat val = data[idx];
-                    max_val = dr::maximum(max_val, val);
-                    min_val = dr::minimum(min_val, val);
-                    Log(Debug, "visited x,y,z: %f, %f, %f", x,y,z);
-                    Log(Debug, "max_val, min_val: %f, %f", min_val, max_val);
+        Float max_val = -dr::Infinity<Float>;
+        Float min_val = dr::Infinity<Float>;
+        
+        if constexpr ( !dr::is_jit_v<Float>){
+            for (int32_t z = voxel_min.z(); z <= voxel_max.z(); ++z) {
+                for (int32_t y = voxel_min.y(); y <= voxel_max.y(); ++y) {
+                    for (int32_t x = voxel_min.x(); x <= voxel_max.x(); ++x) {
+                        size_t idx = ( x 
+                                    + y * res.x() 
+                                    + z * res.x() * res.y() );
+                        ScalarFloat val = array->data()[idx];
+                        max_val = dr::maximum(max_val, val);
+                        min_val = dr::minimum(min_val, val);
+                    }
                 }
             }
+
+        } else {
+           
+            struct LoopState {
+                UInt32 x;
+                UInt32 y;
+                UInt32 z;
+                Float min_val;
+                Float max_val;
+                Mask active;
+
+                DRJIT_STRUCT(LoopState, x, y, z, min_val, max_val, active)
+            } ls = {
+                UInt32(0), UInt32(0), UInt32(0),
+                min_val,
+                max_val,
+                active
+            };
+
+            dr::tie(ls) = dr::while_loop(dr::make_tuple(ls),
+                [](const LoopState& ls){return ls.active;},
+                [array, res, n, voxel_min, range](LoopState& ls){
+                    
+                    Float& min_val = ls.min_val;
+                    Float& max_val = ls.max_val;
+                    Mask& active = ls.active;
+
+                    // volume wide indices
+                    UInt32 x = voxel_min.x() + ls.x;
+                    UInt32 y = voxel_min.y() + ls.y;
+                    UInt32 z = voxel_min.z() + ls.z;
+                    
+                    // serial index
+                    UInt32 tex_idx = x + y * res.x() + z * res.x() * res.y();
+
+                    Float val = dr::gather<Float>(*array, tex_idx, active);
+                    dr::masked(max_val, active) = dr::maximum(max_val, val);
+                    dr::masked(min_val, active) = dr::minimum(min_val, val);
+
+                    // This approach avoids modulo and division which are 
+                    // detrimental to performance.
+                    ls.x += 1;
+
+                    Mask carry_x = ls.x >= range.x();
+                    ls.x = dr::select(carry_x, UInt32(0), ls.x);
+                    ls.y += dr::select(carry_x, UInt32(1), UInt32(0));
+
+                    Mask carry_y = carry_x && (ls.y >= range.y());
+                    ls.y = dr::select(carry_y, UInt32(0), ls.y);
+                    ls.z += dr::select(carry_y, UInt32(1), UInt32(0));
+
+                    ls.active &= ls.z < range.z();
+                }
+            );
+            max_val = ls.max_val;
+            min_val = ls.min_val; 
         }
 
         return { max_val, min_val };

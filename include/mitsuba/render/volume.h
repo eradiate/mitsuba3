@@ -7,6 +7,8 @@
 #include <mitsuba/render/shape.h>
 #include <mitsuba/render/texture.h>
 
+#include <drjit/texture.h>
+
 NAMESPACE_BEGIN(mitsuba)
 
 /// Abstract base class for 3D volumes.
@@ -70,17 +72,23 @@ public:
      *
      * \param bounds  Bounding box defining the query region in local space
      * \return (majorant, minorant) pair
+     * 
+     * The reference to array is a bit of a codesmell, used to avoid the ref-count
+     * cost. 
      */
-    virtual std::pair<ScalarFloat, ScalarFloat>
-    extremum(ScalarBoundingBox3f local_bounds) const;
+    virtual std::pair<Float, Float>
+    extremum(const DynamicBuffer<Float>* array, BoundingBox3f local_bounds) const;
+
+    virtual const ScalarFloat* data() const;
+    virtual const DynamicBuffer<Float>* array() const;
 
     /**
      * \brief Compute local majorant (maximum) over a spatial region
      *
      * Convenience method that returns only the majorant.
      */
-    virtual ScalarFloat majorant(const ScalarBoundingBox3f &local_bounds) const {
-        return extremum(local_bounds).first;
+    virtual Float majorant(const BoundingBox3f &local_bounds) const {
+        return extremum(nullptr, local_bounds).first;
     }
 
     /**
@@ -88,8 +96,8 @@ public:
      *
      * Convenience method that returns only the minorant.
      */
-    virtual ScalarFloat minorant(const ScalarBoundingBox3f &local_bounds) const {
-        return extremum(local_bounds).second;
+    virtual Float minorant(const BoundingBox3f &local_bounds) const {
+        return extremum(nullptr, local_bounds).second;
     }
 // #ERADIATE_CHANGE_END
 

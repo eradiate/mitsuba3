@@ -3,20 +3,24 @@
 #include <mitsuba/render/eradiate/extremum.h>
 #include <mitsuba/render/volume.h>
 #include <mitsuba/render/volumegrid.h>
+#include <nanothread/nanothread.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
 
 // @TODO:
-// - currently only works on axis aligned volumes, see if we can extend it :
+// - Currently only works on axis aligned volumes, see if we can extend it :
 //   For now, we will assume the volume to be axis aligned as it simplifies many
 //   issues related to building grid outside of the volume extent (wraping mode).
-//   Wraping mode is not available to the user.
+//   Wraping mode is not available to the user and therefore not to the majorant.
 // - currently works in 1D, see how we can extend to multiple channels.
-// - grid building limited to one volume, consider extending to multiple.
+// - Grid building limited to one volume, consider extending to multiple.
+//   This is contigent to the axis-aligned volume problem.
 // - allow for volumes with accel=True
 // - work on adaptive resolution
-
+// - reintroduce the safety factor
+// - for build_grid -> detect that the volume's res is the same as the supergrid 
+//   and do a memcpy.
 
 /**!
 .. _extremum-extremum_grid:
@@ -119,7 +123,6 @@ public:
             Log(Debug, "resolution: %f", m_resolution);
         }
 
-        // Build extremum grid
         build_grid(volume.get(), scale);
 
         // TODO: remove useless logs
@@ -224,9 +227,9 @@ public:
             
             // Note: not multiplying the index by 2 because we gather using Vector2f. 
             UInt32 index( dr::fmadd( 
-                        dr::fmadd( UInt32(pos_i.x()), m_resolution.y(), UInt32(pos_i.y()) ), 
-                        m_resolution.z(), 
-                        UInt32(pos_i.z())
+                        dr::fmadd( UInt32(pos_i.z()), m_resolution.y(), UInt32(pos_i.y()) ), 
+                        m_resolution.x(), 
+                        UInt32(pos_i.x())
                     ));
             Log(Debug, "pos_i: %f, index: %f", pos_i, index);
 
@@ -301,71 +304,174 @@ private:
      * the majorant (maximum) extinction value over the corresponding region
      * of the high-resolution sigma_t volume.
      */
+    // void build_grid(const Volume *sigma_t, ScalarFloat scale) {
+    //     using FloatX = DynamicBuffer<ScalarFloat>;
+
+    //     m_bbox = sigma_t->bbox();
+    //     // local space supergrid cell size
+    //     const ScalarVector3f cell_size = dr::rcp(ScalarVector3f(m_resolution));
+        
+    //     // Log(Debug, "Building grid =======");
+    //     // Log(Debug, "m_bbox: %f, cell_size: %f", m_bbox, cell_size);
+
+    //     // Allocate extremum grid data
+    //     size_t n = dr::prod(m_resolution);
+    //     std::vector<ScalarFloat> extremums;
+    //     // std::unique_ptr<ScalarFloat[]> extremums(new ScalarFloat[n*2]);
+
+    //     // avoid unecessary allocation in scalar mode
+    //     if constexpr (!dr::is_jit_v<Float>) {
+    //         m_extremum_grid = dr::empty<FloatStorage>(n*2);
+    //     } else {
+    //         extremums.resize(n*2);
+    //     }
+
+    //     // Build grid (consider parallelizing)
+    //     for (int32_t z = 0; z < m_resolution.z(); ++z) {
+    //         for (int32_t y = 0; y < m_resolution.y(); ++y) {
+    //             for (int32_t x = 0; x < m_resolution.x(); ++x) {
+
+    //     // for (int32_t x = 0; x < m_resolution.x(); ++x) {
+    //     //     for (int32_t y = 0; y < m_resolution.y(); ++y) {
+    //     //         for (int32_t z = 0; z < m_resolution.z(); ++z) {
+    //                 // Compute cell bounding box in local space
+    //                 ScalarPoint3f cell_min = ScalarVector3f(x, y, z) * cell_size;
+    //                 ScalarPoint3f cell_max = cell_min + cell_size;
+    //                 ScalarBoundingBox3f cell_bounds(
+    //                     cell_min + math::RayEpsilon<Float>, 
+    //                     cell_max - math::RayEpsilon<Float>
+    //                 );
+                    
+    //                 // Log(Debug, "[SuperGrid] x,y,z: %f, %f, %f -------", x, y, z);
+    //                 // Log(Debug, "[SuperGrid] cell_bounds: %f, %f",cell_bounds.min, cell_bounds.max);
+
+    //                 // Query volume for local extremum, currently assume local bounds.
+    //                 auto [maj, min] = sigma_t->extremum(nullptr, cell_bounds);
+
+    //                 // Store in linear array (X-slowest, Z-fastest) <-- current
+    //                 // size_t idx = z
+    //                 //              + y * m_resolution.z() 
+    //                 //              + x * m_resolution.z() * m_resolution.y();
+
+    //                 // test: align all to texture layout
+    //                 size_t idx = x
+    //                              + y * m_resolution.x() 
+    //                              + z * m_resolution.x() * m_resolution.y();
+
+    //                 // Log(Debug, "[SuperGrid] idx: %f",idx);
+    //                 // Log(Debug, "[SuperGrid] min, maj: %f, %f",min,maj);
+
+    //                 if constexpr (!dr::is_jit_v<Float>) {
+    //                     dr::scatter(m_extremum_grid, scale * Vector2f(min, maj), UInt32(idx));
+    //                 } else {
+    //                     extremums[idx*2] = min;
+    //                     extremums[idx*2+1] = maj;
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     // Log(Debug, "exetrumum_grid: %f", m_extremum_grid);
+
+    //     if constexpr (dr::is_jit_v<Float>) {
+    //         m_extremum_grid = dr::load<FloatStorage>(extremums.data(), n*2);
+    //     }
+    //     Log(Info, "Extremum grid constructed successfully");
+    // }
+
     void build_grid(const Volume *sigma_t, ScalarFloat scale) {
+
         m_bbox = sigma_t->bbox();
-        // const ScalarVector3f cell_size = m_bbox.extents() / ScalarVector3f(m_resolution);
-        const ScalarVector3f cell_size = 1.f / ScalarVector3f(m_resolution);
-        Log(Debug, "Building grid =======");
-        Log(Debug, "m_bbox: %f, cell_size: %f", m_bbox, cell_size);
+        // local space supergrid cell size
+        const ScalarVector3f cell_size = dr::rcp(ScalarVector3f(m_resolution));
+        
+        // Log(Debug, "Building grid =======");
+        // Log(Debug, "m_bbox: %f, cell_size: %f", m_bbox, cell_size);
 
         // Allocate extremum grid data
         size_t n = dr::prod(m_resolution);
-        std::vector<ScalarFloat> extremums(n*2);
+        
+        std::vector<ScalarFloat> extremums;
+        // std::unique_ptr<ScalarFloat[]> extremums(new ScalarFloat[n*2]);
 
-        // Build grid (consider parallelizing)
-        for (int32_t z = 0; z < m_resolution.z(); ++z) {
-            for (int32_t y = 0; y < m_resolution.y(); ++y) {
-                for (int32_t x = 0; x < m_resolution.x(); ++x) {
-                    // Compute cell bounding box in world space
-                    // ScalarPoint3f cell_min = m_bbox.min +
-                    //     ScalarVector3f(x, y, z) * cell_size;
-                    // ScalarPoint3f cell_max = cell_min + cell_size;
+        // IMPORTANT: need to retrieve the data before to avoid ref count slow-down
+        auto data = sigma_t->array();
 
-                    // Compute cell bounding box in local space
-                    ScalarPoint3f cell_min = ScalarVector3f(x, y, z) * cell_size;
-                    ScalarPoint3f cell_max = cell_min + cell_size;
-                    ScalarBoundingBox3f cell_bounds(
-                        cell_min + math::RayEpsilon<Float>, 
-                        cell_max - math::RayEpsilon<Float>
-                    );
+        size_t n_threads = pool_size() + 1;
+        size_t grain_size = std::max( n / (4 * n_threads), (size_t) 1 );
 
-                    Log(Debug, "[SuperGrid] x,y,z: %f, %f, %f -------", x, y, z);
-                    Log(Debug, "[SuperGrid] cell_bounds: %f, %f",cell_bounds.min, cell_bounds.max);
-                    // ScalarBoundingBox3f cell_bounds(
-                    //     cell_min , 
-                    //     cell_max 
-                    // );
+        if (!dr::is_jit_v<Float> || n < n_threads ) {
+        // if constexpr (!dr::is_jit_v<Float> ) {
 
-                    // Query volume for local extremum
-                    // !! The extremum function transforms the cell bound to 
-                    // local reference system. It is currently limited to 
-                    // axis-aligned queries. Need to find some way to include local 
-                    // bound queries
-                    auto [maj, min] = sigma_t->extremum(cell_bounds);
-                    min = scale * min;
-                    maj = scale * maj;
-
-                    // Store in linear array (Z-slowest, X-fastest)
-                    // size_t idx = x * 2
-                    //              + y * 2 * m_resolution.x() 
-                    //              + z * 2 * m_resolution.x() * m_resolution.y();
-                    // Store in linear array (X-slowest, Z-fastest)
-                    size_t idx = z * 2
-                                 + y * 2 * m_resolution.z() 
-                                 + x * 2 * m_resolution.z() * m_resolution.y();
-
-                    
-                    Log(Debug, "[SuperGrid] idx: %f",idx);
-                    Log(Debug, "[SuperGrid] min, maj: %f, %f",min,maj);
-
-                    extremums[idx] = min;
-                    extremums[idx+1] = maj;
-                }
+            // avoid unecessary allocation in scalar mode
+            if constexpr (!dr::is_jit_v<Float>) {
+                m_extremum_grid = dr::empty<FloatStorage>(n*2);
+            } else {
+                extremums.resize(n*2);
             }
+            
+            dr::parallel_for(
+                dr::blocked_range<size_t>(0, n, grain_size),
+                [&](const dr::blocked_range<size_t> &range) {
+                    // Recover x, y, z from block start (one-time div/mod per block)
+
+                    // Log(Info, "begin: %f, end: %f", range.begin(), range.end());
+                    for (auto idx = range.begin(); idx != range.end(); ++idx) {
+                        // Store in linear array (Z-slowest, X-fastest)
+                        int32_t x = idx % m_resolution.x() ; 
+                        int32_t y = (idx / m_resolution.x())  % m_resolution.y(); 
+                        int32_t z =  idx / (m_resolution.x() * m_resolution.y()); 
+
+                        
+                        ScalarPoint3f cell_min = ScalarVector3f(x, y, z) * cell_size;
+                        ScalarPoint3f cell_max = cell_min + cell_size;
+                        ScalarBoundingBox3f cell_bounds(
+                            cell_min + math::RayEpsilon<Float>, 
+                            cell_max - math::RayEpsilon<Float>
+                        );
+
+                        // // Query volume for local extremum, currently assume local bounds.
+                        auto [maj, min] = sigma_t->extremum(data, cell_bounds);
+
+                        if constexpr (!dr::is_jit_v<Float>) {
+                            dr::scatter(m_extremum_grid, scale * Vector2f(min, maj), UInt32(idx));
+                        } else {
+                            extremums[idx*2] = min[0];
+                            extremums[idx*2+1] = maj[0];
+                        }
+                    }
+                }
+            );
+        
+            if constexpr (dr::is_jit_v<Float>) {
+                m_extremum_grid = dr::load<FloatStorage>(extremums.data(), n*2);
+            }
+        } else {
+            
+            m_extremum_grid = dr::empty<FloatStorage>(n*2);
+
+            UInt32 idx = dr::arange<UInt32>((uint32_t) n);
+
+            UInt32 x = idx % m_resolution.x() ; 
+            UInt32 y = (idx / m_resolution.x())  % m_resolution.y(); 
+            UInt32 z =  idx / (m_resolution.x() * m_resolution.y()); 
+
+            Point3f cell_min = Vector3f(x, y, z) * cell_size;
+            Point3f cell_max = cell_min + cell_size;
+            BoundingBox3f cell_bounds(
+                            cell_min + math::RayEpsilon<Float>, 
+                            cell_max - math::RayEpsilon<Float>
+                        );
+
+            auto [maj, min] = sigma_t->extremum(data, cell_bounds);
+
+            dr::scatter(m_extremum_grid, min, idx*2);
+            dr::scatter(m_extremum_grid, maj, idx*2+1);
+            // Log(Debug, "min, maj: %f, %f", min, maj);
+            // Log(Debug, "cell_bounds: %f", cell_bounds);
+            dr::sync_thread();
         }
 
-
-        m_extremum_grid = dr::load<FloatStorage>(extremums.data(), n*2);
+        
         Log(Info, "Extremum grid constructed successfully");
     }
 

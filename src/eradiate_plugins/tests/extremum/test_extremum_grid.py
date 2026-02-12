@@ -22,10 +22,12 @@ def generate_extremum_grid(
         "type": "extremum_grid",
         "volume": volume,
         "resolution": extremum_res,
+        "build_method":2,
     })
 
     extremum_grid =  mi.traverse(extremum_struct)["extremum_grid"].numpy()
-    extremum_grid = extremum_grid.reshape(extremum_res.x, extremum_res.y, extremum_res.z, 2)
+    extremum_grid = extremum_grid.reshape(extremum_res.z, extremum_res.y, extremum_res.x, 2)
+    extremum_grid = extremum_grid.transpose(2, 1, 0, 3)
     return extremum_struct, extremum_grid
     
 
@@ -54,7 +56,7 @@ def test_build_half_res(variant_scalar_rgb):
     data = np.linspace(1, n_prod, n_prod).reshape( n_x, n_y, n_z)
     volume_grid = mi.VolumeGrid(data.transpose(2,1,0))
 
-    extremum_resolution = mi.ScalarVector3i(2, 4, 2)    
+    extremum_resolution = mi.ScalarVector3i(2, 4, 2)
     _, extremum_grid = generate_extremum_grid(volume_grid, extremum_resolution, "nearest")
     
     assert np.allclose( data[::2,::2,::2], extremum_grid[ :, :, :, 0] )
