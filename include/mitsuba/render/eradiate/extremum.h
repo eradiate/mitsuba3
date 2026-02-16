@@ -7,7 +7,8 @@
 
 NAMESPACE_BEGIN(mitsuba)
 
-// @TODO: rename sigma_maj and sigma_min to maj and min
+// @TODO: remove tau_acc from Extremum Segment and make sample segment return
+//        a tuple {segment, tau_acc}.
 
 /**
  * \brief Segment along a ray with local extremum values
@@ -24,9 +25,9 @@ struct ExtremumSegment {
     /// Segment exit distance along ray
     Float tmax;
     /// Local majorant (maximum extinction) in this segment
-    Float sigma_maj;
+    Float majorant;
     /// Local minorant (minimum extinction) in this segment
-    Float sigma_min;
+    Float minorant;
     /// Accumulated Optical Depth;
     Float tau_acc;
 
@@ -41,10 +42,10 @@ struct ExtremumSegment {
     /// Create an extremum segment from its fields.
     ExtremumSegment(
         Float tmin, Float tmax, 
-        Float sigma_maj, Float sigma_min, 
+        Float majorant, Float minorant, 
         Float tau_acc) 
         : tmin(tmin), tmax(tmax), 
-          sigma_maj(sigma_maj), sigma_min(sigma_min), 
+          majorant(majorant), minorant(minorant), 
           tau_acc(tau_acc)  {  }
 
     /**
@@ -56,8 +57,8 @@ struct ExtremumSegment {
     void zero_(size_t size = 1) {                                                                                                                                                                            
         tmin        = dr::full<Float>(dr::Infinity<Float>, size);
         tmax        = dr::full<Float>(-dr::Infinity<Float>, size);
-        sigma_min   = dr::zeros<Float>(size);
-        sigma_maj   = dr::zeros<Float>(size);
+        minorant   = dr::zeros<Float>(size);
+        majorant   = dr::zeros<Float>(size);
         tau_acc     = dr::zeros<Float>(size);   
     }  
 
@@ -85,25 +86,8 @@ struct ExtremumSegment {
         tmax = -dr::Infinity<Float>;
     }
 
-    DRJIT_STRUCT_NODEF(ExtremumSegment, tmin, tmax, sigma_maj, sigma_min, tau_acc)
+    DRJIT_STRUCT_NODEF(ExtremumSegment, tmin, tmax, majorant, minorant, tau_acc)
 };
-
-// /// Print a string representation of the ExtremumSegment
-// template <typename Float, typename Spectrum>
-// std::ostream &operator<<(std::ostream &os, const ExtremumSegment<Float, Spectrum> &es) {
-//     os << "ExtremumSegment";
-//     if (dr::all(!es.valid()))
-//         os << "[invalid]";
-//     else
-//         os << "[" << std::endl
-//            << "  min = " << es.tmin << "," << std::endl
-//            << "  max = " << es.tmax << std::endl
-//            << "  sigma_min = " << es.sigma_min << std::endl
-//            << "  sigma_maj = " << es.sigma_maj << std::endl
-//            << "  tau_acc = " << es.tau_acc << std::endl
-//            << "]";
-//     return os;
-// }
 
 /**
  * \brief Abstract base class for extremum structures
@@ -150,6 +134,23 @@ public:
         Mask active
     ) const = 0;
 
+    /**
+     * \brief Evaluate the majorant at a medium interaction point.
+     *
+     * This method performs point evaluation at interaction point specified in 
+     * local space.
+     *
+     * \param it            Interaction interaction point in local space
+     * \param active        Mask for active lanes
+     *
+     * \return The minorant and majorant values at the medium interaction point.
+     *         Clamped values outside bounds.
+     */
+    virtual std::tuple<Float, Float> eval_1(
+        const Interaction3f & it,
+        Mask active
+    ) const = 0;
+
     // =============================================================
     //! @{ \name Non-virtual query methods
     // =============================================================
@@ -179,6 +180,7 @@ NAMESPACE_END(mitsuba)
 
 DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::ExtremumStructure)
     DRJIT_CALL_METHOD(sample_segment)
+    DRJIT_CALL_METHOD(eval_1)
 DRJIT_CALL_END()
 
 //! @}

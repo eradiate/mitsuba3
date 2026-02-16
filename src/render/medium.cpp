@@ -82,13 +82,15 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
         // Use extremum structure with local majorants
         auto segment = m_extremum_structure->sample_segment(ray, mint, maxt, desired_tau, active);
         sampled_t = segment.tmin +
-                (desired_tau - segment.tau_acc) / dr::maximum(segment.sigma_maj, dr::Epsilon<Float>);
-
+                (desired_tau - segment.tau_acc) / dr::maximum(segment.majorant, dr::Epsilon<Float>);
+                
+        Log(Debug, "Valid segment: %f, sampled_t: %f, maxt: %f", segment.valid(), sampled_t, maxt);
+                
         // Store local majorant in combined_extinction
-        combined_extinction[0] = segment.sigma_maj;
+        combined_extinction[0] = segment.majorant;
         if constexpr (is_rgb_v<Spectrum>) {
-            combined_extinction[1] = segment.sigma_maj;
-            combined_extinction[2] = segment.sigma_maj;
+            combined_extinction[1] = segment.majorant;
+            combined_extinction[2] = segment.majorant;
         } else {
             DRJIT_MARK_USED(channel);
         }
@@ -111,9 +113,14 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
     mei.p = ray(sampled_t);
 
     std::tie(mei.sigma_s, mei.sigma_n, mei.sigma_t) =
-        get_scattering_coefficients(mei, valid_mi);
-    mei.combined_extinction = combined_extinction;
-
+            get_scattering_coefficients(mei, valid_mi);
+        mei.combined_extinction = combined_extinction;
+        
+    // quick fix for now 
+    if(m_extremum_structure != nullptr){
+        mei.sigma_n = mei.combined_extinction - mei.sigma_t;
+    }
+    
     return mei;
 }
 // #ERADIATE_CHANGE_END
