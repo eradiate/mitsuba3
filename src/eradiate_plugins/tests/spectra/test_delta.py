@@ -11,9 +11,9 @@ def test_02_eval(variant_scalar_spectral):
     s = mi.load_dict({"type": "delta", "wavelength": 550.0})
     si = dr.zeros(mi.SurfaceInteraction3f)
     si.wavelengths = mi.Spectrum([400, 500, 600, 700])
-    assert dr.allclose(s.eval(si), 0.0)
-    assert dr.allclose(s.eval_1(si), 0.0)
-    assert dr.allclose(s.eval_3(si), 0.0)
+    assert dr.allclose(s.eval(si), 1.0)
+    assert dr.allclose(s.eval_1(si), 1.0)
+    assert dr.allclose(s.eval_3(si), 1.0)
 
 
 def test_03_sample(variant_scalar_spectral):

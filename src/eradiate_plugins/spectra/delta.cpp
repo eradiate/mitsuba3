@@ -46,22 +46,22 @@ public:
     UnpolarizedSpectrum eval(const SurfaceInteraction3f & /*si*/,
                              Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::TextureEvaluate, active);
-        return 0.f;
+        return m_value;
     }
 
     Float eval_1(const SurfaceInteraction3f & /*it*/, Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::TextureEvaluate, active);
-        return 0.f;
+        return m_value;
     }
 
     Color3f eval_3(const SurfaceInteraction3f & /*it*/, Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::TextureEvaluate, active);
-        return 0.f;
+        return m_value;
     }
 
     Vector2f eval_1_grad(const SurfaceInteraction3f & /*it*/, Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::TextureEvaluate, active);
-        return 0.f;
+        return m_value;
     }
 
     Wavelength pdf_spectrum(const SurfaceInteraction3f & /*si*/, Mask /*active*/) const override {
