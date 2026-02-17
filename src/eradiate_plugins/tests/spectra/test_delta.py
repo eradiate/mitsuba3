@@ -23,3 +23,9 @@ def test_03_sample(variant_scalar_spectral):
     wavelengths, weights = s.sample_spectrum(si, sample)
     assert dr.allclose(wavelengths, 550.0)
     assert dr.allclose(weights, 0.5)
+
+
+def test_04_construct_specfilm(variant_scalar_spectral):
+    film = mi.load_dict(
+        {"type": "specfilm", "band_0": {"type": "delta", "wavelength": 550.0}}
+    )

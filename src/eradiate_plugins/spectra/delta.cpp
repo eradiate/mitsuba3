@@ -82,11 +82,12 @@ public:
     Float mean() const override { return m_value; }
 
     ScalarVector2f wavelength_range() const override {
-        return { dr::slice(m_wavelength), dr::slice(m_wavelength) };
+        return { dr::slice(m_wavelength) - 1.f,
+                 dr::slice(m_wavelength) + 1.f };
     }
 
     ScalarFloat spectral_resolution() const override {
-        return 0.f;
+        return 2.f * 1.f;
     }
 
     ScalarFloat max() const override {
