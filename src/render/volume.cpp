@@ -76,6 +76,10 @@ Volume<Float, Spectrum>::array() const {
     NotImplementedError("array");
     return nullptr;
 };
+
+MI_VARIANT void Volume<Float, Spectrum>::add_extremum_structure(ExtremumStructure* extremum) {
+    m_extremum_structures.push_back(extremum);
+}
 // #ERADIATE_CHANGE_END
 
 // #RAY_CHANGE_BEGIN, NM 24/05/2024 : Add util functions to the volume class

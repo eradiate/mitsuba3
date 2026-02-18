@@ -85,10 +85,10 @@ public:
         props.mark_queried("center");
         props.mark_queried("rmin");
         props.mark_queried("rmax");
-        props.mark_queried("fillmin");
-        props.mark_queried("fillmax");
         props.mark_queried("resolution");
         props.mark_queried("scale");
+        props.mark_queried("to_world");
+        props.mark_queried("sample_method");
 
         // Set bounding box to enclose the outer sphere
         m_bbox = ScalarBoundingBox3f(
@@ -153,6 +153,7 @@ public:
     ExtremumSphericalImpl(const Properties &props) : Base(props) {
         // Get volume
         ref<Volume> volume = nullptr;
+        // m_volume = props.get_volume<Volume>("volume");
         for (auto &prop : props.objects()) {
             if (auto *vol = prop.try_get<Volume>()) {
                 volume = vol;
@@ -163,27 +164,33 @@ public:
         if (!volume)
             Throw("ExtremumSpherical requires a sigma_t volume");
 
+        m_volume = volume;
+        volume->add_extremum_structure(this);
+
         m_center = props.get<ScalarPoint3f>("center", ScalarPoint3f(0.f));
         m_rmin = props.get<ScalarFloat>("rmin", 0.f);
         m_rmax = props.get<ScalarFloat>("rmax", 1.f);
-        m_fillmin = props.get<ScalarFloat>("fillmin", 0.f);
-        m_fillmax = props.get<ScalarFloat>("fillmax", 0.f);
         m_resolution = props.get<ScalarVector3i>("resolution", ScalarVector3i(1, 1, 1));
-        ScalarFloat scale = props.get<ScalarFloat>("scale", 1.0f);
+        m_scale = props.get<ScalarFloat>("scale", 1.0f);
+        m_to_local = props.get<ScalarAffineTransform4f>("to_world", ScalarAffineTransform4f()).inverse();
+
+        m_sample_method = props.get<ScalarUInt32>("sample_method", 0);
 
         m_dr = (m_rmax - m_rmin) / m_resolution.x();
         m_idr = dr::rcp(m_dr);
 
+        
         // Set bounding box to enclose the outer sphere
-        m_bbox = ScalarBoundingBox3f(
-            m_center - ScalarVector3f(m_rmax),
-            m_center + ScalarVector3f(m_rmax)
-        );
+        m_bbox = m_volume->bbox();
 
-        build_grid(volume.get(), scale);
+        build_grid(m_volume.get(), m_scale);
 
         Log(Info, "ExtremumSpherical created: resolution=%s, center=%s, "
             "rmin=%f, rmax=%f", m_resolution, m_center, m_rmin, m_rmax);
+    }
+
+    void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override {
+        build_grid(m_volume.get(), m_scale);
     }
 
     Segment sample_segment(
@@ -194,7 +201,16 @@ public:
     ) const override {
 
         if constexpr (TraversalType == SphericalTraversalType::RadialOnly) {
-            return sample_segment_radial(ray, mint, maxt, desired_tau, active);
+            switch (m_sample_method)
+            {
+            case 0:
+                return sample_segment_radial(ray, mint, maxt, desired_tau, active);
+            case 1:
+                return sample_segment_radial_3(ray, mint, maxt, desired_tau, active);
+            default:
+                return dr::zeros<Segment>();
+            }
+            
         } else {
             Throw("Full3D spherical traversal is not yet implemented!");
             return dr::zeros<Segment>();
@@ -217,6 +233,7 @@ public:
     void traverse(TraversalCallback *cb) override {
         cb->put("extremum_grid", m_extremum_grid, ParamFlags::NonDifferentiable);
         cb->put("resolution", m_resolution, ParamFlags::NonDifferentiable);
+        cb->put("scale", m_scale, ParamFlags::NonDifferentiable);
         Base::traverse(cb);
     }
 
@@ -231,6 +248,8 @@ public:
             << "  center = " << m_center << "," << std::endl
             << "  rmin = " << m_rmin << "," << std::endl
             << "  rmax = " << m_rmax << std::endl
+            << "  fillmin = " << m_fillmin << "," << std::endl
+            << "  fillmax = " << m_fillmax << std::endl
             << "]";
         return oss.str();
     }
@@ -309,6 +328,23 @@ private:
             dr::sync_thread();
         }
 
+        // Retrieve fillmin and fillmax
+        Interaction3f it = dr::zeros<Interaction3f>();
+
+        it.p = m_center;
+        Float fillmin = sigma_t->eval_1(it, true) * scale;
+        
+        it.p = m_center + m_rmax + 1;
+        Float fillmax = sigma_t->eval_1(it, true) * scale;
+
+        if constexpr (dr::is_jit_v<Float>) {
+            m_fillmin = fillmin[0];
+            m_fillmax = fillmax[1];
+        } else {
+            m_fillmin = fillmin;
+            m_fillmax = fillmax;
+        }
+
         Log(Info, "Extremum spherical grid constructed successfully");
     }
 
@@ -323,6 +359,15 @@ private:
         Mask active
     ) const {
 
+        // const ScalarVector3f extents = m_bbox.extents();
+        Ray3f local_ray(
+            m_to_local * ray.o,  // Normalize origin
+            m_to_local * ray.d,                  // Normalize direction
+            ray.time,
+            ray.wavelengths
+        );
+        // Ray3f local_ray = ray;
+        
         Segment result = dr::zeros<Segment>();
         Float tau_acc = 0.f;
         Mask reached = false;
@@ -340,16 +385,16 @@ private:
         // Log(Debug, "Start Loop");
 
         // ray-sphere intersection info
-        Vector3f o = ray.o - m_center;
+        Vector3f o = local_ray.o - m_center;
         Float o_squared = dr::squared_norm(o);
-        Float a = dr::squared_norm(ray.d);
-        Float b_half = dr::dot(o, ray.d);
+        Float a = dr::squared_norm(local_ray.d);
+        Float b_half = dr::dot(o, local_ray.d);
                 
 
         dr::tie(ls) = dr::while_loop(
             dr::make_tuple(ls),
             [](const LoopState &ls) { return ls.active; },
-            [this, &ray, maxt, desired_tau, o_squared, a, b_half](LoopState &ls) {
+            [this, &local_ray, maxt, desired_tau, o_squared, a, b_half](LoopState &ls) {
                 // Log(Debug, "-------");
 
                 Segment &result   = ls.result;
@@ -361,7 +406,7 @@ private:
                 // Compute radius at current position
                 Float eps = math::RayEpsilon<Float>;
 
-                Point3f pos = ray(current_t + eps);
+                Point3f pos = local_ray(current_t + eps);
                 Vector3f oc = pos - m_center;
                 Float r = dr::norm(oc);
 
@@ -403,6 +448,7 @@ private:
                 Float c_lo = o_squared - dr::square(r_lo);
                 Float c_hi = o_squared - dr::square(r_hi);
                 
+                // Log(Debug, "r_lo: %f, r_hi: %f", r_lo, r_hi);
                 // Log(Debug, "a, b_half, c_lo, c_hi: %f, %f, %f, %f", a, b_half, c_lo, c_hi);
                 auto [valid_lo, t_lo_near, t_lo_far] =
                     math::solve_quadratic(a, 2.f * b_half, c_lo);
@@ -414,7 +460,6 @@ private:
 
                 // Find smallest t > current_t + epsilon among the 4 candidates
                 Float threshold = current_t + eps;
-
                 Float t_next = maxt;
 
                 // Helper: update t_next if candidate > threshold and < t_next
@@ -474,6 +519,180 @@ private:
         return ls.result;
     }
 
+    Segment sample_segment_radial_3(
+        const Ray3f &ray,
+        Float mint, Float maxt,
+        Float desired_tau,
+        Mask active
+    ) const {
+
+        // const ScalarVector3f extents = m_bbox.extents();
+        Ray3f local_ray(
+            m_to_local * ray.o,  // Normalize origin
+            m_to_local * ray.d,                  // Normalize direction
+            ray.time,
+            ray.wavelengths
+        );
+        // Ray3f local_ray = ray;
+
+        Segment result = dr::zeros<Segment>();
+        Float tau_acc = 0.f;
+        Mask reached = false;
+        Float current_t = mint;
+
+        // Log(Debug, "m_rmin: %f, m_rmax: %f, m_dr: %f, desired_tau: %f", m_rmin, m_rmax, m_dr, desired_tau);
+        // Log(Debug, "Start Loop");
+
+        // ray-sphere intersection info
+        Vector3f o = local_ray.o - m_center;
+        Float o_squared = dr::squared_norm(o);
+        Float a = dr::squared_norm(local_ray.d);
+        Float b_half = dr::dot(o, local_ray.d);
+
+        // Find the current/next intersection (use this to calculate the midpoint too)
+        Point3f pos = local_ray(mint+dr::Epsilon<Float>*10.f);
+        Vector3f oc = pos - m_center;
+        Float r = dr::norm(oc);
+
+        // Calculate the initial layer index from which we will step through layers.
+        Int32 layer_idx = dr::clip(dr::floor2int<Int32>((r - m_rmin) * m_idr), -1, m_resolution.x());
+        Mask passed_midpoint = dr::dot((m_center - pos), local_ray.d) < 0;
+        UInt32 shell_padding = dr::select(passed_midpoint, 1, 0);
+        Int32 step = dr::select(passed_midpoint, 1, -1);
+
+        // Log(Debug, "r: %f, (r-m_rmin)*m_idr: %f, layer_idx: %f", r, dr::floor2int<UInt32>((r - m_rmin) * m_idr), layer_idx);
+        // Calculate distance to midpoint, norm of r cancels out.
+        // Float t_midpoint = dr::dot(dr::normalize(ray.d), oc);
+        // Float r_midpoint = dr::sqrt(t_midpoint * t_midpoint + r * r) ;
+        // Int32 midpoint_idx = dr::clip(dr::floor2int<UInt32>((r_midpoint - m_rmin) * m_idr), -1, m_resolution.x());
+
+        struct LoopState {
+            Segment result;
+            Mask active, reached;
+            Float current_t, tau_acc;
+            Int32 layer_idx;
+            Int32 step;
+            UInt32 padding;
+
+            DRJIT_STRUCT(                                                      \
+                LoopState, result, active, reached, current_t,                 \
+                tau_acc, layer_idx, step, padding                              \
+            )
+        } ls = { 
+            result, 
+            active, 
+            reached, 
+            current_t, 
+            tau_acc, 
+            layer_idx, 
+            step,
+            shell_padding, 
+        };
+
+        dr::tie(ls) = dr::while_loop(
+            dr::make_tuple(ls),
+            [](const LoopState &ls) { return ls.active; },
+            [this, maxt, desired_tau, o_squared, a, b_half](LoopState &ls) {
+            // Log(Debug, "---------");
+            Segment &result    = ls.result;
+            Mask    &active    = ls.active;
+            Mask    &reached   = ls.reached;
+            Float   &current_t = ls.current_t;
+            Float   &tau_acc   = ls.tau_acc;
+            Int32   &layer_idx = ls.layer_idx;
+            Int32   &step      = ls.step;
+            UInt32  &padding   = ls.padding;
+
+            // Compute radius at current position
+            Float eps = math::RayEpsilon<Float>;
+            
+            // Passed midpoint == exiting the concentric spheres
+            Int32 shell_idx = dr::clip(layer_idx + padding, 0, m_resolution.x());
+            // Log(Debug, "current_t: %f, layer_idx: %f, shell_idx: %f", current_t, layer_idx, shell_idx);
+            // Log(Debug, "passed_mp: %f", passed_midpoint);
+
+            // Boundary condition of rmin and rmax
+            Float fill_value = -1.f;
+            dr::masked(fill_value, layer_idx < 0) = m_fillmin;
+            dr::masked(fill_value, layer_idx >= m_resolution.x()) = m_fillmax;
+            Mask fill = fill_value >= 0.f;
+
+            // Test intersection with the shell
+            Float r_test = m_rmin + Float(shell_idx) * m_dr;
+            Float c = o_squared - dr::square(r_test);
+            auto [valid_test, t_test_near, t_test_far] = math::solve_quadratic(a, 2.f * b_half, c);
+            // Log(Debug, "r_test: %f, valid_test: %f", r_test, valid_test);
+            // Log(Debug, "a, b_half, c_lo, c_hi: %f, %f, %f, %f", a, b_half, c);
+
+            // Find smallest t > current_t + epsilon among the 4 candidates
+            Float threshold = current_t + eps;
+            Float t_next = maxt;
+
+            // Special case at midpoint where we miss the intersection with the 
+            // shell, bump padding to test outer shell, set step to increase
+            // layer index and continue to next iteration.
+            dr::masked(padding, !valid_test) = 1;
+            dr::masked(step, !valid_test) = 1;
+
+            Mask update = active && valid_test; 
+            // Log(Debug, "update: %f", update);
+
+            if( dr::any_or<true>(update) ) {
+                
+                // Helper: update t_next if candidate > threshold and < t_next
+                auto consider = [&](Float t_cand, Mask valid_cand) DRJIT_INLINE_LAMBDA {
+                    Mask use = valid_cand && (t_cand > threshold) && (t_cand < t_next);
+                    dr::masked(t_next, use) = t_cand;
+                };
+
+                consider(t_test_near, valid_test);
+                consider(t_test_far,  valid_test);
+
+                // Clamp to maxt
+                t_next = dr::minimum(t_next, maxt);
+                // Log(Debug, "t_next: %f", t_next);
+                
+                // Look up extremum values for this shell
+                Vector2f local_extremum = dr::gather<Vector2f>(
+                    m_extremum_grid, layer_idx, active && !fill);
+                Float local_minorant = dr::select(!fill, local_extremum.x(), fill_value);
+                Float local_majorant = dr::select(!fill, local_extremum.y(), fill_value);
+
+                // Accumulate optical depth
+                Float segment_length = t_next - current_t;
+                Float tau_next = dr::fmadd(local_majorant, segment_length, tau_acc);
+                
+                // Check if desired tau is reached in this segment
+                Mask stops_here = active && (local_majorant > 0.f) &&
+                                    (tau_next >= desired_tau) && (t_next <= maxt);
+
+                reached |= stops_here;
+                // Log(Debug, "stops_here: %f, reached: %f", stops_here, reached);
+                // Store result for lanes that reached target
+                dr::masked(result, stops_here) = ExtremumSegment(
+                    current_t, t_next, local_majorant, local_minorant, tau_acc
+                );
+
+                // Advance state for lanes that haven't reached target
+                dr::masked(current_t, update && !reached) = t_next;
+                dr::masked(tau_acc, update && !reached) = tau_next;
+                dr::masked(layer_idx, update && !reached) += step;
+
+                // Log(Debug, "current_t: %f, layer_idx: %f", current_t, layer_idx);
+                // Log(Debug, "count: %f", ls.count);
+
+                // Continue only if not reached and still in bounds
+                active &= (!reached && (t_next < maxt)) ;
+            }
+        },
+        "Spherical Shell Traversal");
+
+        // For lanes that didn't reach, invalidate the segment
+        dr::masked(ls.result.tmin, !ls.reached) = dr::Infinity<Float>;
+
+        return ls.result;
+    }
+
 private:
     FloatStorage m_extremum_grid;
     ScalarVector3i m_resolution;
@@ -481,6 +700,12 @@ private:
     ScalarFloat m_fillmin, m_fillmax;
     ScalarPoint3f m_center;
     ScalarFloat m_dr, m_idr;
+
+    ref<Volume> m_volume;
+
+    ScalarFloat m_scale;
+    ScalarAffineTransform4f m_to_local;
+    ScalarUInt32 m_sample_method;
 };
 
 

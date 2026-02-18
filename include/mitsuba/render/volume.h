@@ -15,7 +15,7 @@ NAMESPACE_BEGIN(mitsuba)
 template <typename Float, typename Spectrum>
 class MI_EXPORT_LIB Volume : public JitObject<Volume<Float, Spectrum>> {
 public:
-    MI_IMPORT_TYPES(Texture)
+    MI_IMPORT_TYPES(Texture, ExtremumStructure)
 
     // ======================================================================
     //! @{ \name Volume interface
@@ -99,6 +99,9 @@ public:
     virtual Float minorant(const BoundingBox3f &local_bounds) const {
         return extremum(nullptr, local_bounds).second;
     }
+
+    virtual void add_extremum_structure(ExtremumStructure* extremum);
+        
 // #ERADIATE_CHANGE_END
 
     /// Returns the bounding box of the volume
@@ -162,6 +165,10 @@ protected:
     ScalarBoundingBox3f m_bbox;
     /// Number of channels stored in the volume
     uint32_t m_channel_count;
+
+// #ERADIATE_CHANGE_BEGIN: Local extremum support
+    std::vector<ExtremumStructure*> m_extremum_structures;  
+// #ERADIATE_CHANGE_END
 
     MI_TRAVERSE_CB(Object)
 };

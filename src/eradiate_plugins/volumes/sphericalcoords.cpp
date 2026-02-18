@@ -1,6 +1,7 @@
 #include <mitsuba/core/properties.h>
 #include <mitsuba/core/transform.h>
 #include <mitsuba/render/volume.h>
+#include <mitsuba/render/eradiate/extremum.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -80,7 +81,7 @@ template <typename Float, typename Spectrum>
 class SphericalCoordsVolume final : public Volume<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Volume, m_to_local, m_bbox)
-    MI_IMPORT_TYPES(VolumeGrid)
+    MI_IMPORT_TYPES(VolumeGrid, ExtremumStructure)
 
     using VolumeType = Volume<Float, Spectrum>;
 
@@ -97,6 +98,10 @@ public:
 
         m_to_local = props.get<ScalarAffineTransform4f>("to_world", ScalarAffineTransform4f()).inverse();
         update_bbox_sphere();
+    }
+
+    void add_extremum_structure(ExtremumStructure* extremum) override {
+        m_volume->add_extremum_structure(extremum);
     }
 
     UnpolarizedSpectrum eval(const Interaction3f &it, Mask active) const override {

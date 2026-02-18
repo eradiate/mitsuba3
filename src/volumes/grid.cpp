@@ -8,6 +8,7 @@
 #include <mitsuba/render/volumegrid.h>
 #include <drjit/dynamic.h>
 #include <drjit/texture.h>
+#include <mitsuba/render/eradiate/extremum.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -158,8 +159,8 @@ little endian encoding and is specified as follows:
 template <typename Float, typename Spectrum>
 class GridVolume final : public Volume<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(Volume, update_bbox, m_to_local, m_bbox, m_channel_count)
-    MI_IMPORT_TYPES(VolumeGrid)
+    MI_IMPORT_BASE(Volume, update_bbox, m_to_local, m_bbox, m_channel_count, m_extremum_structures)
+    MI_IMPORT_TYPES(VolumeGrid, ExtremumStructure)
 
     GridVolume(const Properties &props) : Base(props) {
         std::string_view filter_type_str = props.get<std::string_view>("filter_type", "trilinear");
@@ -323,6 +324,12 @@ public:
 
             if (!m_fixed_max)
                 m_max = (float) dr::max_nested(dr::detach(m_texture.value()));
+
+            for (auto extremum : m_extremum_structures) {
+                if(extremum != nullptr) {
+                    extremum->parameters_changed(keys);
+                }
+            }
         }
     }
 
