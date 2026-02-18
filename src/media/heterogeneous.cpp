@@ -149,7 +149,7 @@ template <typename Float, typename Spectrum>
 class HeterogeneousMedium final : public Medium<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
-                    m_phase_function)
+                    m_phase_function, m_extremum_structure)
     MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume)
 
     HeterogeneousMedium(const Properties &props) : Base(props) {
@@ -175,9 +175,15 @@ public:
     }
 
     UnpolarizedSpectrum
-    get_majorant(const MediumInteraction3f & /* mi */,
+    get_majorant(const MediumInteraction3f & /*mi*/,
                  Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
+        
+        // Will need to replace this check with something that is better for vectorization
+        // if(m_extremum_structure != nullptr){
+        //     return m_extremum_structure->eval_1(mei, active);
+        // }
+
         return m_max_density;
     }
 

@@ -9,12 +9,11 @@ NAMESPACE_BEGIN(mitsuba)
 
 
 // @TODO:
-// - Rename sigma_t to volume to make it more general
 // - Currently only works on axis aligned volumes, see if we can extend it :
 //   For now, we will assume the volume to be axis aligned as it simplifies many
 //   issues related to building grid outside of the volume extent (wraping mode).
 //   Wraping mode is not available to the user and therefore not to the majorant.
-// - currently works in 1D, see how we can extend to multiple channels.
+// - currently works in 1 channel, see how we can extend to multiple channels.
 // - Grid building limited to one volume, consider extending to multiple.
 //   This is contigent to the axis-aligned volume problem.
 // - allow for volumes with accel=True
@@ -31,10 +30,14 @@ Extremum grid structure (:monosp:`extremum_grid`)
 
 .. pluginparameters::
 
- * - sigma_t
+ * - volume
    - |volume|
    - Extinction coefficient volume to build extremum grid from
    - |exposed|
+
+ * - to_world
+   - |transform|
+   - Specifies an optional 4x4 transformation matrix that will be applied to volume coordinates.
 
  * - scale
    - |float|
@@ -43,7 +46,7 @@ Extremum grid structure (:monosp:`extremum_grid`)
  * - resolution_factor
    - |int|
    - Grid resolution divisor. The extremum grid resolution will be
-     sigma_t_resolution / resolution_factor. If 0, automatically determined
+     volume_resolution / resolution_factor. If 0, automatically determined
      via heuristic. (Default: 0)
 
  * - safety_factor
@@ -85,19 +88,17 @@ public:
             Throw("ExtremumGrid requires at least one volume");
         
         m_bbox = volume->bbox(); 
-        m_to_local = (ScalarAffineTransform4f::scale(m_bbox.extents()) * ScalarAffineTransform4f::translate(m_bbox.min)).inverse();
+        volume->add_extremum_structure(this);
 
-        // Get parameters
+        m_to_local = props.get<ScalarAffineTransform4f>("to_world", ScalarAffineTransform4f()).inverse();
+
         ScalarFloat scale = props.get<ScalarFloat>("scale", 1.0f);
 
         if (props.has_property("resolution_factor") && props.has_property("resolution")) {
-            
             Throw("`resolution_factor` and `resolution` are mutually exclusive.");
-
         } else if (props.has_property("resolution_factor")) {
 
             const ScalarVector3i full_res = volume->resolution();
-
             size_t resolution_factor = props.get<size_t>("resolution_factor", 0);
 
             // Determine grid resolution
@@ -116,7 +117,7 @@ public:
             m_resolution = full_res / ScalarVector3i(resolution_factor);
             m_resolution = dr::maximum(m_resolution, 1);
 
-            Log(Info, "Building extremum grid %s from sigma_t grid %s (factor=%d)",
+            Log(Info, "Building extremum grid %s from volume grid %s (factor=%d)",
             m_resolution, full_res, resolution_factor);
 
         } else if (props.has_property("resolution")) {
@@ -169,7 +170,7 @@ public:
         Float tau_acc = 0.f;
         Mask reached = false;
 
-        Log(Debug, "Start Loop");
+        // Log(Debug, "Start Loop");
 
         struct LoopState {
             Segment result;
@@ -209,7 +210,7 @@ public:
             Float t_next = dr::minimum(dr::minimum(dda_tmax.x(), dda_tmax.y()), dda_tmax.z());
             t_next = dr::minimum(t_next, maxt);
 
-            Log(Debug, "t_next: %f", t_next);
+            // Log(Debug, "t_next: %f", t_next);
 
             // Determine which axis advances
             Vector3f tmax_update = dr::zeros<Vector3f>();
@@ -315,15 +316,15 @@ public:
 private:
 
     /**
-     * \brief Build the extremum grid from a sigma_t volume
+     * \brief Build the extremum grid from a volume
      *
      * This method constructs a lower-resolution grid where each cell stores
      * the majorant (maximum) extinction value over the corresponding region
-     * of the high-resolution sigma_t volume.
+     * of the high-resolution volume.
      */
-    void build_grid(const Volume *sigma_t, ScalarFloat scale) {
+    void build_grid(const Volume *volume, ScalarFloat scale) {
 
-        m_bbox = sigma_t->bbox();
+        m_bbox = volume->bbox();
         // local space supergrid cell size
         const ScalarVector3f cell_size = dr::rcp(ScalarVector3f(m_resolution));
         
@@ -337,16 +338,14 @@ private:
         // std::unique_ptr<ScalarFloat[]> extremums(new ScalarFloat[n*2]);
 
         // IMPORTANT: need to retrieve the data before to avoid ref count slow-down
-        auto data = sigma_t->array();
+        auto data = volume->array();
 
         size_t n_threads = pool_size() + 1;
         size_t grain_size = std::max( n / (4 * n_threads), (size_t) 1 );
 
-        if constexpr (!dr::is_jit_v<Float>) {
-        // if constexpr (!dr::is_jit_v<Float> ) {
+        m_extremum_grid = dr::empty<FloatStorage>(n*2);
 
-            // avoid unecessary allocation in scalar mode
-            m_extremum_grid = dr::empty<FloatStorage>(n*2);
+        if constexpr (!dr::is_jit_v<Float>) {
             
             dr::parallel_for(
                 dr::blocked_range<size_t>(0, n, grain_size),
@@ -369,7 +368,7 @@ private:
                         );
 
                         // // Query volume for local extremum, currently assume local bounds.
-                        auto [maj, min] = sigma_t->extremum(data, cell_bounds);
+                        auto [maj, min] = volume->extremum(data, cell_bounds);
 
                         dr::scatter(m_extremum_grid, scale * Vector2f(min, maj), UInt32(idx));
                     }
@@ -377,8 +376,6 @@ private:
             );
         } else {
             
-            m_extremum_grid = dr::empty<FloatStorage>(n*2);
-
             UInt32 idx = dr::arange<UInt32>((uint32_t) n);
 
             UInt32 x = idx % m_resolution.x() ; 
@@ -392,7 +389,7 @@ private:
                             cell_max - math::RayEpsilon<Float>
                         );
 
-            auto [maj, min] = sigma_t->extremum(data, cell_bounds);
+            auto [maj, min] = volume->extremum(data, cell_bounds);
 
             dr::scatter(m_extremum_grid, min, idx*2);
             dr::scatter(m_extremum_grid, maj, idx*2+1);
