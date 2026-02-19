@@ -24,7 +24,7 @@ def generate_extremum_grid(
         "resolution": extremum_res
     })
 
-    extremum_grid =  mi.traverse(extremum_struct)["extremum_grid"].numpy()
+    extremum_grid =  mi.traverse(extremum_struct)["data"].numpy()
     extremum_grid = extremum_grid.reshape(extremum_res.z, extremum_res.y, extremum_res.x, 2)
     extremum_grid = extremum_grid.transpose(2, 1, 0, 3)
     return extremum_struct, extremum_grid

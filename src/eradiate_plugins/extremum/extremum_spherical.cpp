@@ -210,7 +210,7 @@ public:
     }
 
     void traverse(TraversalCallback *cb) override {
-        cb->put("extremum_grid", m_extremum_grid, ParamFlags::NonDifferentiable);
+        cb->put("data", m_extremum_grid, ParamFlags::NonDifferentiable);
         cb->put("resolution", m_resolution, ParamFlags::NonDifferentiable);
         cb->put("scale", m_scale, ParamFlags::NonDifferentiable);
         Base::traverse(cb);
@@ -358,6 +358,10 @@ private:
         Float o_squared = dr::squared_norm(o);
         Float a = dr::squared_norm(local_ray.d);
         Float b_half = dr::dot(o, local_ray.d);
+        
+        // claude addition
+        Float disc_base = b_half * b_half - a * o_squared;  // constant across iterations
+        Float inv_a = dr::rcp(a); 
 
         // Find the current/next intersection (use this to calculate the midpoint too)
         Point3f pos = local_ray(mint+dr::Epsilon<Float>*10.f);
@@ -367,14 +371,10 @@ private:
         // Calculate the initial layer index from which we will step through layers.
         Int32 layer_idx = dr::clip(dr::floor2int<Int32>((r - m_rmin) * m_idr), -1, m_resolution.x());
         Mask passed_midpoint = dr::dot((m_center - pos), local_ray.d) < 0;
-        UInt32 shell_padding = dr::select(passed_midpoint, 1, 0);
+        Int32 shell_padding = dr::select(passed_midpoint, 1, 0);
         Int32 step = dr::select(passed_midpoint, 1, -1);
 
-        // Log(Debug, "r: %f, (r-m_rmin)*m_idr: %f, layer_idx: %f", r, dr::floor2int<UInt32>((r - m_rmin) * m_idr), layer_idx);
-        // Calculate distance to midpoint, norm of r cancels out.
-        // Float t_midpoint = dr::dot(dr::normalize(ray.d), oc);
-        // Float r_midpoint = dr::sqrt(t_midpoint * t_midpoint + r * r) ;
-        // Int32 midpoint_idx = dr::clip(dr::floor2int<UInt32>((r_midpoint - m_rmin) * m_idr), -1, m_resolution.x());
+        // Log(Debug, "r: %f, (r-m_rmin)*m_idr: %f, layer_idx: %f", r, dr::floor2int<Int32>((r - m_rmin) * m_idr), layer_idx);
 
         struct LoopState {
             Segment result;
@@ -382,7 +382,7 @@ private:
             Float current_t, tau_acc;
             Int32 layer_idx;
             Int32 step;
-            UInt32 padding;
+            Int32 padding;
 
             DRJIT_STRUCT(                                                      \
                 LoopState, result, active, reached, current_t,                 \
@@ -402,53 +402,71 @@ private:
         dr::tie(ls) = dr::while_loop(
             dr::make_tuple(ls),
             [](const LoopState &ls) { return ls.active; },
-            [this, maxt, desired_tau, o_squared, a, b_half](LoopState &ls) {
+            // [this, maxt, desired_tau, o_squared, a, b_half](LoopState &ls) {
+            [this, maxt, desired_tau, a, inv_a, disc_base, b_half](LoopState &ls) {
             // Log(Debug, "---------");
-            Segment &result    = ls.result;
-            Mask    &active    = ls.active;
-            Mask    &reached   = ls.reached;
-            Float   &current_t = ls.current_t;
-            Float   &tau_acc   = ls.tau_acc;
-            Int32   &layer_idx = ls.layer_idx;
-            Int32   &step      = ls.step;
-            UInt32  &padding   = ls.padding;
+            // Segment &result    = ls.result;
+            // Mask    &active    = ls.active;
+            // Mask    &reached   = ls.reached;
+            // Float   &current_t = ls.current_t;
+            // Float   &tau_acc   = ls.tau_acc;
+            // Int32   &layer_idx = ls.layer_idx;
+            // Int32   &step      = ls.step;
+            // Int32   &padding   = ls.padding;
 
             // Compute radius at current position
-            Float eps = math::RayEpsilon<Float>;
+            const Float eps = math::RayEpsilon<Float>;
             
             // Passed midpoint == exiting the concentric spheres
-            Int32 shell_idx = dr::clip(layer_idx + padding, 0, m_resolution.x());
+            const Int32 shell_idx = dr::clip(ls.layer_idx + ls.padding, 0, m_resolution.x());
             // Log(Debug, "current_t: %f, layer_idx: %f, shell_idx: %f", current_t, layer_idx, shell_idx);
-            // Log(Debug, "passed_mp: %f", passed_midpoint);
+            // Log(Debug, "padding: %f , step: %f, what: %f", padding, step, layer_idx + padding);
 
             // Boundary condition of rmin and rmax
             Float fill_value = -1.f;
-            dr::masked(fill_value, layer_idx < 0) = m_fillmin;
-            dr::masked(fill_value, layer_idx >= m_resolution.x()) = m_fillmax;
-            Mask fill = fill_value >= 0.f;
+            dr::masked(fill_value, ls.layer_idx < 0) = m_fillmin;
+            dr::masked(fill_value, ls.layer_idx >= m_resolution.x()) = m_fillmax;
+            const Mask fill = fill_value >= 0.f;
 
             // Test intersection with the shell
-            Float r_test = m_rmin + Float(shell_idx) * m_dr;
-            Float c = o_squared - dr::square(r_test);
-            auto [valid_test, t_test_near, t_test_far] = math::solve_quadratic(a, 2.f * b_half, c);
+            const Float r_test = m_rmin + Float(shell_idx) * m_dr;
+            
+            // Float c = o_squared - dr::square(r_test);
+            // auto [valid_test, t_test_near, t_test_far] = math::solve_quadratic(a, 2.f * b_half, c);
+            
+            const Float disc = disc_base + a * dr::square(r_test);
+            const Mask valid_test = disc >= 0.f;
+            const Float sqrt_disc = dr::sqrt(disc);
+            const Float t_test_near = (-b_half - sqrt_disc) * inv_a;
+            const Float t_test_far  = (-b_half + sqrt_disc) * inv_a;
+
             // Log(Debug, "r_test: %f, valid_test: %f", r_test, valid_test);
+            // Log(Debug, "far: %f, near: %f", t_test_far, t_test_near);
             // Log(Debug, "a, b_half, c_lo, c_hi: %f, %f, %f, %f", a, b_half, c);
+            
+            // Update if there is valid intersection that is not tangent.
+            Mask update = valid_test && dr::abs(t_test_far - t_test_near) > math::RayEpsilon<Float>;
+            const Mask pass_midpoint = !update || ls.layer_idx == -1;
 
-            // Find smallest t > current_t + epsilon among the 4 candidates
-            Float threshold = current_t + eps;
-            Float t_next = maxt;
-
+            // Mask skip_update = !valid_test || dr::abs(t_test_far - t_test_near) < math::RayEpsilon<Float>;
+            // Mask pass_midpoint = skip_update || layer_idx == -1;
+            
             // Special case at midpoint where we miss the intersection with the 
             // shell, bump padding to test outer shell, set step to increase
             // layer index and continue to next iteration.
-            dr::masked(padding, !valid_test) = 1;
-            dr::masked(step, !valid_test) = 1;
+            dr::masked(ls.padding, pass_midpoint) = 1;
+            dr::masked(ls.step, pass_midpoint) = 1;
 
-            Mask update = active && valid_test; 
-            // Log(Debug, "update: %f", update);
+            // Mask update = active && valid_test && !tangent; 
+            // Log(Debug, "update: %f, pass_midpoint: %f", update, pass_midpoint);
 
             if( dr::any_or<true>(update) ) {
-                
+            
+                // Find smallest t > current_t + epsilon among the 4 candidates
+                // Float threshold = current_t + eps;
+                const Float threshold = ls.current_t + eps;
+                Float t_next = maxt;
+
                 // Helper: update t_next if candidate > threshold and < t_next
                 auto consider = [&](Float t_cand, Mask valid_cand) DRJIT_INLINE_LAMBDA {
                     Mask use = valid_cand && (t_cand > threshold) && (t_cand < t_next);
@@ -457,42 +475,41 @@ private:
 
                 consider(t_test_near, valid_test);
                 consider(t_test_far,  valid_test);
-
-                // Clamp to maxt
-                t_next = dr::minimum(t_next, maxt);
-                // Log(Debug, "t_next: %f", t_next);
                 
                 // Look up extremum values for this shell
                 Vector2f local_extremum = dr::gather<Vector2f>(
-                    m_extremum_grid, layer_idx, active && !fill);
+                    m_extremum_grid, ls.layer_idx, ls.active && !fill);
                 Float local_minorant = dr::select(!fill, local_extremum.x(), fill_value);
                 Float local_majorant = dr::select(!fill, local_extremum.y(), fill_value);
 
                 // Accumulate optical depth
-                Float segment_length = t_next - current_t;
-                Float tau_next = dr::fmadd(local_majorant, segment_length, tau_acc);
+                const Float segment_length = t_next - ls.current_t;
+                const Float tau_next = dr::fmadd(local_majorant, segment_length, ls.tau_acc);
                 
                 // Check if desired tau is reached in this segment
-                Mask stops_here = active && (local_majorant > 0.f) &&
+                const Mask stops_here = ls.active && (local_majorant > 0.f) &&
                                     (tau_next >= desired_tau) && (t_next <= maxt);
 
-                reached |= stops_here;
+                ls.reached |= stops_here;
+                // Log(Debug, "majorant: %f, minorant: %f", local_majorant, local_minorant);
+                // Log(Debug, "tau_next: %f, t_next: %f", tau_next, t_next);
                 // Log(Debug, "stops_here: %f, reached: %f", stops_here, reached);
                 // Store result for lanes that reached target
-                dr::masked(result, stops_here) = ExtremumSegment(
-                    current_t, t_next, local_majorant, local_minorant, tau_acc
+                dr::masked(ls.result, stops_here) = ExtremumSegment(
+                    ls.current_t, t_next, local_majorant, local_minorant, ls.tau_acc
                 );
 
                 // Advance state for lanes that haven't reached target
-                dr::masked(current_t, update && !reached) = t_next;
-                dr::masked(tau_acc, update && !reached) = tau_next;
-                dr::masked(layer_idx, update && !reached) += step;
+                update &= !ls.reached;
+                dr::masked(ls.current_t, update) = t_next;
+                dr::masked(ls.tau_acc, update) = tau_next;
+                dr::masked(ls.layer_idx, update) += ls.step;
 
                 // Log(Debug, "current_t: %f, layer_idx: %f", current_t, layer_idx);
                 // Log(Debug, "count: %f", ls.count);
 
                 // Continue only if not reached and still in bounds
-                active &= (!reached && (t_next < maxt)) ;
+                ls.active &= (!ls.reached && (t_next < maxt)) ;
             }
         },
         "Spherical Shell Traversal");
