@@ -11,7 +11,8 @@ NAMESPACE_BEGIN(mitsuba)
 MI_VARIANT Medium<Float, Spectrum>::Medium()
     : JitObject<Medium>(""),
       m_is_homogeneous(false),
-      m_has_spectral_extinction(true) {
+      m_has_spectral_extinction(true),
+      m_has_local_extremum(false) {
 }
 
 MI_VARIANT Medium<Float, Spectrum>::Medium(const Properties &props)
@@ -28,6 +29,10 @@ MI_VARIANT Medium<Float, Spectrum>::Medium(const Properties &props)
                 Throw("Only a single extremum structure can be specified per medium");
             m_extremum_structure = extremum;
         }
+        if (m_extremum_structure)
+            m_has_local_extremum = true;
+        else
+            m_has_local_extremum = false;
 // #ERADIATE_CHANGE_END
     }
     if (!m_phase_function) {
@@ -112,14 +117,16 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
     mei.t = dr::select(valid_mi, sampled_t, dr::Infinity<Float>);
     mei.p = ray(sampled_t);
 
+    // TODO: with local extremum structures, this triggers an unnecessary evaluation
+    // of the extremum grid. To fix this we probably need to change the medium interface.
     std::tie(mei.sigma_s, mei.sigma_n, mei.sigma_t) =
             get_scattering_coefficients(mei, valid_mi);
         mei.combined_extinction = combined_extinction;
         
     // quick fix for now 
-    if(m_extremum_structure != nullptr){
-        mei.sigma_n = mei.combined_extinction - mei.sigma_t;
-    }
+    // if(m_extremum_structure != nullptr){
+    //     mei.sigma_n = mei.combined_extinction - mei.sigma_t;
+    // }
     
     return mei;
 }

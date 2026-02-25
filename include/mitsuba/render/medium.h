@@ -129,6 +129,7 @@ protected:
     bool m_is_homogeneous;
     bool m_has_spectral_extinction;
 // #ERADIATE_CHANGE_BEGIN: Extremum structure support
+    bool m_has_local_extremum;
     ref<ExtremumStructure> m_extremum_structure;
 // #ERADIATE_CHANGE_END
 
