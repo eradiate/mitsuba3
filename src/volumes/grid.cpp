@@ -454,8 +454,6 @@ public:
     extremum(
         const DynamicBuffer<Float>* array, 
         BoundingBox3f local_bounds) const override {
-        if (m_accel)
-            NotImplementedError("extremum() not supported with hardware acceleration");
 
         if (m_texture.shape()[3] != 1)
             NotImplementedError("extremum() only supported for single-channel volumes");
