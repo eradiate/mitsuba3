@@ -170,14 +170,14 @@ public:
         m_dr = (m_rmax - m_rmin) / m_resolution.x();
         m_idr = dr::rcp(m_dr);
 
-        build_grid(m_volume.get(), m_scale);
+        build_grid(m_volume.get());
 
         Log(Info, "ExtremumSpherical created: resolution=%s, center=%s, "
             "rmin=%f, rmax=%f", m_resolution, m_center, m_rmin, m_rmax);
     }
 
     void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override {
-        build_grid(m_volume.get(), m_scale);
+        build_grid(m_volume.get());
     }
 
     Segment sample_segment(
@@ -241,11 +241,12 @@ private:
     // Grid construction
     // ------------------------------------------------------------------
 
-    void build_grid(const Volume *volume, ScalarFloat scale) {
+    void build_grid(const Volume *volume) {
         // Cell size in normalized [0,1]^3 space
         const ScalarVector3f cell_size = dr::rcp(ScalarVector3f(m_resolution));
-
         size_t n = dr::prod(m_resolution);
+
+        ScalarVector2f safety_factor(0.99, 1.01);
 
         std::vector<ScalarFloat> extremums;
 
@@ -278,7 +279,7 @@ private:
                         auto [maj, min] = volume->extremum(data, cell_bounds);
 
                         dr::scatter(m_extremum_grid,
-                                    scale * Vector2f(min, maj),
+                                    m_scale * Vector2f(min, maj) * safety_factor,
                                     UInt32(idx));
                     }
                 }
@@ -302,8 +303,8 @@ private:
 
             auto [maj, min] = volume->extremum(data, cell_bounds);
 
-            dr::scatter(m_extremum_grid, min, idx * 2);
-            dr::scatter(m_extremum_grid, maj, idx * 2 + 1);
+            dr::scatter(m_extremum_grid, m_scale * min * safety_factor.x(), idx * 2);
+            dr::scatter(m_extremum_grid, m_scale * maj * safety_factor.y(), idx * 2 + 1);
             dr::sync_thread();
         }
 
@@ -311,10 +312,10 @@ private:
         Interaction3f it = dr::zeros<Interaction3f>();
 
         it.p = m_center;
-        Float fillmin = volume->eval_1(it, true) * scale;
+        Float fillmin = volume->eval_1(it, true) * m_scale;
         
         it.p = m_center + m_rmax + 1;
-        Float fillmax = volume->eval_1(it, true) * scale;
+        Float fillmax = volume->eval_1(it, true) * m_scale;
 
         if constexpr (dr::is_jit_v<Float>) {
             m_fillmin = fillmin[0];
@@ -405,14 +406,6 @@ private:
             // [this, maxt, desired_tau, o_squared, a, b_half](LoopState &ls) {
             [this, maxt, desired_tau, a, inv_a, disc_base, b_half](LoopState &ls) {
             // Log(Debug, "---------");
-            // Segment &result    = ls.result;
-            // Mask    &active    = ls.active;
-            // Mask    &reached   = ls.reached;
-            // Float   &current_t = ls.current_t;
-            // Float   &tau_acc   = ls.tau_acc;
-            // Int32   &layer_idx = ls.layer_idx;
-            // Int32   &step      = ls.step;
-            // Int32   &padding   = ls.padding;
 
             // Compute radius at current position
             const Float eps = math::RayEpsilon<Float>;
