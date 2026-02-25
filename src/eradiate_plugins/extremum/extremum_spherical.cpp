@@ -31,25 +31,26 @@ Extremum spherical structure (:monosp:`extremum_spherical`)
 
  * - rmin
    - |float|
-   - Inner shell radius (Default: 0)
+   - Inner shell radius. It should preferrably match the underlying volume (Default: 0).
 
  * - rmax
    - |float|
-   - Outer shell radius (Default: 1)
+   - Outer shell radius. It should preferrably match the underlying volume (Default: 1).
 
  * - resolution
    - |vector|
-   - Grid resolution as (res_r, res_theta, res_phi) (Default: (1, 1, 1))
+   - Grid resolution as (r, theta, phi). Grids with variations on only the 
+     radial resolution have optimized traversal (Default: (1, 1, 1)).
 
  * - scale
    - |float|
    - Scale factor for extinction coefficients (Default: 1.0)
 
-This plugin creates a spherical extremum structure storing local majorant (and
-minorant) values for efficient delta tracking in spherical media. The grid is
-constructed by querying the extinction volume's extrema over each spherical cell.
+This plugin creates a spherical extremum structure storing local extremum values 
+for efficient delta tracking in spherical media. The grid is constructed by 
+querying the underlying volume's extrema over each spherical cell.
 
-At runtime, concentric shell traversal provides tight-fitting local majorants for
+At runtime, concentric shell traversal provides tight-fitting local extremum for
 radially-varying media such as planetary atmospheres.
 */
 
@@ -246,7 +247,10 @@ private:
         const ScalarVector3f cell_size = dr::rcp(ScalarVector3f(m_resolution));
         size_t n = dr::prod(m_resolution);
 
-        ScalarVector2f safety_factor(0.99, 1.01);
+        ScalarVector2f safety_factor(
+            1.f - dr::Epsilon<Float>, 
+            1.f + dr::Epsilon<Float>
+        );
 
         std::vector<ScalarFloat> extremums;
 
@@ -360,8 +364,8 @@ private:
         Float a = dr::squared_norm(local_ray.d);
         Float b_half = dr::dot(o, local_ray.d);
         
-        // claude addition
-        Float disc_base = b_half * b_half - a * o_squared;  // constant across iterations
+        // Intersection value precomputation
+        Float disc_base = b_half * b_half - a * o_squared; 
         Float inv_a = dr::rcp(a); 
 
         // Find the current/next intersection (use this to calculate the midpoint too)
