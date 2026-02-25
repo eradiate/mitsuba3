@@ -16,10 +16,10 @@ NAMESPACE_BEGIN(mitsuba)
 // - Currently works in 1 channel, see how we can extend to multiple channels.
 // - Grid building limited to one volume, consider extending to multiple.
 //   This is contigent to the axis-aligned volume problem.
-// - Reintroduce the safety factor but not as a parameter
 // - For build_grid -> detect when volume's res == supergrid res to do a memcpy
 //                  -> detect when supergrid res == 1x1x1 to get max value.
 // - Is the m_bbox really needed for extremum grids?
+// - Add min to the volume functions.
 
 /**!
 .. _extremum-extremum_grid:
@@ -36,7 +36,7 @@ Extremum grid structure (:monosp:`extremum_grid`)
 
  * - to_world
    - |transform|
-   - Specifies an optional 4x4 transformation matrix that will be applied to volume coordinates.
+   - Specifies a 4x4 transformation matrix of the underlying volume.
 
  * - scale
    - |float|
@@ -44,7 +44,7 @@ Extremum grid structure (:monosp:`extremum_grid`)
 
  * - resolution
    - |vector|
-   - Grid resolution on along the XYZ axis. Does not have to be a multiple of 
+   - Grid resolution along the XYZ axis. Does not have to be a multiple of 
      the underlying volume. `adaptive` is mutually exclusive with `resolution`. 
      (Default: [1,1,1]).
 
@@ -54,12 +54,12 @@ Extremum grid structure (:monosp:`extremum_grid`)
      Note that this search is costly and needs to run on rebuilds. `adaptive` is 
      mutually exclusive with `resolution`. (Default: false)
 
-This plugin creates a regular grid structure storing local majorant (and minorant)
-values for efficient delta tracking in heterogeneous media. The grid is constructed
+This plugin creates a regular grid structure storing local extremum values for 
+efficient delta tracking in heterogeneous media. The grid is constructed
 by querying the extinction volume's extrema over each grid cell.
 
 At runtime, DDA (Digital Differential Analyzer) traversal through the grid provides
-tight-fitting local majorants, dramatically reducing null collisions in media with
+tight-fitting local extrema, dramatically reducing null collisions in media with
 high spatial variance (e.g., clouds, fog).
 */
 
@@ -85,8 +85,8 @@ public:
         if (!m_volume)
             Throw("ExtremumGrid requires at least one volume");
         
-        // register the extremum structure to the volume to trigger parameter_changed
-        // when the volume is modified.
+        // Register the extremum structure to the volume to trigger 
+        // parameter_changed when the volume is modified.
         m_volume->add_extremum_structure(this);
         m_bbox = m_volume->bbox(); 
 
@@ -287,10 +287,16 @@ public:
     }
 
     std::tuple<Float, Float> eval_1(
-        const Interaction3f &/*it*/, 
-        Mask /*active*/) const override {
-        NotImplementedError("eval_1");
-        return {0.f, 0.f};
+        const Interaction3f &it, 
+        Mask active) const override {
+        Point3f po = m_to_local*it.p;
+        Vector3i pi = dr::clip(Vector3i(po * m_resolution), 0, m_resolution - 1);
+        UInt32 idx = dr::fmadd( 
+                        dr::fmadd( pi.z(), m_resolution.y(), pi.y() ), 
+                        m_resolution.x(), pi.x()
+                    );
+        Vector2f extremum = dr::gather<Vector2f>(m_extremum_grid, idx, active);
+        return {extremum.x(), extremum.y()};
     }
 
     void traverse(TraversalCallback *cb) override {
@@ -328,7 +334,7 @@ private:
         ScalarAffineTransform4f to_world = m_to_local.inverse();
         ScalarVector3f dim;
 
-        // extract scale from to_world transform. Note this does not work with shear
+        // Extract scale from to_world transform. Note this does not work with shear
         for (size_t i = 0; i < 3; ++i) {
             ScalarVector3f basis;
             for (size_t j = 0; j < 3; ++j) {
@@ -336,12 +342,11 @@ private:
             }
             dim[i] = dr::norm(basis);
         }
-
  
         Float denom = dim.x()*dim.y() + dim.x()*dim.z() + dim.y()*dim.z();  
 
         // Cost function as defined in Yue et al. 2011
-        auto cost_fn = [cost_part, denom, dim](FloatStorage& grid, ScalarVector3i resolution){
+        auto cost_fn = [denom, dim](FloatStorage& grid, ScalarVector3i resolution){
             // Select only the majorant from the extremum grid
             ScalarIndex idx = dr::arange<ScalarIndex>(dr::prod(resolution))*2+1;
             ScalarFloatStorage majorant = dr::gather<ScalarFloatStorage>(grid, idx);
@@ -380,6 +385,7 @@ private:
             ScalarFloat left_cost, right_cost;
 
             while( (right - left) > 3) {
+                // Choose new boundaries
                 ScalarUInt32 m1 = left + (right-left)/3;
                 ScalarUInt32 m2 = right - (right-left)/3; 
 
@@ -402,7 +408,7 @@ private:
 
             result[dim] = left_cost < right_cost ? left : right;
         }
-        Log(Warn, "reolution found: %f", result);
+        Log(Warn, "optimal resolution: %f", result);
         return result;
     }
 
@@ -418,7 +424,10 @@ private:
         // local space supergrid cell size
         const ScalarVector3f cell_size = dr::rcp(ScalarVector3f(resolution));
 
-        ScalarVector2f safety_factor(0.99, 1.01);
+        ScalarVector2f safety_factor(
+            1.f - dr::Epsilon<Float>, 
+            1.f + dr::Epsilon<Float>
+        );
         
         // Log(Debug, "Building grid =======");
         // Log(Debug, "m_bbox: %f, cell_size: %f", m_bbox, cell_size);
@@ -435,6 +444,16 @@ private:
         size_t grain_size = std::max( n / (4 * n_threads), (size_t) 1 );
 
         m_extremum_grid = dr::empty<FloatStorage>(n*2);
+
+        // Early return if using the global majorant.
+        if (n == 1) {
+            ScalarFloat max = volume->max();
+            dr::scatter(
+                m_extremum_grid, 
+                m_scale * Vector2f(0.f, max) * safety_factor, 
+                UInt32(0));
+            return;
+        }
 
         if constexpr (!dr::is_jit_v<Float>) {
             
