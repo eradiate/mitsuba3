@@ -19,6 +19,8 @@ set(CORE_PY_V_SRC
   ${CMAKE_CURRENT_SOURCE_DIR}/quad_v.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/any.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/any.h
+
+  ${CMAKE_CURRENT_SOURCE_DIR}/eradiate/obb_v.cpp
   PARENT_SCOPE
 )
 

@@ -1,6 +1,7 @@
 #include <mitsuba/core/properties.h>
 #include <mitsuba/core/transform.h>
 #include <mitsuba/render/volume.h>
+#include <mitsuba/render/eradiate/extremum.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -80,7 +81,7 @@ template <typename Float, typename Spectrum>
 class SphericalCoordsVolume final : public Volume<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Volume, m_to_local, m_bbox)
-    MI_IMPORT_TYPES(VolumeGrid)
+    MI_IMPORT_TYPES(VolumeGrid, ExtremumStructure)
 
     using VolumeType = Volume<Float, Spectrum>;
 
@@ -97,6 +98,10 @@ public:
 
         m_to_local = props.get<ScalarAffineTransform4f>("to_world", ScalarAffineTransform4f()).inverse();
         update_bbox_sphere();
+    }
+
+    void add_extremum_structure(ExtremumStructure* extremum) override {
+        m_volume->add_extremum_structure(extremum);
     }
 
     UnpolarizedSpectrum eval(const Interaction3f &it, Mask active) const override {
@@ -147,9 +152,41 @@ public:
         );
     }
 
-    ScalarFloat max() const override { return m_volume->max(); }
+    ScalarFloat max() const override { return dr::maximum(dr::maximum(m_volume->max(), m_fillmin), m_fillmax); }
 
     ScalarVector3i resolution() const override { return m_volume->resolution(); };
+
+// #ERADIATE_CHANGE_BEGIN: Spatial extremum queries for grid volumes
+    std::pair<Float, Float>
+    extremum(BoundingBox3f local_bounds) const override {
+        // local_bounds is in normalized [0,1]^3 space (r_norm, theta_norm, phi_norm).
+        // The nested volume uses the same coordinate convention, so we forward
+        // directly after clamping to [0,1].
+
+        // Clamp bounds to valid [0,1]^3 range for the nested volume query
+        BoundingBox3f clamped_bounds(
+            dr::maximum(local_bounds.min, Point3f(0.f)),
+            dr::minimum(local_bounds.max, Point3f(1.f))
+        );
+
+        auto [maj, min] = m_volume->extremum(clamped_bounds);
+
+        // If the r-range extends below 0 (below rmin), include fillmin
+        auto below_rmin = local_bounds.min.x() < 0.f;
+        dr::masked(maj, below_rmin) = dr::maximum(maj, Float(m_fillmin));
+        dr::masked(min, below_rmin) = dr::minimum(min, Float(m_fillmin));
+
+        // If the r-range extends above 1 (above rmax), include fillmax
+        auto above_rmax = local_bounds.max.x() > 1.f;
+        dr::masked(maj, above_rmax) = dr::maximum(maj, Float(m_fillmax));
+        dr::masked(min, above_rmax) = dr::minimum(min, Float(m_fillmax));
+
+        return { maj, min };
+    }
+
+    typename Base::PinGuard pin() const override { return m_volume->pin(); };
+
+// #ERADIATE_CHANGE_END
 
     void traverse(TraversalCallback *cb) override {
         cb->put("volume", m_volume.get(), ParamFlags::NonDifferentiable);
