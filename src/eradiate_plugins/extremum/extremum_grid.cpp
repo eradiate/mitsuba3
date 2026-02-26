@@ -45,14 +45,8 @@ Extremum grid structure (:monosp:`extremum_grid`)
  * - resolution
    - |vector|
    - Grid resolution along the XYZ axis. Does not have to be a multiple of 
-     the underlying volume. `adaptive` is mutually exclusive with `resolution`. 
-     (Default: [1,1,1]).
-
- * - adaptive
-   - |bool|
-   - Flags the use of an adaptive method to find a suitable majorant grid resolution.
-     Note that this search is costly and needs to run on rebuilds. `adaptive` is 
-     mutually exclusive with `resolution`. (Default: false)
+     the underlying volume. Set to [0,0,0] to trigger an adaptive resolution 
+     routine (Default: [1,1,1]).
 
 This plugin creates a regular grid structure storing local extremum values for 
 efficient delta tracking in heterogeneous media. The grid is constructed
@@ -94,19 +88,16 @@ public:
         m_scale = props.get<ScalarFloat>("scale", 1.0f);
 
         // Resolution Parameters
-        if (props.has_property("adaptive") &&
-            props.has_property("resolution")) {
-            Throw("`adaptive_resolution` and `resolution` are mutually "
-                  "exclusive.");
-        } else if (props.has_property("adaptive_resolution")) {
-            if (props.get<bool>("adaptive_resolution")) {
-                m_adaptive   = true;
-                m_resolution = find_resolution(m_volume);
-            }
-        } else if (props.has_property("resolution")) {
-            m_adaptive   = false;
-            m_resolution = props.get<ScalarVector3i>("resolution");
+        m_resolution = props.get<ScalarVector3i>("resolution", ScalarVector3i(1,1,1));
+        
+        Log(Warn, "m_adaptive: %f, m_resolution: %f", m_adaptive, m_resolution);
+        m_adaptive = false;
+        if (dr::all(m_resolution <= ScalarVector3i(0))) {
+            m_adaptive = true;
+            m_resolution = find_resolution(m_volume);
         }
+        Log(Warn, "m_adaptive: %f, m_resolution: %f", m_adaptive, m_resolution);
+
         m_cell_size = 1.f / ScalarVector3f(m_resolution);
 
         build_grid(m_volume.get(), m_resolution);
@@ -117,7 +108,7 @@ public:
 
     void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override {
         if (m_adaptive) {
-            find_resolution(m_volume.get());
+            m_resolution = find_resolution(m_volume.get());
         }
         build_grid(m_volume.get(), m_resolution);
     }
