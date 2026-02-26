@@ -94,7 +94,7 @@ public:
         m_scale = props.get<ScalarFloat>("scale", 1.0f);
 
         // Resolution Parameters
-        if (props.has_property("adpative") &&
+        if (props.has_property("adaptive") &&
             props.has_property("resolution")) {
             Throw("`adaptive_resolution` and `resolution` are mutually "
                   "exclusive.");
@@ -328,13 +328,13 @@ private:
     ScalarVector3i find_resolution(const Volume *volume){
         using ScalarIndex =  DynamicBuffer<ScalarUInt32>;
         using ScalarFloatStorage =  DynamicBuffer<ScalarFloat>;
-        ScalarVector3i result = dr::full<ScalarVector3i>(1);
-        ScalarVector3i fine_res = volume->resolution();
-        
-        ScalarAffineTransform4f to_world = m_to_local.inverse();
-        ScalarVector3f dim;
 
+        ScalarVector3i result            = dr::full<ScalarVector3i>(1);
+        ScalarVector3i fine_res          = volume->resolution();
+        ScalarAffineTransform4f to_world = m_to_local.inverse();
+        
         // Extract scale from to_world transform. Note this does not work with shear
+        ScalarVector3f dim;
         for (size_t i = 0; i < 3; ++i) {
             ScalarVector3f basis;
             for (size_t j = 0; j < 3; ++j) {
@@ -343,7 +343,7 @@ private:
             dim[i] = dr::norm(basis);
         }
  
-        Float denom = dim.x()*dim.y() + dim.x()*dim.z() + dim.y()*dim.z();  
+        ScalarFloat denom = dim.x()*dim.y() + dim.x()*dim.z() + dim.y()*dim.z();  
 
         // Cost function as defined in Yue et al. 2011
         auto cost_fn = [denom, dim](FloatStorage& grid, ScalarVector3i resolution){
@@ -351,22 +351,22 @@ private:
             ScalarIndex idx = dr::arange<ScalarIndex>(dr::prod(resolution))*2+1;
             ScalarFloatStorage majorant = dr::gather<ScalarFloatStorage>(grid, idx);
             
-            Float res_prod = dr::prod(resolution);
-            Float dim_prod = dr::prod(dim);
-            Float grid_sum = dr::sum(majorant);
+            ScalarFloat res_prod = dr::prod(resolution);
+            ScalarFloat dim_prod = dr::prod(dim);
+            ScalarFloat grid_sum = dr::sum(majorant);
 
-            Float cost_iter = 2.f * (dim_prod / res_prod) * grid_sum;
+            ScalarFloat cost_iter = 2.f * (dim_prod / res_prod) * grid_sum;
 
-            Float cost_part = (resolution.x() - 1)*dim.y()*dim.z()
-                            + (resolution.y() - 1)*dim.x()*dim.z()
-                            + (resolution.z() - 1)*dim.x()*dim.y(); 
+            ScalarFloat cost_part = (resolution.x() - 1)*dim.y()*dim.z()
+                                  + (resolution.y() - 1)*dim.x()*dim.z()
+                                  + (resolution.z() - 1)*dim.x()*dim.y(); 
 
             // Timing parameters: 
             // t_iter: cost incurred by having to perform a null collision loop
             // t_rewind: cost incurred by having to perform a dda loop
             // Dependent on optimization and target build, left for further optimization.
-            Float t_iter = 1.f;
-            Float t_rewind = 1.f;
+            ScalarFloat t_iter   = 1.f;
+            ScalarFloat t_rewind = 1.f;
             return (t_iter * cost_iter + t_rewind * cost_part)/denom;
         };
 
@@ -378,11 +378,13 @@ private:
         };
 
         // Ternary search over the xyz dimensions to find the best resolution.
-        result = dr::maximum( fine_res/2, 1);
-        for (uint8_t dim = 0; dim < 3; ++dim){
-            ScalarUInt32 left = 1;
-            ScalarUInt32 right = fine_res[dim];
-            ScalarFloat left_cost, right_cost;
+        result = dr::maximum( fine_res / 2, 1);
+        for (uint8_t i = 0; i < 3; ++i){
+            ScalarUInt32 left  = 1;
+            ScalarUInt32 right = fine_res[i];
+            
+            ScalarFloat left_cost  = 0.f;
+            ScalarFloat right_cost = 0.f;
 
             while( (right - left) > 3) {
                 // Choose new boundaries
@@ -390,8 +392,8 @@ private:
                 ScalarUInt32 m2 = right - (right-left)/3; 
 
                 ScalarVector3i left_res = result, right_res = result;
-                left_res[dim]  = m1;
-                right_res[dim] = m2;
+                left_res[i]  = m1;
+                right_res[i] = m2;
     
                 // Evaluate cost at the chosen boundaries
                 build_grid(volume, left_res);
@@ -406,7 +408,7 @@ private:
                     left = m1 + 1;
             }
 
-            result[dim] = left_cost < right_cost ? left : right;
+            result[i] = left_cost <= right_cost ? left : right;
         }
         Log(Warn, "optimal resolution: %f", result);
         return result;

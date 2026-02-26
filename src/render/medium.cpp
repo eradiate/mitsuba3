@@ -17,24 +17,24 @@ MI_VARIANT Medium<Float, Spectrum>::Medium()
 
 MI_VARIANT Medium<Float, Spectrum>::Medium(const Properties &props)
     : JitObject<Medium>(props.id()) {
+
+// #ERADIATE_CHANGE_BEGIN: Initialize extremum structure from properties
     for (auto &prop : props.objects()) {
         if (PhaseFunction *phase = prop.try_get<PhaseFunction>()) {
             if (m_phase_function)
                 Throw("Only a single phase function can be specified per medium");
             m_phase_function = phase;
         }
-// #ERADIATE_CHANGE_BEGIN: Initialize extremum structure from properties
         if (auto *extremum = prop.try_get<ExtremumStructure>()) {
             if (m_extremum_structure)
                 Throw("Only a single extremum structure can be specified per medium");
             m_extremum_structure = extremum;
         }
-        if (m_extremum_structure)
-            m_has_local_extremum = true;
-        else
-            m_has_local_extremum = false;
-// #ERADIATE_CHANGE_END
     }
+
+    m_has_local_extremum = m_extremum_structure != nullptr;
+// #ERADIATE_CHANGE_END
+
     if (!m_phase_function) {
         // Create a default isotropic phase function
         m_phase_function =
@@ -83,7 +83,7 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
     Float sampled_t;
     UnpolarizedSpectrum combined_extinction;
 
-    if (m_extremum_structure != nullptr) {
+    if (m_has_local_extremum) {
         // Use extremum structure with local majorants
         auto [segment, tau_acc] = m_extremum_structure->sample_segment(ray, mint, maxt, target_od, active);
         sampled_t = segment.tmin +
@@ -120,8 +120,8 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
     // TODO: with local extremum structures, this triggers a redundant evaluation
     // of the extremum grid. To fix this we probably need to change the medium interface.
     std::tie(mei.sigma_s, mei.sigma_n, mei.sigma_t) =
-            get_scattering_coefficients(mei, valid_mi);
-        mei.combined_extinction = combined_extinction;
+        get_scattering_coefficients(mei, valid_mi);
+    mei.combined_extinction = combined_extinction;
     
     return mei;
 }

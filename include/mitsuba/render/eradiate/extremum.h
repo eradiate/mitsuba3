@@ -67,7 +67,7 @@ struct ExtremumSegment {
      * \endcode
      */
     Mask valid() const {
-        return tmin <= tmax;
+        return tmin < tmax;
     }
 
     /**

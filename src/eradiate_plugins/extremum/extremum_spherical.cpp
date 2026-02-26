@@ -120,7 +120,6 @@ public:
 
 protected:
     Properties m_props;
-    ScalarPoint3f m_center;
     SphericalTraversalType m_traversal_type;
 };
 
@@ -218,7 +217,7 @@ public:
             );
             extremum = dr::gather<Vector2f>(m_extremum_grid, ir, active && !fill);
 
-        } else if constexpr (TraversalType == SphericalTraversalType::RadialOnly) { 
+        } else if constexpr (TraversalType == SphericalTraversalType::Full3D) { 
             Throw("Full3D spherical evaluation is not yet implemented!");
         }
         
@@ -337,12 +336,12 @@ private:
         it.p = m_center;
         Float fillmin = volume->eval_1(it, true) * m_scale;
         
-        it.p = m_center + m_rmax + 1;
+        it.p = m_center + m_rmax + ScalarVector3f(0.f , 0.f, 1.f);
         Float fillmax = volume->eval_1(it, true) * m_scale;
 
         if constexpr (dr::is_jit_v<Float>) {
             m_fillmin = fillmin[0];
-            m_fillmax = fillmax[1];
+            m_fillmax = fillmax[0];
         } else {
             m_fillmin = fillmin;
             m_fillmax = fillmax;
@@ -525,8 +524,9 @@ private:
                 // Log(Debug, "count: %f", ls.count);
 
                 // Continue only if not reached and still in bounds
-                ls.active &= (!ls.reached && (t_next < maxt)) ;
+                ls.active &= !ls.reached && (t_next < maxt);
             }
+            ls.active &= ls.layer_idx < m_resolution.x();
         },
         "Spherical Shell Traversal");
 
@@ -548,7 +548,6 @@ private:
 
     ScalarFloat m_scale;
     ScalarAffineTransform4f m_to_local;
-    ScalarUInt32 m_sample_method;
 };
 
 

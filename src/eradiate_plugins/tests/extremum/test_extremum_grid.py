@@ -1,4 +1,5 @@
 import mitsuba as mi
+import drjit as dr
 import numpy as np
 
   
@@ -118,11 +119,10 @@ def test_build_scaled(variant_scalar_rgb):
     pass
 
 def assert_compare_segment(ref, other):
-    assert np.allclose(ref.tmin, other.tmin)
-    assert np.allclose(ref.tmax, other.tmax)
-    assert np.allclose(ref.minorant, other.minorant)
-    assert np.allclose(ref.majorant, other.majorant)
-    assert np.allclose(ref.tau_acc, other.tau_acc)
+    assert dr.allclose(ref.tmin, other.tmin)
+    assert dr.allclose(ref.tmax, other.tmax)
+    assert dr.allclose(ref.minorant, other.minorant)
+    assert dr.allclose(ref.majorant, other.majorant)
 
 def test_sample_horizontal_homogeneous(variants_any_scalar, variants_any_llvm):
     n_x = 4
@@ -144,11 +144,14 @@ def test_sample_horizontal_homogeneous(variants_any_scalar, variants_any_llvm):
     desired_tau = 0.2
     active = True
 
-    res = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
     ref_segment = mi.ExtremumSegment(
-        tmin=0.25, tmax=0.5, majorant=0.5, minorant=0.5, tau_acc=0.125,
+        tmin=0.25, tmax=0.5, majorant=0.5, minorant=0.5
     )
+    ref_tau = 0.125
+
     # Test ray starting at segment start
+    assert dr.allclose(ref_tau, tau_acc)
     assert_compare_segment(ref_segment, res)
 
     ray = mi.Ray3f(
@@ -156,10 +159,12 @@ def test_sample_horizontal_homogeneous(variants_any_scalar, variants_any_llvm):
         d=mi.ScalarVector3f(1.,0.,0.),
     )
     ref_segment = mi.ExtremumSegment(
-        tmin=1.25, tmax=1.5, majorant=0.5, minorant=0.5, tau_acc=0.125,
+        tmin=1.25, tmax=1.5, majorant=0.5, minorant=0.5
     )
-    res = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    ref_tau = 0.125
+    res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
     # Test ray starting outside of the grid
+    assert dr.allclose(ref_tau, tau_acc)
     assert_compare_segment(ref_segment, res)
 
     ray = mi.Ray3f(
@@ -167,14 +172,16 @@ def test_sample_horizontal_homogeneous(variants_any_scalar, variants_any_llvm):
         d=mi.ScalarVector3f(1.,0.,0.),
     )
     ref_segment = mi.ExtremumSegment(
-        tmin=0.375, tmax=0.625, majorant=0.5, minorant=0.5, tau_acc=0.1875,
+        tmin=0.375, tmax=0.625, majorant=0.5, minorant=0.5
     )
-    res = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    ref_tau = 0.1875
+    res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
     # Test ray starting outside of the grid
+    assert dr.allclose(ref_tau, tau_acc)
     assert_compare_segment(ref_segment, res)
 
     desired_tau = 0.8
-    res = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
     # Test ray exiting grid
     assert not res.valid()
 
@@ -200,12 +207,14 @@ def test_sample_horizontal_heterogeneous(variants_any_scalar, variants_any_llvm)
     desired_tau = 0.2
     active = True
 
-    res = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
     ref_segment = mi.ExtremumSegment(
-        tmin=0.5, tmax=0.75, majorant=0.6, minorant=0.5, tau_acc=0.15,
+        tmin=0.5, tmax=0.75, majorant=0.6, minorant=0.5
     )
+    ref_tau = 0.15
     # Test ray starting at segment start
     assert_compare_segment(ref_segment, res)
+    assert dr.allclose(ref_tau, tau_acc)
 
 def test_sample_diagonal(variants_any_scalar, variants_any_llvm):
     data_res = mi.ScalarVector3i(2,2,2)
@@ -228,12 +237,14 @@ def test_sample_diagonal(variants_any_scalar, variants_any_llvm):
     desired_tau = 0.6
     active = True
 
-    res = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
     ref_segment = mi.ExtremumSegment(
-        tmin=1., tmax=2., majorant=1., minorant=1., tau_acc=0.5,
+        tmin=1., tmax=2., majorant=1., minorant=1.
     )
+    ref_tau = 0.5
     # Test ray starting at segment start
     assert_compare_segment(ref_segment, res)
+    assert dr.allclose(ref_tau, tau_acc)
 
 
 
