@@ -12,9 +12,9 @@ MI_PY_EXPORT(ExtremumSegment) {
     auto es = nb::class_<ExtremumSegment>(m, "ExtremumSegment", D(ExtremumSegment))
         .def(nb::init<>())
         .def(nb::init<const ExtremumSegment &>(), "other"_a, "Copy constructor")
-        .def(nb::init<Float, Float, Float, Float, Float>(),
+        .def(nb::init<Float, Float, Float, Float>(),
                  D(ExtremumSegment, ExtremumSegment, 2),
-                 "tmin"_a, "tmax"_a, "majorant"_a, "minorant"_a, "tau_acc"_a)
+                 "tmin"_a, "tmax"_a, "majorant"_a, "minorant"_a)
         .def("valid",        &ExtremumSegment::valid,     D(ExtremumSegment, valid))
         .def("reset",        &ExtremumSegment::reset,     D(ExtremumSegment, reset))
         .def("zero_",        &ExtremumSegment::zero_,     "size"_a = 1)
@@ -23,10 +23,9 @@ MI_PY_EXPORT(ExtremumSegment) {
         .def_rw("tmax",      &ExtremumSegment::tmax,      D(ExtremumSegment, tmax))
         .def_rw("majorant", &ExtremumSegment::majorant, D(ExtremumSegment, majorant))
         .def_rw("minorant", &ExtremumSegment::minorant, D(ExtremumSegment, minorant))
-        .def_rw("tau_acc",   &ExtremumSegment::tau_acc,   D(ExtremumSegment, tau_acc))
         .def_repr(ExtremumSegment);
 
-    MI_PY_DRJIT_STRUCT(es, ExtremumSegment, tmin, tmax, majorant, minorant, tau_acc);
+    MI_PY_DRJIT_STRUCT(es, ExtremumSegment, tmin, tmax, majorant, minorant);
 }
 
 /// Trampoline for derived types implemented in Python
@@ -37,14 +36,14 @@ public:
 
     PyExtremumStructure(const Properties &props) : ExtremumStructure(props) {}
 
-    ExtremumSegment sample_segment(
+    std::tuple<ExtremumSegment, Float> sample_segment(
         const Ray3f &ray,
         Float mint,
         Float maxt,
-        Float desired_tau,
+        Float target_od,
         Mask active
     ) const override {
-        NB_OVERRIDE_PURE(sample_segment, ray, mint, maxt, desired_tau, active);
+        NB_OVERRIDE_PURE(sample_segment, ray, mint, maxt, target_od, active);
     }
 
     std::tuple<Float, Float> eval_1(
@@ -74,8 +73,8 @@ template <typename Ptr, typename Cls> void bind_extremum_structure_generic(Cls &
 
     cls.def("sample_segment",
             [](Ptr ptr, const Ray3f &ray, Float mint, Float maxt,
-               Float desired_tau, Mask active) {
-                return ptr->sample_segment(ray, mint, maxt, desired_tau, active);
+               Float sample, Mask active) {
+                return ptr->sample_segment(ray, mint, maxt, sample, active);
             },
             "ray"_a, "mint"_a, "maxt"_a, "desired_tau"_a, "active"_a = true,
             D(ExtremumStructure, sample_segment))

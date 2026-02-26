@@ -7,9 +7,6 @@
 
 NAMESPACE_BEGIN(mitsuba)
 
-// @TODO: remove tau_acc from Extremum Segment and make sample segment return
-//        a tuple {segment, tau_acc}.
-
 /**
  * \brief Segment along a ray with local extremum values
  *
@@ -28,8 +25,6 @@ struct ExtremumSegment {
     Float majorant;
     /// Local minorant (minimum extinction) in this segment
     Float minorant;
-    /// Accumulated Optical Depth;
-    Float tau_acc;
 
     /** 
      * \brief Create a new invalid extremum segment 
@@ -41,12 +36,14 @@ struct ExtremumSegment {
 
     /// Create an extremum segment from its fields.
     ExtremumSegment(
-        Float tmin, Float tmax, 
-        Float majorant, Float minorant, 
-        Float tau_acc) 
-        : tmin(tmin), tmax(tmax), 
-          majorant(majorant), minorant(minorant), 
-          tau_acc(tau_acc)  {  }
+        Float tmin, 
+        Float tmax, 
+        Float majorant, 
+        Float minorant
+    ) : tmin(tmin), 
+        tmax(tmax), 
+        majorant(majorant), 
+        minorant(minorant) {  }
 
     /**
      * This callback method is invoked by dr::zeros<>, and takes care of fields that deviate
@@ -59,7 +56,6 @@ struct ExtremumSegment {
         tmax        = dr::full<Float>(-dr::Infinity<Float>, size);
         minorant   = dr::zeros<Float>(size);
         majorant   = dr::zeros<Float>(size);
-        tau_acc     = dr::zeros<Float>(size);   
     }  
 
     /**
@@ -86,7 +82,7 @@ struct ExtremumSegment {
         tmax = -dr::Infinity<Float>;
     }
 
-    DRJIT_STRUCT_NODEF(ExtremumSegment, tmin, tmax, majorant, minorant, tau_acc)
+    DRJIT_STRUCT_NODEF(ExtremumSegment, tmin, tmax, majorant, minorant)
 };
 
 /**
@@ -119,18 +115,20 @@ public:
      * \param ray           Ray along which to sample
      * \param mint          Minimum distance to consider
      * \param maxt          Maximum distance to consider
-     * \param desired_tau   Target optical depth to accumulate
+     * \param target_od     Target optical depth to accumulate
      * \param active        Mask for active lanes
      *
-     * \return ExtremumSegment containing the sampled distance (tmin), segment
-     *         bounds, and local majorant/minorant values. If desired_tau cannot
-     *         be reached, tmin is set to Infinity.
+     * \return 
+     *      ExtremumSegment containing the sampled distance (tmin), segment
+     *      bounds, and local majorant/minorant values. If desired_tau cannot
+     *      be reached, tmin is set to Infinity.
+     *      Accumulated optical thickness at segment start.
      */
-    virtual ExtremumSegment sample_segment(
+    virtual std::tuple<ExtremumSegment, Float> sample_segment(
         const Ray3f &ray,
         Float mint,
         Float maxt,
-        Float desired_tau,
+        Float target_od,
         Mask active
     ) const = 0;
 

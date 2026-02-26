@@ -79,15 +79,15 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
     maxt = dr::minimum(ray.maxt, maxt);
     mei.mint = mint;
 
-    Float desired_tau = -dr::log(1.f - sample);
+    Float target_od = -dr::log(1.f - sample);
     Float sampled_t;
     UnpolarizedSpectrum combined_extinction;
 
     if (m_extremum_structure != nullptr) {
         // Use extremum structure with local majorants
-        auto segment = m_extremum_structure->sample_segment(ray, mint, maxt, desired_tau, active);
+        auto [segment, tau_acc] = m_extremum_structure->sample_segment(ray, mint, maxt, target_od, active);
         sampled_t = segment.tmin +
-                (desired_tau - segment.tau_acc) / dr::maximum(segment.majorant, dr::Epsilon<Float>);
+                (target_od - tau_acc) / dr::maximum(segment.majorant, dr::Epsilon<Float>);
                 
         Log(Debug, "Valid segment: %f, sampled_t: %f, maxt: %f", segment.valid(), sampled_t, maxt);
                 
@@ -109,7 +109,7 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
         } else {
             DRJIT_MARK_USED(channel);
         }
-        sampled_t = mint + (desired_tau / m);
+        sampled_t = mint + (target_od / m);
     }
 
     // Finalize interaction
@@ -117,16 +117,11 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
     mei.t = dr::select(valid_mi, sampled_t, dr::Infinity<Float>);
     mei.p = ray(sampled_t);
 
-    // TODO: with local extremum structures, this triggers an unnecessary evaluation
+    // TODO: with local extremum structures, this triggers a redundant evaluation
     // of the extremum grid. To fix this we probably need to change the medium interface.
     std::tie(mei.sigma_s, mei.sigma_n, mei.sigma_t) =
             get_scattering_coefficients(mei, valid_mi);
         mei.combined_extinction = combined_extinction;
-        
-    // quick fix for now 
-    // if(m_extremum_structure != nullptr){
-    //     mei.sigma_n = mei.combined_extinction - mei.sigma_t;
-    // }
     
     return mei;
 }

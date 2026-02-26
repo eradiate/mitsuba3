@@ -104,10 +104,10 @@ public:
     }
 
     // Stub overrides — never called, expand() replaces this object
-    Segment sample_segment(const Ray3f &, Float, Float, Float,
+    std::tuple<Segment, Float> sample_segment(const Ray3f &, Float, Float, Float,
                            Mask) const override {
         NotImplementedError("sample_segment");
-        return dr::zeros<Segment>();
+        return {dr::zeros<Segment>(), Float(0.f)};
     }
 
     std::tuple<Float, Float> eval_1(const Interaction3f &,
@@ -181,19 +181,19 @@ public:
         build_grid(m_volume.get());
     }
 
-    Segment sample_segment(
+    std::tuple<Segment, Float> sample_segment(
         const Ray3f &ray,
         Float mint, Float maxt,
-        Float desired_tau,
+        Float target_od,
         Mask active
     ) const override {
 
         if constexpr (TraversalType == SphericalTraversalType::RadialOnly) {
-            return sample_segment_radial(ray, mint, maxt, desired_tau, active);
+            return sample_segment_radial(ray, mint, maxt, target_od, active);
             
         } else {
             Throw("Full3D spherical traversal is not yet implemented!");
-            return dr::zeros<Segment>();
+            return {dr::zeros<Segment>(), 0.f};
         }
     }
 
@@ -201,12 +201,31 @@ public:
         const Interaction3f &it,
         Mask active
     ) const override {
-        Float r = dr::norm(it.p - m_center);
-        UInt32 ir = dr::clip(
-            dr::floor2int<UInt32>((r - m_rmin) / m_dr),
-            0u, (uint32_t)(m_resolution.x() - 1)
+        Point3f po = m_to_local * it.p;
+        Float r = dr::norm(po);
+
+        Float fillval = -1.f;
+        dr::masked(fillval, r < m_rmin) = m_fillmin;
+        dr::masked(fillval, r > m_rmax) = m_fillmax;
+        Mask fill = fillval > 0.f;
+        Vector2f extremum = dr::zeros<Vector2f>();
+
+        if constexpr (TraversalType == SphericalTraversalType::RadialOnly) { 
+            // Note that this is only valid for radial only for now
+            UInt32 ir = dr::clip(
+                dr::floor2int<UInt32>((r - m_rmin) * m_idr),
+                0u, (uint32_t)(m_resolution.x() - 1)
+            );
+            extremum = dr::gather<Vector2f>(m_extremum_grid, ir, active && !fill);
+
+        } else if constexpr (TraversalType == SphericalTraversalType::RadialOnly) { 
+            Throw("Full3D spherical evaluation is not yet implemented!");
+        }
+        
+        extremum = dr::select(
+                fill, Vector2f(fillval, fillval), extremum
         );
-        Vector2f extremum = dr::gather<Vector2f>(m_extremum_grid, ir, active);
+
         return { extremum.x(), extremum.y() };
     }
 
@@ -335,10 +354,10 @@ private:
     // ------------------------------------------------------------------
     // RadialOnly shell traversal
     // ------------------------------------------------------------------
-    Segment sample_segment_radial(
+    std::tuple<Segment, Float> sample_segment_radial(
         const Ray3f &ray,
         Float mint, Float maxt,
-        Float desired_tau,
+        Float target_od,
         Mask active
     ) const {
 
@@ -355,7 +374,7 @@ private:
         Mask reached = false;
         Float current_t = mint;
 
-        // Log(Debug, "m_rmin: %f, m_rmax: %f, m_dr: %f, desired_tau: %f", m_rmin, m_rmax, m_dr, desired_tau);
+        // Log(Debug, "m_rmin: %f, m_rmax: %f, m_dr: %f, target_od: %f", m_rmin, m_rmax, m_dr, target_od);
         // Log(Debug, "Start Loop");
 
         // ray-sphere intersection info
@@ -407,8 +426,8 @@ private:
         dr::tie(ls) = dr::while_loop(
             dr::make_tuple(ls),
             [](const LoopState &ls) { return ls.active; },
-            // [this, maxt, desired_tau, o_squared, a, b_half](LoopState &ls) {
-            [this, maxt, desired_tau, a, inv_a, disc_base, b_half](LoopState &ls) {
+            // [this, maxt, target_od, o_squared, a, b_half](LoopState &ls) {
+            [this, maxt, target_od, a, inv_a, disc_base, b_half](LoopState &ls) {
             // Log(Debug, "---------");
 
             // Compute radius at current position
@@ -485,7 +504,7 @@ private:
                 
                 // Check if desired tau is reached in this segment
                 const Mask stops_here = ls.active && (local_majorant > 0.f) &&
-                                    (tau_next >= desired_tau) && (t_next <= maxt);
+                                    (tau_next >= target_od) && (t_next <= maxt);
 
                 ls.reached |= stops_here;
                 // Log(Debug, "majorant: %f, minorant: %f", local_majorant, local_minorant);
@@ -493,7 +512,7 @@ private:
                 // Log(Debug, "stops_here: %f, reached: %f", stops_here, reached);
                 // Store result for lanes that reached target
                 dr::masked(ls.result, stops_here) = ExtremumSegment(
-                    ls.current_t, t_next, local_majorant, local_minorant, ls.tau_acc
+                    ls.current_t, t_next, local_majorant, local_minorant
                 );
 
                 // Advance state for lanes that haven't reached target
@@ -514,7 +533,7 @@ private:
         // For lanes that didn't reach, invalidate the segment
         dr::masked(ls.result.tmin, !ls.reached) = dr::Infinity<Float>;
 
-        return ls.result;
+        return {ls.result, ls.tau_acc};
     }
 
 private:

@@ -122,10 +122,11 @@ public:
         build_grid(m_volume.get(), m_resolution);
     }
 
-    Segment sample_segment(
+    std::tuple<Segment, Float> sample_segment(
         const Ray3f &ray,
-        Float mint, Float maxt,
-        Float desired_tau,
+        Float mint, 
+        Float maxt,
+        Float target_od,
         Mask active
     ) const override {
         // MI_MASKED_FUNCTION(ProfilerPhase::MediumSample, active);
@@ -215,7 +216,7 @@ public:
         dr::tie(ls) = dr::while_loop(
             dr::make_tuple(ls),
             [](const LoopState& ls) { return ls.active; },
-            [this, local_ray, step, abs_rcp_d, t_max, desired_tau, mint, offset](LoopState& ls) {
+            [this, local_ray, step, abs_rcp_d, t_max, target_od, mint, offset](LoopState& ls) {
             // Log(Debug, "-----");
             
             Segment& result = ls.result;
@@ -251,7 +252,7 @@ public:
             Float tau_next = dr::fmadd(majorant, dt, tau_acc);
 
             // Check if desired tau reached in this segment
-            Mask exit = active && (tau_next >= desired_tau);
+            Mask exit = active && (tau_next >= target_od);
 
             if (dr::any_or<true>(exit)){
                 // Store result for lanes that reached target
@@ -260,8 +261,7 @@ public:
                     t_curr, 
                     t_curr + dt, 
                     majorant, 
-                    minorant, 
-                    tau_acc
+                    minorant
                 );
             }
             // Log(Debug, "mint: %f, t_max: %f, t_rem: %f, dt: %f", mint, t_max, t_rem, dt);
@@ -272,7 +272,7 @@ public:
             dr::masked(p1, mask) = offset;
             dr::masked(pi, mask) += step;
             t_rem -= dt;
-            tau_acc = tau_next; 
+            dr::masked(tau_acc, !exit) = tau_next;
             
             active &= dr::all((pi >= 0) && (pi < m_resolution)) && (t_rem > 0.f) && !exit;
             // Log(Debug, "t_rem: %f, pi: %f, exit: %f, active: %f", t_rem, pi, exit, active );
@@ -283,7 +283,7 @@ public:
         // For lanes that didn't reach, set tmin to infinity to invalidate the segment
         // dr::masked(ls.result.tmin, !ls.reached) = dr::Infinity<Float>;
 
-        return ls.result;
+        return {ls.result, ls.tau_acc};
     }
 
     std::tuple<Float, Float> eval_1(
