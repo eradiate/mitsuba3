@@ -90,15 +90,11 @@ public:
         // Resolution Parameters
         m_resolution = props.get<ScalarVector3i>("resolution", ScalarVector3i(1,1,1));
         
-        Log(Warn, "m_adaptive: %f, m_resolution: %f", m_adaptive, m_resolution);
         m_adaptive = false;
         if (dr::all(m_resolution <= ScalarVector3i(0))) {
             m_adaptive = true;
             m_resolution = find_resolution(m_volume);
         }
-        Log(Warn, "m_adaptive: %f, m_resolution: %f", m_adaptive, m_resolution);
-
-        m_cell_size = 1.f / ScalarVector3f(m_resolution);
 
         build_grid(m_volume.get(), m_resolution);
 
@@ -168,7 +164,7 @@ public:
 
         // Compute the integer step direction
         Vector3i step = dr::select(d_pos, 1, -1);
-        Vector3f offset = dr::select(d_pos, 0.f, 1.f);
+        // Vector3f offset = dr::select(d_pos, 0.f, 1.f);
         Vector3f abs_rcp_d = abs(rcp_d);
 
         // Integer grid coordinates
@@ -188,17 +184,15 @@ public:
             Segment result;
             Mask active;
             Vector3f dt_v;
-            Vector3f p0;
             Vector3i pi;
             Float t_rem;
             Float tau_acc;
 
-            DRJIT_STRUCT(LoopState, result, active, dt_v, p0, pi, t_rem, tau_acc)
+            DRJIT_STRUCT(LoopState, result, active, dt_v, pi, t_rem, tau_acc)
         } ls = {
             result,
             active,
             dt_v,
-            p0,
             pi,
             t_max,
             /* tau_acc = */ 0.f
@@ -207,13 +201,12 @@ public:
         dr::tie(ls) = dr::while_loop(
             dr::make_tuple(ls),
             [](const LoopState& ls) { return ls.active; },
-            [this, local_ray, step, abs_rcp_d, t_max, target_od, mint, offset](LoopState& ls) {
+            [this, step, abs_rcp_d, t_max, target_od, mint](LoopState& ls) {
             // Log(Debug, "-----");
             
             Segment& result = ls.result;
             Mask& active    = ls.active;
             Vector3f& dt_v  = ls.dt_v;
-            Vector3f& p0    = ls.p0;
             Vector3i& pi    = ls.pi;
             Float& t_rem = ls.t_rem; 
             Float& tau_acc = ls.tau_acc; 
@@ -223,9 +216,6 @@ public:
             Float dt = dr::minimum(dr::min(dt_v), t_rem); // what type is dt and t_rem?
             auto mask = dt_v == dt;
             // Log(Debug, "t_rem: %f, dt_v: %f", t_rem, dt_v);
-
-            // Compute an updated position
-            Vector3f p1 = dr::fmadd(local_ray.d, dt, p0);
 
             // Note: not multiplying the index by 2 because we gather using Vector2f. 
             UInt32 idx = dr::fmadd( 
@@ -259,8 +249,6 @@ public:
             // Log(Debug, "tau_next: %f, t_curr: %f, t_next: %f", tau_next, t_curr, t_curr + dt);
             // Advance
             dt_v = dr::select(mask, abs_rcp_d, dt_v - dt);
-            // dr::masked(p1, mask) = dr::select(local_ray.d >= 0, 0.f, 1.f);
-            dr::masked(p1, mask) = offset;
             dr::masked(pi, mask) += step;
             t_rem -= dt;
             dr::masked(tau_acc, !exit) = tau_next;
@@ -281,6 +269,7 @@ public:
         const Interaction3f &it, 
         Mask active) const override {
         Point3f po = m_to_local*it.p;
+        // Effectively acts as a clamp wrapping policy
         Vector3i pi = dr::clip(Vector3i(po * m_resolution), 0, m_resolution - 1);
         UInt32 idx = dr::fmadd( 
                         dr::fmadd( pi.z(), m_resolution.y(), pi.y() ), 
@@ -428,10 +417,7 @@ private:
         // Allocate extremum grid data
         size_t n = dr::prod(resolution);
         
-        std::vector<ScalarFloat> extremums;
-
-        // IMPORTANT: need to retrieve the data before to avoid ref count slow-down
-        auto data = volume->array();
+        // auto data = volume->array();
 
         size_t n_threads = pool_size() + 1;
         size_t grain_size = std::max( n / (4 * n_threads), (size_t) 1 );
@@ -449,7 +435,8 @@ private:
         }
 
         if constexpr (!dr::is_jit_v<Float>) {
-            
+            auto guard = volume->pin();
+
             dr::parallel_for(
                 dr::blocked_range<size_t>(0, n, grain_size),
                 [&](const dr::blocked_range<size_t> &range) {
@@ -471,7 +458,7 @@ private:
                         );
 
                         // Query volume for local extremum, currently assume local bounds.
-                        auto [maj, min] = volume->extremum(data, cell_bounds);
+                        auto [maj, min] = volume->extremum(cell_bounds);
 
                         dr::scatter(
                             m_extremum_grid, 
@@ -495,7 +482,7 @@ private:
                             cell_max - math::RayEpsilon<Float>
                         );
 
-            auto [maj, min] = volume->extremum(data, cell_bounds);
+            auto [maj, min] = volume->extremum(cell_bounds);
 
             dr::scatter(m_extremum_grid, m_scale * min * safety_factor.x(), idx*2);
             dr::scatter(m_extremum_grid, m_scale * maj * safety_factor.y(), idx*2+1);
@@ -515,7 +502,6 @@ private:
 
     bool m_adaptive;
     ScalarVector3i m_resolution;
-    ScalarVector3f m_cell_size;
     ScalarAffineTransform4f m_to_local;
 };
 

@@ -156,17 +156,9 @@ public:
 
     ScalarVector3i resolution() const override { return m_volume->resolution(); };
 
-    const ScalarFloat* data() const override {
-        return m_volume->data();
-    }
-
-    const DynamicBuffer<Float>* array() const override {
-        return m_volume->array();
-    }
-
+// #ERADIATE_CHANGE_BEGIN: Spatial extremum queries for grid volumes
     std::pair<Float, Float>
-    extremum(const DynamicBuffer<Float>* array,
-             BoundingBox3f local_bounds) const override {
+    extremum(BoundingBox3f local_bounds) const override {
         // local_bounds is in normalized [0,1]^3 space (r_norm, theta_norm, phi_norm).
         // The nested volume uses the same coordinate convention, so we forward
         // directly after clamping to [0,1].
@@ -177,7 +169,7 @@ public:
             dr::minimum(local_bounds.max, Point3f(1.f))
         );
 
-        auto [maj, min] = m_volume->extremum(array, clamped_bounds);
+        auto [maj, min] = m_volume->extremum(clamped_bounds);
 
         // If the r-range extends below 0 (below rmin), include fillmin
         auto below_rmin = local_bounds.min.x() < 0.f;
@@ -191,6 +183,10 @@ public:
 
         return { maj, min };
     }
+
+    typename Base::PinGuard pin() const override { return m_volume->pin(); };
+
+// #ERADIATE_CHANGE_END
 
     void traverse(TraversalCallback *cb) override {
         cb->put("volume", m_volume.get(), ParamFlags::NonDifferentiable);

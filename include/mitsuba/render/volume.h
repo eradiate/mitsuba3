@@ -77,10 +77,7 @@ public:
      * cost. 
      */
     virtual std::pair<Float, Float>
-    extremum(const DynamicBuffer<Float>* array, BoundingBox3f local_bounds) const;
-
-    virtual const ScalarFloat* data() const;
-    virtual const DynamicBuffer<Float>* array() const;
+    extremum(BoundingBox3f local_bounds) const;
 
     /**
      * \brief Compute local majorant (maximum) over a spatial region
@@ -88,7 +85,7 @@ public:
      * Convenience method that returns only the majorant.
      */
     virtual Float majorant(const BoundingBox3f &local_bounds) const {
-        return extremum(nullptr, local_bounds).first;
+        return extremum(local_bounds).first;
     }
 
     /**
@@ -97,7 +94,7 @@ public:
      * Convenience method that returns only the minorant.
      */
     virtual Float minorant(const BoundingBox3f &local_bounds) const {
-        return extremum(nullptr, local_bounds).second;
+        return extremum(local_bounds).second;
     }
 
     virtual void add_extremum_structure(ExtremumStructure* extremum);
@@ -140,7 +137,21 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_PLUGIN_BASE_CLASS(Volume)
+MI_DECLARE_PLUGIN_BASE_CLASS(Volume)
+
+// #ERADIATE_CHANGE_BEGIN: Local extremum support
+    /// A Scoped Guard that pins the reference count of the volume.
+    struct PinGuard {
+        const Volume *volume;
+        explicit PinGuard(const Volume* v) : volume(v) { volume->pin_ref_count(); }
+        ~PinGuard() { volume->unpin_ref_count(); }
+
+        PinGuard(const PinGuard&) = delete;
+        PinGuard& operator=(const PinGuard&) = delete;
+    };
+
+    virtual PinGuard pin() const { return PinGuard(this); };
+// #ERADIATE_CHANGE_END
 
 protected:
     Volume(const Properties &props);
@@ -157,6 +168,13 @@ protected:
         m_bbox.expand(to_world * ScalarPoint3f(1.f, 1.f, 0.f));
         m_bbox.expand(to_world * ScalarPoint3f(1.f, 1.f, 1.f));
     }
+
+// #ERADIATE_CHANGE_BEGIN: Local extremum support
+    /// Pin the reference count of the data that constitutes the volume e.g. Texture/
+    virtual void pin_ref_count() const {};
+    /// Unpin the reference count.
+    virtual void unpin_ref_count() const {}; 
+// #ERADIATE_CHANGE_END
 
 protected:
     /// Used to bring points in world coordinates to local coordinates.

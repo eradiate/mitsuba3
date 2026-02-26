@@ -59,23 +59,11 @@ Volume<Float, Spectrum>::max_per_channel(ScalarFloat * /*out*/) const {
 
 // #ERADIATE_CHANGE_BEGIN: Local extremum support
 MI_VARIANT std::pair<Float, Float>
-Volume<Float, Spectrum>::extremum(const DynamicBuffer<Float>* /*array*/, BoundingBox3f /*local_bounds*/) const {
+Volume<Float, Spectrum>::extremum(BoundingBox3f /*local_bounds*/) const {
     // Default implementation: fall back to global max/min
     // Derived classes should override for better spatial queries
     return { max(), 0.f };
 }
-
-MI_VARIANT const typename Volume<Float, Spectrum>::ScalarFloat*
-Volume<Float, Spectrum>::data() const {
-    NotImplementedError("data");
-    return { nullptr };
-};
-
-MI_VARIANT const DynamicBuffer<Float>*
-Volume<Float, Spectrum>::array() const {
-    NotImplementedError("array");
-    return nullptr;
-};
 
 MI_VARIANT void Volume<Float, Spectrum>::add_extremum_structure(ExtremumStructure* extremum) {
     m_extremum_structures.push_back(extremum);

@@ -270,17 +270,13 @@ private:
             1.f + dr::Epsilon<Float>
         );
 
-        std::vector<ScalarFloat> extremums;
-
-        // Retrieve data pointer before parallel_for to avoid ref count issues
-        auto data = volume->array();
-
         size_t n_threads = pool_size() + 1;
         size_t grain_size = std::max(n / (4 * n_threads), (size_t) 1);
 
-        if constexpr (!dr::is_jit_v<Float>) {
+        m_extremum_grid = dr::empty<FloatStorage>(n * 2);
 
-            m_extremum_grid = dr::empty<FloatStorage>(n * 2);
+        if constexpr (!dr::is_jit_v<Float>) {
+            auto guard = volume->pin();
 
             dr::parallel_for(
                 dr::blocked_range<size_t>(0, n, grain_size),
@@ -298,7 +294,7 @@ private:
                             cell_max - math::RayEpsilon<Float>
                         );
 
-                        auto [maj, min] = volume->extremum(data, cell_bounds);
+                        auto [maj, min] = volume->extremum(cell_bounds);
 
                         dr::scatter(m_extremum_grid,
                                     m_scale * Vector2f(min, maj) * safety_factor,
@@ -307,9 +303,6 @@ private:
                 }
             );
         } else {
-
-            m_extremum_grid = dr::empty<FloatStorage>(n * 2);
-
             UInt32 idx = dr::arange<UInt32>((uint32_t) n);
 
             UInt32 ir     = idx % m_resolution.x();
@@ -323,7 +316,7 @@ private:
                 cell_max - math::RayEpsilon<Float>
             );
 
-            auto [maj, min] = volume->extremum(data, cell_bounds);
+            auto [maj, min] = volume->extremum(cell_bounds);
 
             dr::scatter(m_extremum_grid, m_scale * min * safety_factor.x(), idx * 2);
             dr::scatter(m_extremum_grid, m_scale * maj * safety_factor.y(), idx * 2 + 1);

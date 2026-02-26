@@ -362,3 +362,41 @@ def test_radial_sample_rmin_0_heterogeneous(variants_any_scalar):
     ref_tau = 0.1
     assert_compare_segment(ref_segment, res)
     assert dr.allclose(ref_tau, tau_acc)
+
+def test_radial_sample_outside_rmax_heterogeneous(variants_any_scalar):
+    """
+    Test the sampling routine of the RadialOnly variant.
+    Direct a ray in the perfect downward vertical direction through rmin=0. 
+    This should act like a tangent case!
+    """
+    n_x = 4
+    n_y = 1
+    n_z = 1
+    mult = 0.1
+
+    data = np.linspace(1, n_x, n_x).reshape(-1, 1, 1) * mult
+    data = np.ones((n_x, n_y, n_z)) * data
+    volume_grid = mi.VolumeGrid(data[::-1, :, :].transpose(2, 1, 0))
+
+    extremum_resolution = mi.ScalarVector3i(2, 1, 1)
+    extremum_struct, _ = generate_extremum_spherical(
+        volume_grid,
+        extremum_resolution,
+        "nearest",
+        rmin=0.,
+        rmax=0.5,
+        fillmin=1.0,
+        fillmax=0.0,
+    )
+
+    ray = mi.Ray3f(
+        o=mi.ScalarVector3f(0.0, 0.75, 1.0),
+        d=mi.ScalarVector3f(0.0, 0.0, -1.0),
+    )
+    mint = 0.0
+    maxt = 10.0
+    active = True
+    desired_tau = 0.3
+
+    res, _ = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    assert not res.valid()
