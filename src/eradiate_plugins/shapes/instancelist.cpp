@@ -21,12 +21,12 @@ InstanceList (:monosp:`instancelist`)
 
  * - transforms
    - |tensor|
-   - Specifies a buffer of object-to-world transformations of shape [N,4,4] with 
-     N being the number of instances. 
+   - Specifies a buffer of object-to-world transformations of shape [N,4,4] with
+     N being the number of instances.
    - |exposed|
 
 This is utility plugins allows to create multiple instances of a shape group
-from a buffer of object-to-world transforms. For details on how to create 
+from a buffer of object-to-world transforms. For details on how to create
 instances, refer to the :ref:`shape-shapegroup` and :ref:`shape-instances` plugins.
  */
 
@@ -41,7 +41,7 @@ public:
     InstanceList(const Properties &props) : Base(props) {
         Log(Debug, "Start Constructor");
 
-        m_shapegroup = nullptr; 
+        m_shapegroup = nullptr;
         for (auto &prop : props.objects()) {
             if (Base *shape = prop.try_get<Base>()) {
                 if (shape->is_shape_group()) {
@@ -98,7 +98,7 @@ public:
         return dr::zeros<ScalarBoundingBox3f>();
     }
 
-    MI_DECLARE_CLASS()
+    MI_DECLARE_CLASS(InstanceList)
 private:
     uint32_t m_instance_count;
     TensorXf *m_tensor;
