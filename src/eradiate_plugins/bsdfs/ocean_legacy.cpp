@@ -1,5 +1,3 @@
-#include <drjit/dynamic.h>
-#include <drjit/texture.h>
 #include <mitsuba/core/distr_1d.h>
 #include <mitsuba/core/properties.h>
 #include <mitsuba/core/random.h>
@@ -8,6 +6,8 @@
 #include <mitsuba/render/microfacet.h>
 #include <mitsuba/render/texture.h>
 #include <mitsuba/eradiate/oceanprops.h>
+#include <drjit/dynamic.h>
+#include <drjit/texture.h>
 
 // Transmittance angular resolution
 // i.e. texture resolution

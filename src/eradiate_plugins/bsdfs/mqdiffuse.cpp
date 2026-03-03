@@ -1,10 +1,10 @@
-#include <drjit/texture.h>
 #include <mitsuba/core/fresolver.h>
 #include <mitsuba/core/spectrum.h>
 #include <mitsuba/core/util.h>
 #include <mitsuba/core/warp.h>
 #include <mitsuba/render/bsdf.h>
 #include <mitsuba/render/volumegrid.h>
+#include <drjit/texture.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
