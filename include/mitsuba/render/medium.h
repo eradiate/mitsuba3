@@ -11,7 +11,7 @@ NAMESPACE_BEGIN(mitsuba)
 template <typename Float, typename Spectrum>
 class MI_EXPORT_LIB Medium : public JitObject<Medium<Float, Spectrum>> {
 public:
-    MI_IMPORT_TYPES(PhaseFunction, Sampler, Scene, Texture);
+    MI_IMPORT_TYPES(PhaseFunction, Sampler, Scene, Texture, ExtremumStructure);
 
     /// Destructor
     ~Medium();
@@ -100,6 +100,18 @@ public:
         return m_has_spectral_extinction;
     }
 
+// #ERADIATE_CHANGE_BEGIN: Extremum structure accessor
+    /// Returns the extremum structure for local majorant acceleration (nullptr if not used)
+    MI_INLINE const ExtremumStructure* extremum_structure() const {
+        return m_extremum_structure.get();
+    }
+
+    /// Check if medium uses extremum structure
+    MI_INLINE bool has_extremum_structure() const {
+        return m_extremum_structure.get() != nullptr;
+    }
+// #ERADIATE_CHANGE_END
+
     void traverse(TraversalCallback *callback) override;
 
     /// Return a human-readable representation of the Medium
@@ -116,8 +128,13 @@ protected:
     bool m_sample_emitters;
     bool m_is_homogeneous;
     bool m_has_spectral_extinction;
+// #ERADIATE_CHANGE_BEGIN: Extremum structure support
+    bool m_has_local_extremum;
+    ref<ExtremumStructure> m_extremum_structure;
+// #ERADIATE_CHANGE_END
 
-    MI_DECLARE_TRAVERSE_CB(m_phase_function)
+    MI_DECLARE_TRAVERSE_CB(m_phase_function, m_extremum_structure)
+    // MI_DECLARE_TRAVERSE_CB(m_phase_function)
 };
 
 MI_EXTERN_CLASS(Medium)
