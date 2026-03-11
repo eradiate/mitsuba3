@@ -97,6 +97,39 @@ jobs:
       #########################
       # Build and store wheels
       #########################
+      - name: Cache cibuildwheel downloads (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pypa\cibuildwheel\Cache
+          key: cibw-virtualenv-20.26.3
+
+      - name: Cache cibuildwheel downloads (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/cibuildwheel
+          key: cibw-virtualenv-20.26.3
+
+      - name: Pre-download virtualenv for cibuildwheel (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $cacheDir = "$env:LOCALAPPDATA\pypa\cibuildwheel\Cache"
+          New-Item -ItemType Directory -Force -Path $cacheDir
+          Invoke-WebRequest `
+            -Uri "https://raw.githubusercontent.com/pypa/get-virtualenv/20.26.3/public/virtualenv.pyz" `
+            -OutFile "$cacheDir\virtualenv-20.26.3.pyz"
+
+      - name: Pre-download virtualenv for cibuildwheel (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cache_dir="$HOME/Library/Caches/cibuildwheel"
+          mkdir -p "$cache_dir"
+          curl -fsSL \
+            "https://raw.githubusercontent.com/pypa/get-virtualenv/20.26.3/public/virtualenv.pyz" \
+            -o "$cache_dir/virtualenv-20.26.3.pyz"
+
       - name: Build wheel
         run: |
           python -m cibuildwheel --output-dir wheelhouse
