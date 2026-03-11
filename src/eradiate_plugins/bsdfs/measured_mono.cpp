@@ -127,61 +127,90 @@ public:
         m_isotropic = phi_i.shape[0] <= 2;
         m_jacobian  = ((uint8_t *) jacobian.data)[0];
 
+        // Tensor files always store data as float32. When ScalarFloat != float
+        // (e.g. scalar_mono_double), a direct reinterpret cast causes pointer
+        // arithmetic to advance by sizeof(ScalarFloat) instead of sizeof(float),
+        // reading out of bounds of the memory-mapped file. Convert explicitly.
+        auto f32_to_scalar = [](const void *data, size_t n) {
+            const float *src = reinterpret_cast<const float *>(data);
+            std::vector<ScalarFloat> buf(n);
+            for (size_t i = 0; i < n; ++i)
+                buf[i] = ScalarFloat(src[i]);
+            return buf;
+        };
+
+        size_t n_phi_i       = phi_i.shape[0];
+        size_t n_theta_i     = theta_i.shape[0];
+        size_t n_wavelengths = wavelengths.shape[0];
+
+        auto phi_i_buf       = f32_to_scalar(phi_i.data, n_phi_i);
+        auto theta_i_buf     = f32_to_scalar(theta_i.data, n_theta_i);
+        auto wavelengths_buf = f32_to_scalar(wavelengths.data, n_wavelengths);
+
         if (!m_isotropic) {
-            ScalarFloat *phi_i_data = (ScalarFloat *) phi_i.data;
             m_reduction = (int) std::rint((2 * dr::Pi<ScalarFloat>) /
-                (phi_i_data[phi_i.shape[0] - 1] - phi_i_data[0]));
+                (phi_i_buf[n_phi_i - 1] - phi_i_buf[0]));
         } else {
             m_reduction = 0;
         }
 
+        auto ndf_buf       = f32_to_scalar(ndf.data,
+                                 ndf.shape[0] * ndf.shape[1]);
+        auto sigma_buf     = f32_to_scalar(sigma.data,
+                                 sigma.shape[0] * sigma.shape[1]);
+        auto vndf_buf      = f32_to_scalar(vndf.data,
+                                 vndf.shape[0] * vndf.shape[1] * vndf.shape[2] * vndf.shape[3]);
+        auto luminance_buf = f32_to_scalar(luminance.data,
+                                 luminance.shape[0] * luminance.shape[1] * luminance.shape[2] * luminance.shape[3]);
+        auto spectra_buf   = f32_to_scalar(spectra.data,
+                                 spectra.shape[0] * spectra.shape[1] * spectra.shape[2] * spectra.shape[3] * spectra.shape[4]);
+
         // Construct NDF interpolant data structure
         m_ndf = Warp2D0(
-            (ScalarFloat *) ndf.data,
+            ndf_buf.data(),
             ScalarVector2u(ndf.shape[1], ndf.shape[0]),
             { }, { }, false, false
         );
 
         // Construct projected surface area interpolant data structure
         m_sigma = Warp2D0(
-            (ScalarFloat *) sigma.data,
+            sigma_buf.data(),
             ScalarVector2u(sigma.shape[1], sigma.shape[0]),
             { }, { }, false, false
         );
 
         // Construct VNDF warp data structure
         m_vndf = Warp2D2(
-            (ScalarFloat *) vndf.data,
+            vndf_buf.data(),
             ScalarVector2u(vndf.shape[3], vndf.shape[2]),
-            {{ (uint32_t) phi_i.shape[0],
-               (uint32_t) theta_i.shape[0] }},
-            {{ (const ScalarFloat *) phi_i.data,
-               (const ScalarFloat *) theta_i.data }}
+            {{ (uint32_t) n_phi_i,
+               (uint32_t) n_theta_i }},
+            {{ phi_i_buf.data(),
+               theta_i_buf.data() }}
         );
 
         // Construct Luminance warp data structure
         m_luminance = Warp2D2(
-            (ScalarFloat *) luminance.data,
+            luminance_buf.data(),
             ScalarVector2u(luminance.shape[3], luminance.shape[2]),
-            {{ (uint32_t) phi_i.shape[0],
-               (uint32_t) theta_i.shape[0] }},
-            {{ (const ScalarFloat *) phi_i.data,
-               (const ScalarFloat *) theta_i.data }}
+            {{ (uint32_t) n_phi_i,
+               (uint32_t) n_theta_i }},
+            {{ phi_i_buf.data(),
+               theta_i_buf.data() }}
         );
 
         // Construct spectral interpolant
         m_spectra = Warp2D3(
-            (ScalarFloat *) spectra.data,
+            spectra_buf.data(),
             ScalarVector2u(spectra.shape[4], spectra.shape[3]),
-            {{ (uint32_t) phi_i.shape[0],
-               (uint32_t) theta_i.shape[0],
-               (uint32_t) wavelengths.shape[0] }},
-            {{ (const ScalarFloat *) phi_i.data,
-               (const ScalarFloat *) theta_i.data,
-               (const ScalarFloat *) wavelengths.data }},
+            {{ (uint32_t) n_phi_i,
+               (uint32_t) n_theta_i,
+               (uint32_t) n_wavelengths }},
+            {{ phi_i_buf.data(),
+               theta_i_buf.data(),
+               wavelengths_buf.data() }},
             false, false
         );
-
         std::string description_str(
             (const char *) description.data,
             (const char *) description.data + description.shape[0]
