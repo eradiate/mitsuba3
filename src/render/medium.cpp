@@ -79,15 +79,15 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
     maxt = dr::minimum(ray.maxt, maxt);
     mei.mint = mint;
 
-    Float target_od = -dr::log(1.f - sample);
+    Float target_ot = -dr::log(1.f - sample);
     Float sampled_t;
     UnpolarizedSpectrum combined_extinction;
 
     if (m_has_local_extremum) {
         // Use extremum structure with local majorants
-        auto [segment, tau_acc] = m_extremum_structure->sample_segment(ray, mint, maxt, target_od, active);
+        auto [segment, tau_acc] = m_extremum_structure->sample_segment(ray, mint, maxt, target_ot, active);
         sampled_t = segment.tmin +
-                (target_od - tau_acc) / dr::maximum(segment.majorant, dr::Epsilon<Float>);
+                (target_ot - tau_acc) / dr::maximum(segment.majorant, dr::Epsilon<Float>);
                 
         Log(Debug, "Valid segment: %f, sampled_t: %f, maxt: %f", segment.valid(), sampled_t, maxt);
                 
@@ -109,7 +109,7 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
         } else {
             DRJIT_MARK_USED(channel);
         }
-        sampled_t = mint + (target_od / m);
+        sampled_t = mint + (target_ot / m);
     }
 
     // Finalize interaction

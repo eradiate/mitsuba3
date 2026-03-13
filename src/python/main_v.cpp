@@ -26,7 +26,7 @@
 /// Helper routine to cast Mitsuba plugins to their underlying interfaces
 static nb::object caster(Object *o) {
     MI_PY_IMPORT_TYPES()
-    
+
     // Try casting, starting from the most precise types
     PY_TRY_CAST(Scene);
     PY_TRY_CAST(Mesh);

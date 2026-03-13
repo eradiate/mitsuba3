@@ -180,7 +180,7 @@ public:
     }
 
     UnpolarizedSpectrum
-    get_majorant(const MediumInteraction3f & /*mi*/,
+    get_majorant(const MediumInteraction3f & /* mi */,
                  Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
         return m_max_density;
@@ -197,6 +197,7 @@ public:
 
         auto sigmas = sigmat * m_albedo->eval(mi, active);
         
+// #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
         Float min, max;
         if (m_has_local_extremum)
             std::tie(min, max) = m_extremum_structure->eval_1(mi, active);
@@ -204,7 +205,8 @@ public:
             max = m_max_density;
 
         auto sigman = max - sigmat;
-        
+// #ERADIATE_CHANGE_END    
+    
         return { sigmas, sigman, sigmat };
     }
 

@@ -184,12 +184,12 @@ public:
     std::tuple<Segment, Float> sample_segment(
         const Ray3f &ray,
         Float mint, Float maxt,
-        Float target_od,
+        Float target_ot,
         Mask active
     ) const override {
 
         if constexpr (TraversalType == SphericalTraversalType::RadialOnly) {
-            return sample_segment_radial(ray, mint, maxt, target_od, active);
+            return sample_segment_radial(ray, mint, maxt, target_ot, active);
             
         } else {
             Throw("Full3D spherical traversal is not yet implemented!");
@@ -350,7 +350,7 @@ private:
     std::tuple<Segment, Float> sample_segment_radial(
         const Ray3f &ray,
         Float mint, Float maxt,
-        Float target_od,
+        Float target_ot,
         Mask active
     ) const {
 
@@ -413,7 +413,7 @@ private:
         dr::tie(ls) = dr::while_loop(
             dr::make_tuple(ls),
             [](const LoopState &ls) { return ls.active; },
-            [this, maxt, target_od, a, inv_a, disc_base, b_half](LoopState &ls) {
+            [this, maxt, target_ot, a, inv_a, disc_base, b_half](LoopState &ls) {
 
             // Compute radius at current position
             const Float eps = math::RayEpsilon<Float>;
@@ -474,7 +474,7 @@ private:
                 
                 // Check if desired tau is reached in this segment
                 const Mask stops_here = ls.active && (local_majorant > 0.f) &&
-                                    (tau_next >= target_od) && (t_next <= maxt);
+                                    (tau_next >= target_ot) && (t_next <= maxt);
 
                 ls.reached |= stops_here;
                 // Store result for lanes that reached target

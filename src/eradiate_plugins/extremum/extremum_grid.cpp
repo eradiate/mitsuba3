@@ -11,7 +11,7 @@ NAMESPACE_BEGIN(mitsuba)
 .. _extremum-extremum_grid:
 
 Extremum grid structure (:monosp:`extremum_grid`)
---------------------------------------------------
+-------------------------------------------------
 
 .. pluginparameters::
 
@@ -96,7 +96,7 @@ public:
         const Ray3f &ray,
         Float mint, 
         Float maxt,
-        Float target_od,
+        Float target_ot,
         Mask active
     ) const override {
         Segment result = dr::zeros<Segment>();
@@ -176,7 +176,7 @@ public:
         dr::tie(ls) = dr::while_loop(
             dr::make_tuple(ls),
             [](const LoopState& ls) { return ls.active; },
-            [this, step, abs_rcp_d, t_max, target_od, mint](LoopState& ls) {
+            [this, step, abs_rcp_d, t_max, target_ot, mint](LoopState& ls) {
             
             Segment& result = ls.result;
             Mask& active    = ls.active;
@@ -199,11 +199,11 @@ public:
             const Float minorant = extremum.x();
             const Float majorant = extremum.y();
 
-            // Accumulate optical depth
+            // Accumulate optical thickness
             Float tau_next = dr::fmadd(majorant, dt, tau_acc);
 
             // Check if desired tau reached in this segment
-            Mask exit = active && (tau_next >= target_od);
+            Mask exit = active && (tau_next >= target_ot);
 
             if (dr::any_or<true>(exit)){
                 // Store result for lanes that reached target
@@ -226,7 +226,7 @@ public:
                       && (t_rem > 0.f) 
                       && !exit;
         },
-        "DDA Travesal");
+        "DDA Traversal");
 
         return {ls.result, ls.tau_acc};
     }

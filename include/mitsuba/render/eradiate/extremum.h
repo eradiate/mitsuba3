@@ -77,7 +77,7 @@ struct ExtremumSegment {
      * and maximum distances to \f$\infty\f$ and \f$-\infty\f$,
      * respectively.
      */
-    void reset(){
+    void reset() {
         tmin = dr::Infinity<Float>;
         tmax = -dr::Infinity<Float>;
     }
@@ -105,17 +105,17 @@ public:
     ~ExtremumStructure();
 
     /**
-     * \brief Sample a segment along a ray with desired optical depth
+     * \brief Sample a segment along a ray with desired optical thickness
      *
      * This method traverses the extremum structure (e.g., via DDA for grids)
-     * and returns a segment where the accumulated optical depth reaches the
+     * and returns a segment where the accumulated optical thickness reaches the
      * desired value. The traversal logic is completely encapsulated within
      * this method to minimize virtual call overhead.
      *
      * \param ray           Ray along which to sample
      * \param mint          Minimum distance to consider
      * \param maxt          Maximum distance to consider
-     * \param target_od     Target optical depth to accumulate
+     * \param target_ot     Target optical thickness to accumulate
      * \param active        Mask for active lanes
      *
      * \return 
@@ -128,12 +128,12 @@ public:
         const Ray3f &ray,
         Float mint,
         Float maxt,
-        Float target_od,
+        Float target_ot,
         Mask active = true
     ) const = 0;
 
     /**
-     * \brief Evaluate the majorant at a medium interaction point.
+     * \brief Evaluate the minorant and majorant at a medium interaction point.
      *
      * This method performs point evaluation at interaction point specified in 
      * local space.
