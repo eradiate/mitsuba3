@@ -6,9 +6,9 @@
 #include <mitsuba/render/srgb.h>
 #include <mitsuba/render/volume.h>
 #include <mitsuba/render/volumegrid.h>
+#include <mitsuba/render/eradiate/extremum.h>
 #include <drjit/dynamic.h>
 #include <drjit/texture.h>
-#include <mitsuba/render/eradiate/extremum.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -301,10 +301,12 @@ public:
             update_bbox();
         }
 
+// #ERADIATE_CHANGE_BEGIN: Local extremum support
         if (props.has_property("max_value")) {
             m_fixed_max = true;
             m_max = props.get<ScalarFloat>("max_value");
         }
+// #ERADIATE_CHANGE_END
     }
 
     void traverse(TraversalCallback *cb) override {
@@ -326,9 +328,8 @@ public:
                 m_max = (float) dr::max_nested(dr::detach(m_texture.value()));
 
             for (auto extremum : m_extremum_structures) {
-                if(extremum != nullptr) {
+                if(extremum != nullptr)
                     extremum->parameters_changed(keys);
-                }
             }
         }
     }

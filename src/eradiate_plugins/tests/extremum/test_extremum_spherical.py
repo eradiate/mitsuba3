@@ -1,6 +1,7 @@
 import drjit as dr
 import mitsuba as mi
 import numpy as np
+import pytest
 
 
 def generate_extremum_spherical(
@@ -93,12 +94,8 @@ def test_radial_build_half_res(variant_scalar_rgb):
     assert np.allclose(data[1::2, 1::2, 1::2], extremum_grid[:, :, :, 1])
 
 
-def test_radial_sample_vertical_heterogeneous_1(variants_any_scalar):
-    """
-    Test the sampling routine of the RadialOnly variant.
-    Direct a ray in the perfect downward vertical direction and test different
-    tau values.
-    """
+@pytest.fixture
+def extremum_struct():
     n_x = 4
     n_y = 1
     n_z = 1
@@ -119,10 +116,24 @@ def test_radial_sample_vertical_heterogeneous_1(variants_any_scalar):
         fillmax=0.0,
     )
 
+    return extremum_struct
+
+@pytest.fixture
+def downward_ray():
     ray = mi.Ray3f(
         o=mi.ScalarVector3f(0.0, 0.0, 1.0),
         d=mi.ScalarVector3f(0.0, 0.0, -1.0),
     )
+    return ray
+
+
+def test_radial_sample_vertical_heterogeneous_1(variants_any_scalar, extremum_struct, downward_ray):
+    """
+    Test the sampling routine of the RadialOnly variant.
+    Direct a ray in the perfect downward vertical direction and test different
+    tau values.
+    """
+    ray = downward_ray
     mint = 0.0
     maxt = 10.0
     active = True
@@ -162,7 +173,7 @@ def test_radial_sample_vertical_heterogeneous_1(variants_any_scalar):
         majorant=0.2,
         minorant=0.1,
     )
-    ref_tau = 1.25 
+    ref_tau = 1.25
     assert_compare_segment(ref_segment, res)
     assert dr.allclose(ref_tau, tau_acc)
 
@@ -177,36 +188,14 @@ def test_radial_sample_vertical_heterogeneous_1(variants_any_scalar):
     )
     assert not ref_segment.valid()
 
-def test_radial_sample_vertical_heterogeneous_2(variants_any_scalar):
+
+def test_radial_sample_vertical_heterogeneous_2(variants_any_scalar, extremum_struct, downward_ray):
     """
     Test the sampling routine of the RadialOnly variant.
     Direct a ray in the perfect downward vertical direction and test different
     ray origin values.
     """
-    n_x = 4
-    n_y = 1
-    n_z = 1
-    mult = 0.1
-
-    data = np.linspace(1, n_x, n_x).reshape(-1, 1, 1) * mult
-    data = np.ones((n_x, n_y, n_z)) * data
-    volume_grid = mi.VolumeGrid(data[::-1, :, :].transpose(2, 1, 0))
-
-    extremum_resolution = mi.ScalarVector3i(2, 1, 1)
-    extremum_struct, _ = generate_extremum_spherical(
-        volume_grid,
-        extremum_resolution,
-        "nearest",
-        rmin=0.5,
-        rmax=1.0,
-        fillmin=1.0,
-        fillmax=0.0,
-    )
-
-    ray = mi.Ray3f(
-        o=mi.ScalarVector3f(0.0, 0.0, 1.0),
-        d=mi.ScalarVector3f(0.0, 0.0, -1.0),
-    )
+    ray = downward_ray
     mint = 0.0
     maxt = 10.0
     active = True
@@ -225,7 +214,6 @@ def test_radial_sample_vertical_heterogeneous_2(variants_any_scalar):
     assert_compare_segment(ref_segment, res)
     assert dr.allclose(ref_tau, tau_acc)
 
-
     # Test ray starting in a layer.
     ray.o = mi.ScalarVector3f(0.0, 0.0, 0.8)
     res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
@@ -238,7 +226,6 @@ def test_radial_sample_vertical_heterogeneous_2(variants_any_scalar):
     ref_tau = 0.01
     assert_compare_segment(ref_segment, res)
     assert dr.allclose(ref_tau, tau_acc)
-
 
     # Test sampling in rmin, passed the midpoint.
     ray.o = mi.ScalarVector3f(0.0, 0.0, -0.25)
@@ -254,7 +241,6 @@ def test_radial_sample_vertical_heterogeneous_2(variants_any_scalar):
     assert_compare_segment(ref_segment, res)
     assert dr.allclose(ref_tau, tau_acc)
 
-
     # Test sampling passed the volume.
     ray.o = mi.ScalarVector3f(0.0, 0.0, -1.25)
     res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
@@ -268,33 +254,12 @@ def test_radial_sample_vertical_heterogeneous_2(variants_any_scalar):
     assert not res.valid()
 
 
-
-def test_radial_sample_tangent_heterogeneous(variants_any_scalar):
+def test_radial_sample_tangent_heterogeneous(variants_any_scalar, extremum_struct):
     """
     Test the sampling routine of the RadialOnly variant.
     Direct a ray in the perfect downward vertical direction tangent to one of
     the radii.
     """
-    n_x = 4
-    n_y = 1
-    n_z = 1
-    mult = 0.1
-
-    data = np.linspace(1, n_x, n_x).reshape(-1, 1, 1) * mult
-    data = np.ones((n_x, n_y, n_z)) * data
-    volume_grid = mi.VolumeGrid(data[::-1, :, :].transpose(2, 1, 0))
-
-    extremum_resolution = mi.ScalarVector3i(2, 1, 1)
-    extremum_struct, _ = generate_extremum_spherical(
-        volume_grid,
-        extremum_resolution,
-        "nearest",
-        rmin=0.5,
-        rmax=1.0,
-        fillmin=1.0,
-        fillmax=0.0,
-    )
-
     ray = mi.Ray3f(
         o=mi.ScalarVector3f(0.75, 0.0, 1.0),
         d=mi.ScalarVector3f(0.0, 0.0, -1.0),
@@ -319,7 +284,7 @@ def test_radial_sample_tangent_heterogeneous(variants_any_scalar):
 def test_radial_sample_rmin_0_heterogeneous(variants_any_scalar):
     """
     Test the sampling routine of the RadialOnly variant.
-    Direct a ray in the perfect downward vertical direction through rmin=0. 
+    Direct a ray in the perfect downward vertical direction through rmin=0.
     This should act like a tangent case!
     """
     n_x = 4
@@ -336,7 +301,7 @@ def test_radial_sample_rmin_0_heterogeneous(variants_any_scalar):
         volume_grid,
         extremum_resolution,
         "nearest",
-        rmin=0.,
+        rmin=0.0,
         rmax=1.0,
         fillmin=1.0,
         fillmax=0.0,
@@ -363,10 +328,11 @@ def test_radial_sample_rmin_0_heterogeneous(variants_any_scalar):
     assert_compare_segment(ref_segment, res)
     assert dr.allclose(ref_tau, tau_acc)
 
+
 def test_radial_sample_outside_rmax_heterogeneous(variants_any_scalar):
     """
     Test the sampling routine of the RadialOnly variant.
-    Direct a ray in the perfect downward vertical direction through rmin=0. 
+    Direct a ray in the perfect downward vertical direction through rmin=0.
     This should act like a tangent case!
     """
     n_x = 4
@@ -383,7 +349,7 @@ def test_radial_sample_outside_rmax_heterogeneous(variants_any_scalar):
         volume_grid,
         extremum_resolution,
         "nearest",
-        rmin=0.,
+        rmin=0.0,
         rmax=0.5,
         fillmin=1.0,
         fillmax=0.0,

@@ -72,9 +72,6 @@ public:
      *
      * \param bbox  Bounding box defining the query region in local space
      * \return (minorant, majorant) pair
-     * 
-     * The reference to array is a bit of a codesmell, used to avoid the ref-count
-     * cost. 
      */
     virtual std::pair<Float, Float>
     extremum(BoundingBox3f bbox, Mask local = true) const;
@@ -97,6 +94,12 @@ public:
         return extremum(bbox, local).first;
     }
 
+    /**
+     * \brief Register an extremum structure to the list of structures to update
+     * on parameter changed.
+     * 
+     * \param extremum  Extremum structure to register for update.
+     */
     virtual void add_extremum_structure(ExtremumStructure* extremum);
         
 // #ERADIATE_CHANGE_END
@@ -137,7 +140,7 @@ public:
         return oss.str();
     }
 
-MI_DECLARE_PLUGIN_BASE_CLASS(Volume)
+    MI_DECLARE_PLUGIN_BASE_CLASS(Volume)
 
 // #ERADIATE_CHANGE_BEGIN: Local extremum support
     /**
