@@ -41,10 +41,10 @@ public:
         const Ray3f &ray,
         Float mint,
         Float maxt,
-        Float target_od,
+        Float target_ot,
         Mask active
     ) const override {
-        NB_OVERRIDE_PURE(sample_segment, ray, mint, maxt, target_od, active);
+        NB_OVERRIDE_PURE(sample_segment, ray, mint, maxt, target_ot, active);
     }
 
     std::tuple<Float, Float> eval_1(
@@ -74,10 +74,10 @@ template <typename Ptr, typename Cls> void bind_extremum_structure_generic(Cls &
 
     cls.def("sample_segment",
             [](Ptr ptr, const Ray3f &ray, Float mint, Float maxt,
-               Float target_od, Mask active) {
-                return ptr->sample_segment(ray, mint, maxt, target_od, active);
+               Float target_ot, Mask active) {
+                return ptr->sample_segment(ray, mint, maxt, target_ot, active);
             },
-            "ray"_a, "mint"_a, "maxt"_a, "target_od"_a, "active"_a = true,
+            "ray"_a, "mint"_a, "maxt"_a, "target_ot"_a, "active"_a = true,
             D(ExtremumStructure, sample_segment))
         .def("eval_1",
             [](Ptr ptr, const Interaction3f &it, Mask active) {
