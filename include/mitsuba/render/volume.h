@@ -7,13 +7,15 @@
 #include <mitsuba/render/shape.h>
 #include <mitsuba/render/texture.h>
 
+#include <drjit/texture.h>
+
 NAMESPACE_BEGIN(mitsuba)
 
 /// Abstract base class for 3D volumes.
 template <typename Float, typename Spectrum>
 class MI_EXPORT_LIB Volume : public JitObject<Volume<Float, Spectrum>> {
 public:
-    MI_IMPORT_TYPES(Texture)
+    MI_IMPORT_TYPES(Texture, ExtremumStructure)
 
     // ======================================================================
     //! @{ \name Volume interface
@@ -60,6 +62,48 @@ public:
      */
     virtual void max_per_channel(ScalarFloat *out) const;
 
+// #ERADIATE_CHANGE_BEGIN: Local extremum support
+    /**
+     * \brief Compute local extrema over a spatial region
+     *
+     * Returns the maximum value (majorant) and minimum value (minorant)
+     * over the specified bounding box region.
+     * Only fully implemented for grid-based volumes.
+     *
+     * \param bbox  Bounding box defining the query region in local space
+     * \return (minorant, majorant) pair
+     */
+    virtual std::pair<Float, Float>
+    extremum(BoundingBox3f bbox, Mask local = true) const;
+
+    /**
+     * \brief Compute local majorant (maximum) over a spatial region
+     *
+     * Convenience method that returns only the majorant.
+     */
+    virtual Float majorant(const BoundingBox3f& bbox, Mask local = true) const {
+        return extremum(bbox, local).second;
+    }
+
+    /**
+     * \brief Compute local minorant (minimum) over a spatial region
+     *
+     * Convenience method that returns only the minorant.
+     */
+    virtual Float minorant(const BoundingBox3f& bbox, Mask local = true) const {
+        return extremum(bbox, local).first;
+    }
+
+    /**
+     * \brief Register an extremum structure to the list of structures to update
+     * on parameter changed.
+     * 
+     * \param extremum  Extremum structure to register for update.
+     */
+    virtual void add_extremum_structure(ExtremumStructure* extremum);
+        
+// #ERADIATE_CHANGE_END
+
     /// Returns the bounding box of the volume
     ScalarBoundingBox3f bbox() const { return m_bbox; }
 
@@ -98,6 +142,24 @@ public:
 
     MI_DECLARE_PLUGIN_BASE_CLASS(Volume)
 
+// #ERADIATE_CHANGE_BEGIN: Local extremum support
+    /**
+     * \brief A Scoped Guard that pins the reference count of the volume.
+     * 
+     * Use for bulk operations in scalar mode.
+     */ 
+    struct PinGuard {
+        const Volume *volume;
+        explicit PinGuard(const Volume* v) : volume(v) { volume->pin_ref_count(); }
+        ~PinGuard() { volume->unpin_ref_count(); }
+
+        PinGuard(const PinGuard&) = delete;
+        PinGuard& operator=(const PinGuard&) = delete;
+    };
+
+    virtual PinGuard pin() const { return PinGuard(this); };
+// #ERADIATE_CHANGE_END
+
 protected:
     Volume(const Properties &props);
 
@@ -114,6 +176,13 @@ protected:
         m_bbox.expand(to_world * ScalarPoint3f(1.f, 1.f, 1.f));
     }
 
+// #ERADIATE_CHANGE_BEGIN: Local extremum support
+    /// Pin the reference count of the data that constitutes the volume e.g. Texture/
+    virtual void pin_ref_count() const {};
+    /// Unpin the reference count.
+    virtual void unpin_ref_count() const {}; 
+// #ERADIATE_CHANGE_END
+
 protected:
     /// Used to bring points in world coordinates to local coordinates.
     ScalarAffineTransform4f m_to_local;
@@ -121,6 +190,10 @@ protected:
     ScalarBoundingBox3f m_bbox;
     /// Number of channels stored in the volume
     uint32_t m_channel_count;
+
+// #ERADIATE_CHANGE_BEGIN: Local extremum support
+    std::vector<ExtremumStructure*> m_extremum_structures;  
+// #ERADIATE_CHANGE_END
 
     MI_TRAVERSE_CB(Object)
 };
