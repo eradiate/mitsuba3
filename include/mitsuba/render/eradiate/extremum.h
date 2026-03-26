@@ -3,87 +3,10 @@
 #include <mitsuba/core/object.h>
 #include <mitsuba/render/interaction.h>
 #include <mitsuba/render/volume.h>
+#include <mitsuba/render/eradiate/extremum_segment.h>
 #include <drjit/call.h>
 
 NAMESPACE_BEGIN(mitsuba)
-
-/**
- * \brief Segment along a ray with local extremum values
- *
- * This structure stores the entry/exit distances of a segment along a ray,
- * along with the local majorant and minorant within that segment.
- */
-template <typename Float, typename Spectrum>
-struct ExtremumSegment {
-    using Mask = dr::mask_t<Float>;
-
-    /// Segment entry distance along ray
-    Float tmin;
-    /// Segment exit distance along ray
-    Float tmax;
-    /// Local majorant (maximum extinction) in this segment
-    Float majorant;
-    /// Local minorant (minimum extinction) in this segment
-    Float minorant;
-
-    /** 
-     * \brief Create a new invalid extremum segment 
-     * 
-     * Initializes the minimum and maximum segment distances to \f$\infty\f$ 
-     * and \f$-\infty\f$, respectively.
-     */
-    ExtremumSegment() { reset(); }
-
-    /// Create an extremum segment from its fields.
-    ExtremumSegment(
-        Float tmin, 
-        Float tmax, 
-        Float majorant, 
-        Float minorant
-    ) : tmin(tmin), 
-        tmax(tmax), 
-        majorant(majorant), 
-        minorant(minorant) {  }
-
-    /**
-     * This callback method is invoked by dr::zeros<>, and takes care of fields that deviate
-     * from the standard zero-initialization convention. In this particular class, 
-     * the ``tmin`` and ``tmax`` fields should be set to + and - infinity respectively to 
-     * to mark invalid intersection records.
-     */
-    void zero_(size_t size = 1) {                                                                                                                                                                            
-        tmin        = dr::full<Float>(dr::Infinity<Float>, size);
-        tmax        = dr::full<Float>(-dr::Infinity<Float>, size);
-        minorant   = dr::zeros<Float>(size);
-        majorant   = dr::zeros<Float>(size);
-    }  
-
-    /**
-     * \brief Check whether this is a valid segment
-     * 
-     * A segment is considered valid when 
-     * \code
-     * segment.tmin < segment.tmax
-     * \endcode
-     */
-    Mask valid() const {
-        return tmin < tmax;
-    }
-
-    /**
-     * \brief Mark the extremum segment as invalid.
-     *
-     * This operation sets segment's minimum
-     * and maximum distances to \f$\infty\f$ and \f$-\infty\f$,
-     * respectively.
-     */
-    void reset() {
-        tmin = dr::Infinity<Float>;
-        tmax = -dr::Infinity<Float>;
-    }
-
-    DRJIT_STRUCT_NODEF(ExtremumSegment, tmin, tmax, majorant, minorant)
-};
 
 /**
  * \brief Abstract base class for extremum structures
@@ -92,14 +15,14 @@ struct ExtremumSegment {
  * store local extrema (majorant/minorant) of volumetric extinction coefficients.
  * This enables efficient delta tracking with locally-adaptive majorants.
  *
- * To minimize virtual function overhead, the `sample_segment()` method 
+ * To minimize virtual function overhead, the ``sample_segment()`` method 
  * encapsulates the entire traversal loop internally, requiring only a single
  * virtual call per distance sample.
  */
 template <typename Float, typename Spectrum>
 class MI_EXPORT_LIB ExtremumStructure : public JitObject<ExtremumStructure<Float, Spectrum>> {
 public:
-    MI_IMPORT_TYPES()
+    MI_IMPORT_TYPES(Medium, Sampler)
 
     /// Destructor
     ~ExtremumStructure();
@@ -119,9 +42,9 @@ public:
      * \param active        Mask for active lanes
      *
      * \return 
-     *      ExtremumSegment containing the sampled distance (tmin), segment
+     *      ExtremumSegment containing the sampled distance (mint), segment
      *      bounds, and local majorant/minorant values. If desired_tau cannot
-     *      be reached, tmin is set to Infinity.
+     *      be reached, mint is set to Infinity.
      *      Accumulated optical thickness at segment start.
      */
     virtual std::tuple<ExtremumSegment, Float> sample_segment(
