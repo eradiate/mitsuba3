@@ -1,5 +1,6 @@
 #include <mitsuba/core/properties.h>
 #include <mitsuba/render/eradiate/extremum.h>
+#include <mitsuba/render/eradiate/extremum_segment.h>
 #include <mitsuba/python/python.h>
 #include <nanobind/trampoline.h>
 #include <nanobind/stl/string.h>
@@ -15,18 +16,22 @@ MI_PY_EXPORT(ExtremumSegment) {
         .def(nb::init<const ExtremumSegment &>(), "other"_a, "Copy constructor")
         .def(nb::init<Float, Float, Float, Float>(),
                  D(ExtremumSegment, ExtremumSegment, 2),
-                 "tmin"_a, "tmax"_a, "majorant"_a, "minorant"_a)
+                 "mint"_a, "maxt"_a, "minorant"_a, "majorant"_a)
+        .def(nb::init<Float, Float, Vector2f>(),
+                 D(ExtremumSegment, ExtremumSegment, 2),
+                 "mint"_a, "maxt"_a, "value"_a)
         .def("valid",        &ExtremumSegment::valid,     D(ExtremumSegment, valid))
         .def("reset",        &ExtremumSegment::reset,     D(ExtremumSegment, reset))
         .def("zero_",        &ExtremumSegment::zero_,     "size"_a = 1)
         .def("zero_",        &ExtremumSegment::zero_,     D(ExtremumSegment, zero))
-        .def_rw("tmin",      &ExtremumSegment::tmin,      D(ExtremumSegment, tmin))
-        .def_rw("tmax",      &ExtremumSegment::tmax,      D(ExtremumSegment, tmax))
-        .def_rw("majorant", &ExtremumSegment::majorant, D(ExtremumSegment, majorant))
-        .def_rw("minorant", &ExtremumSegment::minorant, D(ExtremumSegment, minorant))
+        .def("minorant",     &ExtremumSegment::minorant,  D(ExtremumSegment, minorant))
+        .def("majorant",     &ExtremumSegment::majorant,  D(ExtremumSegment, majorant))
+        .def_field(ExtremumSegment, mint,   D(ExtremumSegment, mint))
+        .def_field(ExtremumSegment, maxt,   D(ExtremumSegment, maxt))
+        .def_field(ExtremumSegment, value,  D(ExtremumSegment, value))
         .def_repr(ExtremumSegment);
 
-    MI_PY_DRJIT_STRUCT(es, ExtremumSegment, tmin, tmax, majorant, minorant);
+    MI_PY_DRJIT_STRUCT(es, ExtremumSegment, mint, maxt, value);
 }
 
 /// Trampoline for derived types implemented in Python

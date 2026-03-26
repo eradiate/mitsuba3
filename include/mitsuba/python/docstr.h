@@ -2867,23 +2867,17 @@ static const char *__doc_mitsuba_Endpoint_traverse_1_cb_rw = R"doc()doc";
 
 static const char *__doc_mitsuba_Endpoint_world_transform = R"doc(Return the local space to world space transformation)doc";
 
-static const char *__doc_mitsuba_ExtremumSegment =
-R"doc(Segment along a ray with local extremum values
+static const char *__doc_mitsuba_ExtremumSegment = R"doc()doc";
 
-This structure stores the entry/exit distances of a segment along a
-ray, along with the local majorant and minorant within that segment.)doc";
+static const char *__doc_mitsuba_ExtremumSegment_ExtremumSegment = R"doc()doc";
 
-static const char *__doc_mitsuba_ExtremumSegment_ExtremumSegment =
-R"doc(Create a new invalid extremum segment
-
-Initializes the minimum and maximum segment distances to
-:math:`\infty` and :math:`-\infty`, respectively.)doc";
-
-static const char *__doc_mitsuba_ExtremumSegment_ExtremumSegment_2 = R"doc(Create an extremum segment from its fields.)doc";
+static const char *__doc_mitsuba_ExtremumSegment_ExtremumSegment_2 = R"doc()doc";
 
 static const char *__doc_mitsuba_ExtremumSegment_ExtremumSegment_3 = R"doc()doc";
 
 static const char *__doc_mitsuba_ExtremumSegment_ExtremumSegment_4 = R"doc()doc";
+
+static const char *__doc_mitsuba_ExtremumSegment_ExtremumSegment_5 = R"doc()doc";
 
 static const char *__doc_mitsuba_ExtremumSegment_fields = R"doc()doc";
 
@@ -2891,9 +2885,17 @@ static const char *__doc_mitsuba_ExtremumSegment_fields_2 = R"doc()doc";
 
 static const char *__doc_mitsuba_ExtremumSegment_labels = R"doc()doc";
 
-static const char *__doc_mitsuba_ExtremumSegment_majorant = R"doc(Local majorant (maximum extinction) in this segment)doc";
+static const char *__doc_mitsuba_ExtremumSegment_majorant =
+R"doc(Majorant value over the segment. Accessor to the second element of
+``value``.)doc";
 
-static const char *__doc_mitsuba_ExtremumSegment_minorant = R"doc(Local minorant (minimum extinction) in this segment)doc";
+static const char *__doc_mitsuba_ExtremumSegment_maxt = R"doc(Segment exit distance along ray)doc";
+
+static const char *__doc_mitsuba_ExtremumSegment_minorant =
+R"doc(Minorant value over the segment. Accessor to the first element of
+``value``.)doc";
+
+static const char *__doc_mitsuba_ExtremumSegment_mint = R"doc(Segment entry distance along ray)doc";
 
 static const char *__doc_mitsuba_ExtremumSegment_name = R"doc()doc";
 
@@ -2907,25 +2909,22 @@ R"doc(Mark the extremum segment as invalid.
 This operation sets segment's minimum and maximum distances to
 :math:`\infty` and :math:`-\infty`, respectively.)doc";
 
-static const char *__doc_mitsuba_ExtremumSegment_tmax = R"doc(Segment exit distance along ray)doc";
-
-static const char *__doc_mitsuba_ExtremumSegment_tmin = R"doc(Segment entry distance along ray)doc";
-
 static const char *__doc_mitsuba_ExtremumSegment_valid =
 R"doc(Check whether this is a valid segment
 
 A segment is considered valid when
 
 ```
-segment.tmin < segment.tmax
+segment.mint < segment.maxt
 ```)doc";
+
+static const char *__doc_mitsuba_ExtremumSegment_value = R"doc(Extremum data stored as [minorant, majorant])doc";
 
 static const char *__doc_mitsuba_ExtremumSegment_zero =
 R"doc(This callback method is invoked by dr::zeros<>, and takes care of
 fields that deviate from the standard zero-initialization convention.
-In this particular class, the ``tmin`` and ``tmax`` fields should be
-set to + and - infinity respectively to to mark invalid intersection
-records.)doc";
+In ExtremumSegment, the ``mint`` and ``maxt`` fields are set to + and
+- infinity respectively to to mark invalid intersection records.)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure =
 R"doc(Abstract base class for extremum structures
@@ -2935,7 +2934,7 @@ that store local extrema (majorant/minorant) of volumetric extinction
 coefficients. This enables efficient delta tracking with locally-
 adaptive majorants.
 
-To minimize virtual function overhead, the `sample_segment()` method
+To minimize virtual function overhead, the ``sample_segment()`` method
 encapsulates the entire traversal loop internally, requiring only a
 single virtual call per distance sample.)doc";
 
@@ -2964,7 +2963,7 @@ static const char *__doc_mitsuba_ExtremumStructure_bbox = R"doc(Return the bound
 static const char *__doc_mitsuba_ExtremumStructure_class_name = R"doc()doc";
 
 static const char *__doc_mitsuba_ExtremumStructure_eval_1 =
-R"doc(Evaluate the majorant at a medium interaction point.
+R"doc(Evaluate the minorant and majorant at a medium interaction point.
 
 This method performs point evaluation at interaction point specified
 in local space.
@@ -2982,12 +2981,12 @@ Returns:
 static const char *__doc_mitsuba_ExtremumStructure_m_bbox = R"doc(Bounding box of the extremum structure in world space)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure_sample_segment =
-R"doc(Sample a segment along a ray with desired optical depth
+R"doc(Sample a segment along a ray with desired optical thickness
 
 This method traverses the extremum structure (e.g., via DDA for grids)
-and returns a segment where the accumulated optical depth reaches the
-desired value. The traversal logic is completely encapsulated within
-this method to minimize virtual call overhead.
+and returns a segment where the accumulated optical thickness reaches
+the desired value. The traversal logic is completely encapsulated
+within this method to minimize virtual call overhead.
 
 Parameter ``ray``:
     Ray along which to sample
@@ -2998,16 +2997,16 @@ Parameter ``mint``:
 Parameter ``maxt``:
     Maximum distance to consider
 
-Parameter ``target_od``:
-    Target optical depth to accumulate
+Parameter ``target_ot``:
+    Target optical thickness to accumulate
 
 Parameter ``active``:
     Mask for active lanes
 
 Returns:
-    ExtremumSegment containing the sampled distance (tmin), segment
+    ExtremumSegment containing the sampled distance (mint), segment
     bounds, and local majorant/minorant values. If desired_tau cannot
-    be reached, tmin is set to Infinity. Accumulated optical thickness
+    be reached, mint is set to Infinity. Accumulated optical thickness
     at segment start.)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure_type = R"doc()doc";
@@ -10993,7 +10992,12 @@ static const char *__doc_mitsuba_Volume_PinGuard_volume = R"doc()doc";
 
 static const char *__doc_mitsuba_Volume_Volume = R"doc()doc";
 
-static const char *__doc_mitsuba_Volume_add_extremum_structure = R"doc()doc";
+static const char *__doc_mitsuba_Volume_add_extremum_structure =
+R"doc(Register an extremum structure to the list of structures to update on
+parameter changed.
+
+Parameter ``extremum``:
+    Extremum structure to register for update.)doc";
 
 static const char *__doc_mitsuba_Volume_bbox = R"doc(Returns the bounding box of the volume)doc";
 
@@ -11042,10 +11046,7 @@ Parameter ``bbox``:
     Bounding box defining the query region in local space
 
 Returns:
-    (minorant, majorant) pair
-
-The reference to array is a bit of a codesmell, used to avoid the ref-
-count cost.)doc";
+    (minorant, majorant) pair)doc";
 
 static const char *__doc_mitsuba_Volume_m_bbox = R"doc(Bounding box)doc";
 

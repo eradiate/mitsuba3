@@ -5,6 +5,7 @@
 #include <mitsuba/render/scene.h>
 #include <mitsuba/render/texture.h>
 #include <mitsuba/render/eradiate/extremum.h>
+#include <mitsuba/render/eradiate/extremum_segment.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -86,16 +87,14 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
     if (m_has_local_extremum) {
         // Use extremum structure with local majorants
         auto [segment, tau_acc] = m_extremum_structure->sample_segment(ray, mint, maxt, target_ot, active);
-        sampled_t = segment.tmin +
-                (target_ot - tau_acc) / dr::maximum(segment.majorant, dr::Epsilon<Float>);
-                
-        Log(Debug, "Valid segment: %f, sampled_t: %f, maxt: %f", segment.valid(), sampled_t, maxt);
+        sampled_t = segment.mint +
+                (target_ot - tau_acc) / dr::maximum(segment.majorant(), dr::Epsilon<Float>);
                 
         // Store local majorant in combined_extinction
-        combined_extinction[0] = segment.majorant;
+        combined_extinction[0] = segment.majorant();
         if constexpr (is_rgb_v<Spectrum>) {
-            combined_extinction[1] = segment.majorant;
-            combined_extinction[2] = segment.majorant;
+            combined_extinction[1] = segment.majorant();
+            combined_extinction[2] = segment.majorant();
         } else {
             DRJIT_MARK_USED(channel);
         }

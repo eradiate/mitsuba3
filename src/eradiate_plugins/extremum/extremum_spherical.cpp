@@ -62,8 +62,6 @@ public:
     MI_IMPORT_BASE(ExtremumStructure, m_bbox)
     MI_IMPORT_TYPES(Volume)
 
-    using Segment = ExtremumSegment;
-
     ExtremumSpherical(const Properties &props) : Base(props), m_props(props) {
         ScalarVector3i resolution = props.get<ScalarVector3i>("resolution", ScalarVector3i(1, 1, 1));
 
@@ -84,7 +82,6 @@ public:
         props.mark_queried("rmax");
         props.mark_queried("resolution");
         props.mark_queried("scale");
-        props.mark_queried("sample_method");
     }
 
     template <SphericalTraversalType TT>
@@ -106,10 +103,10 @@ public:
     }
 
     // Stub overrides — never called, expand() replaces this object
-    std::tuple<Segment, Float> sample_segment(const Ray3f &, Float, Float, Float,
+    std::tuple<ExtremumSegment, Float> sample_segment(const Ray3f &, Float, Float, Float,
                            Mask) const override {
         NotImplementedError("sample_segment");
-        return {dr::zeros<Segment>(), Float(0.f)};
+        return {dr::zeros<ExtremumSegment>(), Float(0.f)};
     }
 
     std::tuple<Float, Float> eval_1(const Interaction3f &,
@@ -136,7 +133,6 @@ public:
     MI_IMPORT_BASE(ExtremumStructure, m_bbox)
     MI_IMPORT_TYPES(Volume)
 
-    using Segment = ExtremumSegment;
     using FloatStorage = DynamicBuffer<Float>;
 
     ExtremumSphericalImpl(const Properties &props) : Base(props) {
@@ -181,20 +177,57 @@ public:
         build_grid(m_volume.get());
     }
 
-    std::tuple<Segment, Float> sample_segment(
+    std::tuple<ExtremumSegment, Float> sample_segment(
         const Ray3f &ray,
         Float mint, Float maxt,
         Float target_ot,
         Mask active
     ) const override {
 
+        ExtremumSegment segment = dr::zeros<ExtremumSegment>();
+
+        struct DeltaTrackingState {
+            ExtremumSegment segment;
+            Float target_ot;
+            Float tau_acc;
+            DRJIT_STRUCT(DeltaTrackingState, segment, target_ot, tau_acc)
+        } state {
+            segment,
+            target_ot,
+            /*tau_acc =*/0.f
+        };
+
+        // To be moved to tracking.h in future iterations
+        auto func = [](
+            ExtremumSegment& segment, 
+            DeltaTrackingState& state, 
+            Mask& /*advance*/,
+            Mask& active
+        ){
+            Float dt = segment.maxt - segment.mint;
+            Float tau_next = dr::fmadd(segment.majorant(), dt, state.tau_acc);
+            Mask exit = tau_next >= state.target_ot;
+            // update variables
+            dr::masked(state.segment, active &&  exit) = segment;
+            dr::masked(state.tau_acc, active && !exit) = tau_next;
+            active &= !exit;
+        };
+
         if constexpr (TraversalType == SphericalTraversalType::RadialOnly) {
-            return sample_segment_radial(ray, mint, maxt, target_ot, active);
-            
+            state = traverse_radial(
+                func,
+                state, 
+                ray, 
+                mint,
+                maxt,
+                active
+            );            
         } else {
             Throw("Full3D spherical traversal is not yet implemented!");
-            return {dr::zeros<Segment>(), 0.f};
+            return {dr::zeros<ExtremumSegment>(), 0.f};
         }
+
+        return {state.segment, state.tau_acc};
     }
 
     std::tuple<Float, Float> eval_1(
@@ -347,19 +380,47 @@ private:
     // ------------------------------------------------------------------
     // RadialOnly shell traversal
     // ------------------------------------------------------------------
-    std::tuple<Segment, Float> sample_segment_radial(
-        const Ray3f &ray,
-        Float mint, Float maxt,
-        Float target_ot,
+    /** \brief General radial traversal algorithm.
+     * 
+     * This method traverses the regular concentric-shell structure along the 
+     * provided ray. At each traversed cell, it calls the function ``func``,
+     * that can perform actions on the passed ``segment``, ``state``,``advance``,
+     * and ``active``. This function can be used for sampling segments and 
+     * perform various tracking algorithms.
+     * 
+     * \param func  Function to be called at each step of the traversal. Must have
+     *              the signature: 
+     *              (ExtremumSegment& segment, 
+     *               StateD& state, 
+     *               Mask& condition, 
+     *               Mask active) -> StateD
+     * 
+     *              Changes to the segment, state, and condition can be done in place.
+     * \param state The payload passed to ``func``.
+     * \param ray   The ray along which the structure is traversed.
+     * \param mint  The minimum distance along the ray.
+     * \param maxt  The maximum distance along the ray.
+     * \param active 
+     * 
+     * \return
+     *      Returns the final state at the end of the traversal.
+     */
+    template<typename FuncT, typename StateT>
+    std::decay_t<StateT> traverse_radial(
+        FuncT&& func,
+        StateT&& state,
+        const Ray3f ray,
+        Float mint,
+        Float maxt,
         Mask active
     ) const {
+        using StateD = std::decay_t<StateT>;
 
         Ray3f local_ray(m_to_local * ray.o, // Normalize origin
                         m_to_local * ray.d, // Normalize direction
                         ray.time, ray.wavelengths);
 
-        Segment result  = dr::zeros<Segment>();
-        Float tau_acc   = 0.f;
+        ExtremumSegment segment  = dr::zeros<ExtremumSegment>();
         Mask reached    = false;
         Float current_t = mint;
 
@@ -388,23 +449,27 @@ private:
         Int32 step           = dr::select(passed_midpoint, 1, -1);
 
         struct LoopState {
-            Segment result;
-            Mask active, reached;
-            Float current_t, tau_acc;
+            ExtremumSegment segment;
+            StateD state;
+            Mask advance;
+            Mask active;
+            Mask reached;
+            Float current_t;
             Int32 layer_idx;
             Int32 step;
             Int32 padding;
 
             DRJIT_STRUCT(                                                      \
-                LoopState, result, active, reached, current_t,                 \
-                tau_acc, layer_idx, step, padding                              \
+                LoopState, segment, state, advance, active, reached, current_t,\
+                 layer_idx, step, padding                                      \
             )
         } ls = { 
-            result, 
-            active, 
+            segment,
+            state, 
+            /*advance=*/active,
+            active,
             reached, 
             current_t, 
-            tau_acc, 
             layer_idx, 
             step,
             shell_padding, 
@@ -413,10 +478,10 @@ private:
         dr::tie(ls) = dr::while_loop(
             dr::make_tuple(ls),
             [](const LoopState &ls) { return ls.active; },
-            [this, maxt, target_ot, a, inv_a, disc_base, b_half](LoopState &ls) {
+            [this, func, maxt, a, inv_a, disc_base, b_half](LoopState &ls) {
 
             // Compute radius at current position
-            const Float eps = math::RayEpsilon<Float>;
+            const Float eps = dr::Epsilon<Float> * 2.f;
             
             // Passed midpoint == exiting the concentric spheres
             const Int32 shell_idx = dr::clip(ls.layer_idx + ls.padding, 0, m_resolution.x());
@@ -437,8 +502,9 @@ private:
             const Float t_test_far  = (-b_half + sqrt_disc) * inv_a;
 
             // Update if there is valid intersection that is not tangent.
-            Mask update = valid_test && dr::abs(t_test_far - t_test_near) >
-                                            math::RayEpsilon<Float>;
+            Mask update = ls.active 
+                          && valid_test 
+                          && dr::abs(t_test_far - t_test_near) > eps;
             const Mask pass_midpoint = !update || ls.layer_idx == -1;
 
             // Special case at midpoint where we miss the intersection with the
@@ -463,43 +529,31 @@ private:
                 consider(t_test_far,  valid_test);
                 
                 // Look up extremum values for this shell
-                Vector2f local_extremum = dr::gather<Vector2f>(
+                Vector2f extremum = dr::gather<Vector2f>(
                     m_extremum_grid, ls.layer_idx, ls.active && !fill);
-                Float local_minorant = dr::select(!fill, local_extremum.x(), fill_value);
-                Float local_majorant = dr::select(!fill, local_extremum.y(), fill_value);
+                extremum = dr::select(!fill, extremum, fill_value);
 
-                // Accumulate optical depth
-                const Float segment_length = t_next - ls.current_t;
-                const Float tau_next = dr::fmadd(local_majorant, segment_length, ls.tau_acc);
-                
-                // Check if desired tau is reached in this segment
-                const Mask stops_here = ls.active && (local_majorant > 0.f) &&
-                                    (tau_next >= target_ot) && (t_next <= maxt);
-
-                ls.reached |= stops_here;
-                // Store result for lanes that reached target
-                dr::masked(ls.result, stops_here) = ExtremumSegment(
-                    ls.current_t, t_next, local_majorant, local_minorant
+                dr::masked(ls.segment, update) = ExtremumSegment(
+                    ls.current_t, t_next, extremum
                 );
+                
+                Mask active_update = ls.active && update;
+                func( ls.segment, ls.state, ls.advance, active_update);
 
                 // Advance state for lanes that haven't reached target
-                update &= !ls.reached;
-                dr::masked(ls.current_t, update) = t_next;
-                dr::masked(ls.tau_acc, update) = tau_next;
-                dr::masked(ls.layer_idx, update) += ls.step;
+                dr::masked(ls.current_t, ls.advance && update) = t_next;
+                dr::masked(ls.layer_idx, ls.advance && update) += ls.step;
 
                 // Continue only if not reached and still in bounds
-                ls.active &= !ls.reached && (t_next < maxt);
+                dr::masked(ls.active, update) &= active_update && (t_next <= maxt);
             }
             ls.active &= ls.layer_idx < m_resolution.x();
         },
         "Spherical Shell Traversal");
 
-        // For lanes that didn't reach, invalidate the segment
-        dr::masked(ls.result.tmin, !ls.reached) = dr::Infinity<Float>;
-
-        return {ls.result, ls.tau_acc};
+        return ls.state;
     }
+
 
 private:
     FloatStorage m_extremum_grid;

@@ -179,10 +179,10 @@ def test_build_scaled(variant_scalar_rgb):
 
 
 def assert_compare_segment(ref, other):
-    assert dr.allclose(ref.tmin, other.tmin)
-    assert dr.allclose(ref.tmax, other.tmax)
-    assert dr.allclose(ref.minorant, other.minorant)
-    assert dr.allclose(ref.majorant, other.majorant)
+    assert dr.allclose(ref.mint, other.mint)
+    assert dr.allclose(ref.maxt, other.maxt)
+    assert dr.allclose(ref.minorant(), other.minorant())
+    assert dr.allclose(ref.majorant(), other.majorant())
 
 
 def test_sample_horizontal_homogeneous(variants_any_scalar, variants_any_llvm):
@@ -208,7 +208,7 @@ def test_sample_horizontal_homogeneous(variants_any_scalar, variants_any_llvm):
     active = True
 
     res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    ref_segment = mi.ExtremumSegment(tmin=0.25, tmax=0.5, majorant=0.5, minorant=0.5)
+    ref_segment = mi.ExtremumSegment(mint=0.25, maxt=0.5, majorant=0.5, minorant=0.5)
     ref_tau = 0.125
 
     # Test ray starting at segment start
@@ -219,7 +219,7 @@ def test_sample_horizontal_homogeneous(variants_any_scalar, variants_any_llvm):
         o=mi.ScalarVector3f(-1.0, 0.5, 0.5),
         d=mi.ScalarVector3f(1.0, 0.0, 0.0),
     )
-    ref_segment = mi.ExtremumSegment(tmin=1.25, tmax=1.5, majorant=0.5, minorant=0.5)
+    ref_segment = mi.ExtremumSegment(mint=1.25, maxt=1.5, majorant=0.5, minorant=0.5)
     ref_tau = 0.125
     res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
     # Test ray starting outside of the grid
@@ -230,7 +230,7 @@ def test_sample_horizontal_homogeneous(variants_any_scalar, variants_any_llvm):
         o=mi.ScalarVector3f(0.125, 0.5, 0.5),
         d=mi.ScalarVector3f(1.0, 0.0, 0.0),
     )
-    ref_segment = mi.ExtremumSegment(tmin=0.375, tmax=0.625, majorant=0.5, minorant=0.5)
+    ref_segment = mi.ExtremumSegment(mint=0.375, maxt=0.625, majorant=0.5, minorant=0.5)
     ref_tau = 0.1875
     res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
     # Test ray starting outside of the grid
@@ -268,7 +268,7 @@ def test_sample_horizontal_heterogeneous(variants_any_scalar, variants_any_llvm)
     active = True
 
     res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    ref_segment = mi.ExtremumSegment(tmin=0.5, tmax=0.75, majorant=0.6, minorant=0.5)
+    ref_segment = mi.ExtremumSegment(mint=0.5, maxt=0.75, majorant=0.6, minorant=0.5)
     ref_tau = 0.15
     # Test ray starting at segment start
     assert_compare_segment(ref_segment, res)
@@ -297,7 +297,7 @@ def test_sample_diagonal(variants_any_scalar, variants_any_llvm):
     active = True
 
     res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    ref_segment = mi.ExtremumSegment(tmin=1.0, tmax=2.0, majorant=1.0, minorant=1.0)
+    ref_segment = mi.ExtremumSegment(mint=1.0, maxt=2.0, majorant=1.0, minorant=1.0)
     ref_tau = 0.5
     # Test ray starting at segment start
     assert_compare_segment(ref_segment, res)

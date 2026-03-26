@@ -49,7 +49,6 @@ public:
     MI_IMPORT_BASE(ExtremumStructure, m_bbox)
     MI_IMPORT_TYPES(Volume)
 
-    using Segment = ExtremumSegment;
     using FloatStorage = DynamicBuffer<Float>;
 
     ExtremumGrid(const Properties &props) : Base(props) {
@@ -92,143 +91,52 @@ public:
         build_grid(m_volume.get(), m_resolution);
     }
 
-    std::tuple<Segment, Float> sample_segment(
+    std::tuple<ExtremumSegment, Float> sample_segment(
         const Ray3f &ray,
         Float mint, 
         Float maxt,
         Float target_ot,
         Mask active
     ) const override {
-        Segment result = dr::zeros<Segment>();
+        ExtremumSegment segment = dr::zeros<ExtremumSegment>();
 
-        // Currently assuming that the majorant aligns perfectly with the 
-        // volume and that values outside the bbox cannot be evaluated.
-        // Transform ray to local grid coordinates [0,res]³
-        Vector3f res = Vector3f(m_resolution);
-        Ray3f local_ray((m_to_local * ray.o) * res, // Normalize origin
-                        (m_to_local * ray.d) * res, // Normalize direction
-                        ray.time, ray.wavelengths);
-        Vector3f rcp_d = dr::rcp(local_ray.d);
-        auto inf_t     = local_ray.d == 0.f;
-        auto d_pos     = local_ray.d >= 0.f;
-
-        // Per-axis intersection of the ray with the grid bounds
-        Vector3f t_min_v  = -local_ray.o * rcp_d;
-        Vector3f t_max_v  = (res - local_ray.o) * rcp_d;
-        Vector3f t_min_v2 = dr::minimum(t_min_v, t_max_v);
-        Vector3f t_max_v2 = dr::maximum(t_min_v, t_max_v);
-
-        // Disable extent computation for dims where the ray direction is zero
-        dr::masked(t_max_v2, inf_t) = dr::Infinity<Float>;
-        dr::masked(t_min_v2, inf_t) = -dr::Infinity<Float>;
-
-        // Reduce constraints to a single ray interval
-        Float t_min = dr::maximum(dr::max(t_min_v2), mint);
-        Float t_max = dr::minimum(dr::min(t_max_v2), maxt);
-        mint        = t_min;
-        maxt        = t_max;
-
-        // Only run the DDA algorithm if the interval is nonempty
-        active &= (t_max > t_min) & dr::isfinite(t_max);
-
-        // Deactivate rays that have zero direction along any axis
-        // and whose origin along that axis is outside the grid bounds
-        active &=
-            dr::all(!inf_t || ((0.f <= local_ray.o) && (local_ray.o <= res)));
-
-        // Advance the ray to the start of the interval
-        local_ray.o = dr::fmadd(local_ray.d, t_min, local_ray.o);
-        t_max       = t_max - t_min;
-        t_min       = 0.f;
-
-        // Compute the integer step direction
-        Vector3i step      = dr::select(d_pos, 1, -1);
-        Vector3f abs_rcp_d = abs(rcp_d);
-
-        // Integer grid coordinates
-        Vector3i pi = dr::clip(Vector3i(local_ray.o), 0, m_resolution - 1);
-
-        // Fractional entry position
-        Vector3f p0 = local_ray.o - Vector3f(pi);
-        // Step size to next interaction
-        Vector3f dt_v =
-            dr::select(d_pos, dr::fmadd(-p0, rcp_d, rcp_d), -p0 * rcp_d);
-        dr::masked(dt_v, inf_t) = dr::Infinity<Float>;
-
-        struct LoopState {
-            Segment result;
-            Mask active;
-            Vector3f dt_v;
-            Vector3i pi;
-            Float t_rem;
+        struct DeltaTrackingState {
+            ExtremumSegment segment;
+            Float target_ot;
             Float tau_acc;
-
-            DRJIT_STRUCT(LoopState, result, active, dt_v, pi, t_rem, tau_acc)
-        } ls = {
-            result,
-            active,
-            dt_v,
-            pi,
-            t_max,
-            /* tau_acc = */ 0.f
+            DRJIT_STRUCT(DeltaTrackingState, segment, target_ot, tau_acc)
+        } state {
+            segment,
+            target_ot,
+            /*tau_acc =*/0.f
         };
-        
-        dr::tie(ls) = dr::while_loop(
-            dr::make_tuple(ls),
-            [](const LoopState& ls) { return ls.active; },
-            [this, step, abs_rcp_d, t_max, target_ot, mint](LoopState& ls) {
-            
-            Segment& result = ls.result;
-            Mask& active    = ls.active;
-            Vector3f& dt_v  = ls.dt_v;
-            Vector3i& pi    = ls.pi;
-            Float& t_rem = ls.t_rem; 
-            Float& tau_acc = ls.tau_acc;
 
-            // Select the smallest step. It's possible that dt == 0 when
-            // starting directly on a grid line.
-            Float dt  = dr::minimum(dr::min(dt_v), t_rem);
-            auto mask = dt_v == dt;
+        // if this works then we will be able to move this outside of the grid code
+        auto func = [](
+            ExtremumSegment& segment, 
+            DeltaTrackingState& state, 
+            Mask& /*advance*/,
+            Mask& active
+        ){
+            Float dt = segment.maxt - segment.mint;
+            Float tau_next = dr::fmadd(segment.majorant(), dt, state.tau_acc);
+            Mask exit = tau_next >= state.target_ot;
+            // update variables
+            dr::masked(state.segment, active &&  exit) = segment;
+            dr::masked(state.tau_acc, active && !exit) = tau_next;
+            active &= !exit;
+        };
 
-            // Note: not multiplying the index by 2 because we gather using
-            // Vector2f.
-            UInt32 idx = dr::fmadd(dr::fmadd(pi.z(), m_resolution.y(), pi.y()),
-                                   m_resolution.x(), pi.x());
+        state = traverse_dda(
+            func,
+            state, 
+            ray, 
+            mint,
+            maxt,
+            active
+        );
 
-            Vector2f extremum    = dr::gather<Vector2f>(m_extremum_grid, idx);
-            const Float minorant = extremum.x();
-            const Float majorant = extremum.y();
-
-            // Accumulate optical thickness
-            Float tau_next = dr::fmadd(majorant, dt, tau_acc);
-
-            // Check if desired tau reached in this segment
-            Mask exit = active && (tau_next >= target_ot);
-
-            if (dr::any_or<true>(exit)){
-                // Store result for lanes that reached target
-                Float t_curr = mint + t_max - t_rem;
-                dr::masked(result, exit) = ExtremumSegment(
-                    t_curr, 
-                    t_curr + dt, 
-                    majorant, 
-                    minorant
-                );
-            }
-            // Advance
-            dt_v = dr::select(mask, abs_rcp_d, dt_v - dt);
-            dr::masked(pi, mask) += step;
-            t_rem -= dt;
-            dr::masked(tau_acc, !exit) = tau_next;
-
-            active &= dr::all((pi >= 0) 
-                      && (pi < m_resolution)) 
-                      && (t_rem > 0.f) 
-                      && !exit;
-        },
-        "DDA Traversal");
-
-        return {ls.result, ls.tau_acc};
+        return {state.segment, state.tau_acc};
     }
 
     std::tuple<Float, Float> eval_1(const Interaction3f &it,
@@ -451,6 +359,169 @@ private:
 
         Log(Info, "Extremum grid constructed successfully");
     }
+
+    /** \brief General regular grid DDA traversal algorithm.
+     * 
+     * This method traverses the regular grid along the provided ray using the 
+     * DDA algorithm. At each traversed cell, it calls the function ``func``,
+     * that can perform actions on the passed ``segment``, ``state``, 
+     * ``advance``, and ``active``. This function can be used for sampling 
+     * segments and perform various tracking algorithms.
+     * 
+     * \param func  Function to be called at each step of the traversal. Must have
+     *              the signature: 
+     *              (ExtremumSegment& segment, 
+     *               StateD& state, 
+     *               Mask& advance, 
+     *               Mask active) -> StateD
+     * 
+     *              Changes to the segment, state, and condition can be done in place.
+     * \param state The payload passed to ``func``.
+     * \param ray   The ray along which the structure is traversed.
+     * \param mint  The minimum distance along the ray.
+     * \param maxt  The maximum distance along the ray.
+     * \param active 
+     * 
+     * \return
+     *      Returns the final state at the end of the traversal.
+     */
+    template<typename FuncT, typename StateT>
+    std::decay_t<StateT> traverse_dda(
+        FuncT&& func, 
+        StateT&& state, 
+        const Ray3f& ray, 
+        Float mint,
+        Float maxt,
+        Mask active
+    ) const {
+        using StateD = std::decay_t<StateT>;
+
+        ExtremumSegment segment = dr::zeros<ExtremumSegment>();
+
+        // Currently assuming that the majorant aligns perfectly with the 
+        // volume and that values outside the bbox cannot be evaluated.
+        // Transform ray to local grid coordinates [0,res]³
+        Vector3f res = Vector3f(m_resolution);
+        Ray3f local_ray((m_to_local * ray.o) * res, // Normalize origin
+                        (m_to_local * ray.d) * res, // Normalize direction
+                        ray.time, ray.wavelengths);
+        Vector3f rcp_d = dr::rcp(local_ray.d);
+        auto inf_t     = local_ray.d == 0.f;
+        auto d_pos     = local_ray.d >= 0.f;
+
+        // Per-axis intersection of the ray with the grid bounds
+        Vector3f t_min_v  = -local_ray.o * rcp_d;
+        Vector3f t_max_v  = (res - local_ray.o) * rcp_d;
+        Vector3f t_min_v2 = dr::minimum(t_min_v, t_max_v);
+        Vector3f t_max_v2 = dr::maximum(t_min_v, t_max_v);
+
+        // Disable extent computation for dims where the ray direction is zero
+        dr::masked(t_max_v2, inf_t) = dr::Infinity<Float>;
+        dr::masked(t_min_v2, inf_t) = -dr::Infinity<Float>;
+
+        // Reduce constraints to a single ray interval
+        Float t_min = dr::maximum(dr::max(t_min_v2), mint);
+        Float t_max = dr::minimum(dr::min(t_max_v2), maxt);
+        mint        = t_min;
+        maxt        = t_max;
+
+        // Only run the DDA algorithm if the interval is nonempty
+        active &= (t_max > t_min) & dr::isfinite(t_max);
+
+        // Deactivate rays that have zero direction along any axis
+        // and whose origin along that axis is outside the grid bounds
+        active &=
+            dr::all(!inf_t || ((0.f <= local_ray.o) && (local_ray.o <= res)));
+
+        // Advance the ray to the start of the interval
+        local_ray.o = dr::fmadd(local_ray.d, t_min, local_ray.o);
+        t_max       = t_max - t_min;
+        t_min       = 0.f;
+
+        // Compute the integer step direction
+        Vector3i step      = dr::select(d_pos, 1, -1);
+        Vector3f abs_rcp_d = abs(rcp_d);
+
+        // Integer grid coordinates
+        Vector3i pi = dr::clip(Vector3i(local_ray.o), 0, m_resolution - 1);
+
+        // Fractional entry position
+        Vector3f p0 = local_ray.o - Vector3f(pi);
+        // Step size to next interaction
+        Vector3f dt_v =
+            dr::select(d_pos, dr::fmadd(-p0, rcp_d, rcp_d), -p0 * rcp_d);
+        dr::masked(dt_v, inf_t) = dr::Infinity<Float>;
+
+        struct LoopState {
+            ExtremumSegment segment;
+            StateD state;
+            Mask advance;
+            Mask active;
+            Vector3f dt_v;
+            Vector3i pi;
+            Float t_rem;
+
+            DRJIT_STRUCT(LoopState, segment, state, advance, active, dt_v, \
+                pi, t_rem)
+        } ls = {
+            segment,
+            state,
+            /*advance=*/active,
+            active,
+            dt_v,
+            pi,
+            t_max
+        };
+        
+        dr::tie(ls) = dr::while_loop(
+            dr::make_tuple(ls),
+            [](const LoopState& ls) { return ls.active; },
+            [this, func, step, abs_rcp_d, t_max, mint](LoopState& ls) {
+            
+            ExtremumSegment& segment = ls.segment;
+            StateD& state = ls.state;
+            Mask& advance    = ls.advance;
+            Mask& active    = ls.active;
+            Vector3f& dt_v  = ls.dt_v;
+            Vector3i& pi    = ls.pi;
+            Float& t_rem = ls.t_rem;
+
+            // Select the smallest step. It's possible that dt == 0 when
+            // starting directly on a grid line.
+            Float dt  = dr::minimum(dr::min(dt_v), t_rem);
+            auto mask = dt_v == dt;
+
+            // Note: not multiplying the index by 2 because we gather using
+            // Vector2f.
+            UInt32 idx = dr::fmadd(dr::fmadd(pi.z(), m_resolution.y(), pi.y()),
+                                   m_resolution.x(), pi.x());
+
+            const Vector2f extremum    = dr::gather<Vector2f>(m_extremum_grid, idx);
+
+            // Store segment for lanes that reached target
+            Float t_curr = mint + t_max - t_rem;
+            dr::masked(segment, active) = ExtremumSegment(
+                t_curr,
+                t_curr + dt,
+                extremum
+            );
+
+            func( segment, state, advance, active);
+
+            // Advance
+            dt_v = dr::select(mask, abs_rcp_d, dt_v - dt);
+            dr::masked(pi, mask && advance) += step;
+            dr::masked(t_rem, advance) -= dt;
+
+            active &= dr::all((pi >= 0) 
+                      && (pi < m_resolution)) 
+                      && (t_rem > 0.f);
+        },
+        "DDA Traversal");
+
+        return ls.state;
+    };
+
 
 private:
     /// Grid storing pre-computed local majorants
