@@ -1,4 +1,3 @@
-import pytest
 import drjit as dr
 import mitsuba as mi
 
@@ -206,10 +205,6 @@ def test_traverse(variant_scalar_mono_polarized):
     # Phase function table definition
     import numpy as np
 
-    ref_y = np.array([0.5, 1.0, 1.5])
-    ref_x = np.linspace(-1, 1, len(ref_y))
-    ref_integral = np.trapz(ref_y, ref_x)
-
     # Initialise as isotropic and update with parameters
     phase = mi.load_dict(
         {
@@ -241,7 +236,14 @@ def test_traverse(variant_scalar_mono_polarized):
     assert dr.allclose(params["m34"], [0.5, 1.0, 1.5])
     assert dr.allclose(params["nodes"], [-1.0, 0.5, 1.0])
 
+    # PDF and interpolator nodes are synced
+    assert "nodes = [-1, 0.5, 1]" in str(phase), f"{phase = }"
+
     # The plugin itself evaluates consistently
+    ref_y = np.array([0.5, 1.0, 1.5])
+    ref_x = np.array([-1, 0.5, 1])
+    ref_integral = np.trapezoid(ref_y, ref_x)
+
     ctx = mi.PhaseFunctionContext(None)
     mei = mi.MediumInteraction3f()
     mei.wi = np.array([0, 0.0000000001, -0.999999999])
@@ -262,4 +264,3 @@ def test_traverse(variant_scalar_mono_polarized):
     print(ref)
 
     assert dr.allclose(phase.eval_pdf(ctx, mei, wo)[0], ref, rtol=1e-5, atol=1e-6)
-
