@@ -81,9 +81,9 @@ function of the cosine of the scattering angle.
  * \brief 1D array defined in terms of an *irregularly* sampled linear
  * interpolant
  *
- * This data structure represents an an array that is defined as a linear
+ * This data structure represents an array that is defined as a linear
  * interpolant of an irregularly discretized signal. The nodes represent
- * the irregular abscissa only which the array is represented.
+ * the irregular abscissa on which the array is represented.
  *
  * Notes: The data array can be different types as long as they are laid out in
  * a contiguous array of Float. The templated Value will specify the output
@@ -122,7 +122,6 @@ public:
         update();
 
     }
-
 
     /// Update the internal state. Must be invoked when changing the data or
     /// range.
@@ -348,7 +347,7 @@ public:
 
         Spectrum phase_val(0.f);
 
-        // Use m11 for the for the phase and pdf since it is used for sampling
+        // Use m11 for the phase and PDF since it is used for sampling
         // cos theta.
         Float m11      = m_m11.eval_pdf(cos_theta, active);
         Float m11_norm = m_m11.normalization();
@@ -403,12 +402,12 @@ public:
         cb->put("m34", m_mvec.data(3), ParamFlags::NonDifferentiable);
         cb->put("m44", m_mvec.data(4), ParamFlags::NonDifferentiable);
         cb->put("nodes", m_m11.nodes(), ParamFlags::NonDifferentiable);
-        cb->put("nodes", m_mvec.nodes(), ParamFlags::NonDifferentiable);
     }
 
     void
     parameters_changed(const std::vector<std::string> & /*keys*/) override {
         m_m11.update();
+        m_mvec.nodes() = m_m11.nodes();
         m_mvec.update();
     }
 
