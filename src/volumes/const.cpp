@@ -82,6 +82,9 @@ public:
     }
 
     ScalarFloat max() const override { return m_value->max(); }
+// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
+    ScalarFloat min() const override { return m_value->min(); }
+// #ERADIATE_CHANGE_END
 
     std::string to_string() const override {
         std::ostringstream oss;

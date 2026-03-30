@@ -243,6 +243,8 @@ public:
                     std::unique_ptr<ScalarFloat[]>(new ScalarFloat[size * 4]);
                 ScalarFloat *scaled_data_ptr = scaled_data.get();
                 ScalarFloat max = 0.0;
+// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
+                ScalarFloat min = 0.0;
                 for (ScalarUInt32 i = 0; i < size; ++i) {
                     ScalarColor3f rgb = dr::load<ScalarColor3f>(ptr);
                     // TODO: Make this scaling optional if the RGB values are
@@ -252,12 +254,14 @@ public:
                         rgb / dr::maximum((ScalarFloat) 1e-8, scale);
                     ScalarVector3f coeff = srgb_model_fetch(rgb_norm);
                     max = dr::maximum(max, scale);
+                    min = dr::maximum(min, scale);
                     dr::store(scaled_data_ptr,
                               dr::concat(coeff, dr::Array<ScalarFloat, 1>(scale)));
                     ptr += 3;
                     scaled_data_ptr += 4;
                 }
                 m_max = (float) max;
+                m_min = (float) min;
 
                 size_t shape[4] = {
                     (size_t) res.z(),
@@ -275,10 +279,15 @@ public:
                     channel_count
                 };
                 m_texture = Texture3f(TensorXf(volume_grid->data(), 4, shape),
-                                      m_accel, m_accel, filter_mode, wrap_mode);
+                                      m_accel, m_accel, filter_mode, wrap_mode);             
                 m_max = volume_grid->max();
                 m_max_per_channel.resize(volume_grid->channel_count());
                 volume_grid->max_per_channel(m_max_per_channel.data());
+                
+                m_min = volume_grid->min();
+                m_min_per_channel.resize(volume_grid->channel_count());
+                volume_grid->min_per_channel(m_min_per_channel.data());
+
                 m_channel_count = channel_count;
             } else if (tensor) {
                 size_t shape[4] = {
@@ -290,7 +299,9 @@ public:
                 m_texture = Texture3f(TensorXf(tensor->array(), 4, shape),
                                       m_accel, m_accel, filter_mode, wrap_mode);
                 m_max = (float) dr::max_nested(dr::detach(m_texture.value()));
+                m_min = (float) dr::min_nested(dr::detach(m_texture.value()));
                 m_channel_count = channel_count;
+// #ERADIATE_CHANGE_END
             }
         }
 
@@ -301,10 +312,14 @@ public:
             update_bbox();
         }
 
-// #ERADIATE_CHANGE_BEGIN: Local extremum support
         if (props.has_property("max_value")) {
             m_fixed_max = true;
             m_max = props.get<ScalarFloat>("max_value");
+        }
+// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
+        if (props.has_property("min_value")) {
+            m_fixed_min = true;
+            m_min = props.get<ScalarFloat>("min_value");
         }
 // #ERADIATE_CHANGE_END
     }
@@ -327,11 +342,16 @@ public:
             if (!m_fixed_max)
                 m_max = (float) dr::max_nested(dr::detach(m_texture.value()));
 
+            if (!m_fixed_min)
+                m_min = (float) dr::min_nested(dr::detach(m_texture.value()));
+
+// #ERADIATE_CHANGE_BEGIN: Spatial extremum queries for grid volumes
             for (auto extremum : m_extremum_structures) {
                 if(extremum != nullptr)
                     extremum->parameters_changed(keys);
             }
         }
+// #ERADIATE_CHANGE_END
     }
 
     UnpolarizedSpectrum eval(const Interaction3f &it,
@@ -441,6 +461,15 @@ public:
         for (size_t i=0; i<m_max_per_channel.size(); ++i)
             out[i] = m_max_per_channel[i];
     }
+
+// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
+    ScalarFloat min() const override { return m_min; }
+
+    void min_per_channel(ScalarFloat *out) const override {
+        for (size_t i=0; i<m_min_per_channel.size(); ++i)
+            out[i] = m_min_per_channel[i];
+    }
+// #ERADIATE_CHANGE_END
 
 // #ERADIATE_CHANGE_BEGIN: Spatial extremum queries for grid volumes
     std::pair<Float, Float>
@@ -569,6 +598,9 @@ public:
             << "  bbox = " << string::indent(m_bbox) << "," << std::endl
             << "  dimensions = " << resolution() << "," << std::endl
             << "  max = " << m_max << "," << std::endl
+// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
+            << "  min = " << m_min << "," << std::endl
+// #ERADIATE_CHANGE_END
             << "  channels = " << m_texture.shape()[3] << std::endl
             << "]";
         return oss.str();
@@ -759,6 +791,11 @@ protected:
     bool m_fixed_max = false;
     ScalarFloat m_max;
     std::vector<ScalarFloat> m_max_per_channel;
+// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
+    bool m_fixed_min = false;
+    ScalarFloat m_min;
+    std::vector<ScalarFloat> m_min_per_channel;
+// #ERADIATE_CHANGE_END
     
 // #ERADIATE_CHANGE_BEGIN: Local extremum support
     mutable const ScalarFloat* m_pinned_data = nullptr;

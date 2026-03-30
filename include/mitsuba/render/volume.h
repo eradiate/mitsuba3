@@ -62,6 +62,19 @@ public:
      */
     virtual void max_per_channel(ScalarFloat *out) const;
 
+// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
+    /// Returns the minimum value of the volume over all dimensions.
+    virtual ScalarFloat min() const;
+
+    /**
+     * \brief In the case of a multi-channel volume, this function returns
+     * the minimum value for each channel.
+     *
+     * Pointer allocation/deallocation must be performed by the caller.
+     */
+    virtual void min_per_channel(ScalarFloat *out) const;
+// #ERADIATE_CHANGE_END
+
 // #ERADIATE_CHANGE_BEGIN: Local extremum support
     /**
      * \brief Compute local extrema over a spatial region

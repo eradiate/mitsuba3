@@ -67,6 +67,12 @@ public:
         NB_OVERRIDE_PURE(max);
     }
 
+// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
+    ScalarFloat min() const override {
+        NB_OVERRIDE_PURE(min);
+    }
+// #ERADIATE_CHANGE_END
+
     ScalarVector2i resolution() const override {
         NB_OVERRIDE(resolution);
     }
@@ -148,6 +154,11 @@ template <typename Ptr, typename Cls> void bind_texture_generic(Cls &cls) {
         .def("max",
              [](Ptr texture) { return texture->max(); },
              D(Texture, max))
+// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension        
+        .def("min",
+             [](Ptr texture) { return texture->min(); },
+             D(Texture, min))
+// #ERADIATE_CHANGE_END
         .def("is_spatially_varying",
              [](Ptr texture) { return texture->is_spatially_varying(); },
              D(Texture, is_spatially_varying));
