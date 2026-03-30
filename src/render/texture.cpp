@@ -108,5 +108,12 @@ Texture<Float, Spectrum>::max() const {
     NotImplementedError("max");
 }
 
+// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
+MI_VARIANT typename Texture<Float, Spectrum>::ScalarFloat
+Texture<Float, Spectrum>::min() const {
+    NotImplementedError("min");
+}
+// #ERADIATE_CHANGE_END
+
 MI_INSTANTIATE_CLASS(Texture)
 NAMESPACE_END(mitsuba)

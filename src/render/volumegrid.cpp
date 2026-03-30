@@ -20,7 +20,10 @@ VolumeGrid<Float, Spectrum>::VolumeGrid(ScalarVector3u size,
                                         ScalarUInt32 channel_count)
     : m_size(size), m_channel_count(channel_count),
       m_bbox(ScalarBoundingBox3f(ScalarPoint3f(0.f), ScalarPoint3f(1.f))),
-      m_max_per_channel(channel_count, 0.f) {
+// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
+      m_max_per_channel(channel_count, 0.f),
+      m_min_per_channel(channel_count, 0.f) {
+// #ERADIATE_CHANGE_END
     m_data = std::unique_ptr<ScalarFloat[]>(
         new ScalarFloat[dr::prod(m_size) * m_channel_count]);
 }
@@ -65,6 +68,9 @@ void VolumeGrid<Float, Spectrum>::read(Stream *stream) {
 
     m_max = -dr::Infinity<ScalarFloat>;
     m_max_per_channel.resize(m_channel_count, -dr::Infinity<ScalarFloat>);
+// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
+    m_min = dr::Infinity<ScalarFloat>;
+    m_min_per_channel.resize(m_channel_count, dr::Infinity<ScalarFloat>);
 
     m_data = std::unique_ptr<ScalarFloat[]>(new ScalarFloat[size * m_channel_count]);
     size_t k = 0;
@@ -75,9 +81,14 @@ void VolumeGrid<Float, Spectrum>::read(Stream *stream) {
             m_data[k] = val;
             m_max     = dr::maximum(m_max, val);
             m_max_per_channel[j] = dr::maximum(m_max_per_channel[j], val);
+            
+            m_min     = dr::minimum(m_min, val);
+            m_min_per_channel[j] = dr::minimum(m_min_per_channel[j], val);
+            
             ++k;
         }
     }
+// #ERADIATE_CHANGE_END
     Log(Debug, "Loaded grid volume data from file: dimensions %s, max value %f",
         m_size, m_max);
 }
@@ -87,6 +98,14 @@ void VolumeGrid<Float, Spectrum>::max_per_channel(ScalarFloat *out) const {
     for (size_t i=0; i<m_channel_count; ++i)
         out[i] = m_max_per_channel[i];
 }
+
+// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
+MI_VARIANT
+void VolumeGrid<Float, Spectrum>::min_per_channel(ScalarFloat *out) const {
+    for (size_t i=0; i<m_channel_count; ++i)
+        out[i] = m_min_per_channel[i];
+}
+// #ERADIATE_CHANGE_END
 
 MI_VARIANT
 void VolumeGrid<Float, Spectrum>::write(const fs::path &path) const {
@@ -133,6 +152,14 @@ std::string VolumeGrid<Float, Spectrum>::to_string() const {
     for (uint32_t i=0; i<m_max_per_channel.size(); ++i)
         oss << m_max_per_channel[i] << ", ";
     oss << std::endl;
+// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
+    oss << "  ],"  << std::endl
+        << "  min = " << m_min << "," << std::endl
+        << "  min_channels = [" << std::endl << "    ";
+    for (uint32_t i=0; i<m_min_per_channel.size(); ++i)
+        oss << m_min_per_channel[i] << ", ";
+    oss << std::endl;
+// #ERADIATE_CHANGE_END
     oss << "  ],"  << std::endl
         << "  data = [ " << util::mem_string(buffer_size())
         << " of volume data ]" << std::endl

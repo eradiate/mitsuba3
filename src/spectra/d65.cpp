@@ -292,6 +292,21 @@ public:
         }
     }
 
+// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
+    ScalarFloat min() const override {
+        if constexpr (is_spectral_v<Spectrum>) {
+            if (m_nested_texture)
+                return m_nested_texture->min();
+            else if (m_has_value)
+                return dr::min_nested(srgb_model_mean(m_value));
+            else
+                return 1.f;
+        } else {
+            NotImplementedError("min");
+        }
+    }
+// #ERADIATE_CHANGE_END
+
     bool is_spatially_varying() const override {
         if (m_nested_texture)
             return m_nested_texture->is_spatially_varying();

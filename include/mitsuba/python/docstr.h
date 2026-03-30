@@ -10519,6 +10519,15 @@ default implementation throws an exception.
 Even if the operation is provided, it may only return an
 approximation.)doc";
 
+static const char *__doc_mitsuba_Texture_min =
+R"doc(Return the maximum value of the spectrum
+
+Not every implementation necessarily provides this function. The
+default implementation throws an exception.
+
+Even if the operation is provided, it may only return an
+approximation.)doc";
+
 static const char *__doc_mitsuba_Texture_pdf_position = R"doc(Returns the probability per unit area of sample_position())doc";
 
 static const char *__doc_mitsuba_Texture_pdf_spectrum =
@@ -10643,6 +10652,56 @@ static const char *__doc_mitsuba_Timer_reset = R"doc()doc";
 static const char *__doc_mitsuba_Timer_start = R"doc()doc";
 
 static const char *__doc_mitsuba_Timer_value = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingEstimator = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingEstimatorType = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingEstimatorType_RatioTracking = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingEstimatorType_ResidualRatioTracking = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingEstimator_estimator = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingEstimator_ratio_tracking = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingEstimator_residual_ratio_tracking = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingEstimator_transmittance = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingState = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingState_TrackingState = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingState_TrackingState_2 = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingState_TrackingState_3 = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingState_fields = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingState_fields_2 = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingState_labels = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingState_medium = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingState_name = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingState_operator_assign = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingState_operator_assign_2 = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingState_ray = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingState_sampler = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingState_target_ot = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingState_tau_acc = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingState_transmittance_one = R"doc()doc";
+
+static const char *__doc_mitsuba_TrackingState_transmittance_two = R"doc()doc";
 
 static const char *__doc_mitsuba_Transform =
 R"doc(Unified homogeneous coordinate transformation
@@ -10939,6 +10998,10 @@ static const char *__doc_mitsuba_VolumeGrid_m_max = R"doc()doc";
 
 static const char *__doc_mitsuba_VolumeGrid_m_max_per_channel = R"doc()doc";
 
+static const char *__doc_mitsuba_VolumeGrid_m_min = R"doc()doc";
+
+static const char *__doc_mitsuba_VolumeGrid_m_min_per_channel = R"doc()doc";
+
 static const char *__doc_mitsuba_VolumeGrid_m_size = R"doc()doc";
 
 static const char *__doc_mitsuba_VolumeGrid_max = R"doc(Return the precomputed maximum over the volume grid)doc";
@@ -10948,12 +11011,26 @@ R"doc(Return the precomputed maximum over the volume grid per channel
 
 Pointer allocation/deallocation must be performed by the caller.)doc";
 
+static const char *__doc_mitsuba_VolumeGrid_min = R"doc(Return the precomputed minimum over the volume grid)doc";
+
+static const char *__doc_mitsuba_VolumeGrid_min_per_channel =
+R"doc(Return the precomputed minimum over the volume grid per channel
+
+Pointer allocation/deallocation must be performed by the caller.)doc";
+
 static const char *__doc_mitsuba_VolumeGrid_read = R"doc()doc";
 
 static const char *__doc_mitsuba_VolumeGrid_set_max = R"doc(Set the precomputed maximum over the volume grid)doc";
 
 static const char *__doc_mitsuba_VolumeGrid_set_max_per_channel =
 R"doc(Set the precomputed maximum over the volume grid per channel
+
+Pointer allocation/deallocation must be performed by the caller.)doc";
+
+static const char *__doc_mitsuba_VolumeGrid_set_min = R"doc(Set the precomputed minimum over the volume grid)doc";
+
+static const char *__doc_mitsuba_VolumeGrid_set_min_per_channel =
+R"doc(Set the precomputed minimum over the volume grid per channel
 
 Pointer allocation/deallocation must be performed by the caller.)doc";
 
@@ -11066,6 +11143,14 @@ static const char *__doc_mitsuba_Volume_max = R"doc(Returns the maximum value of
 static const char *__doc_mitsuba_Volume_max_per_channel =
 R"doc(In the case of a multi-channel volume, this function returns the
 maximum value for each channel.
+
+Pointer allocation/deallocation must be performed by the caller.)doc";
+
+static const char *__doc_mitsuba_Volume_min = R"doc(Returns the minimum value of the volume over all dimensions.)doc";
+
+static const char *__doc_mitsuba_Volume_min_per_channel =
+R"doc(In the case of a multi-channel volume, this function returns the
+minimum value for each channel.
 
 Pointer allocation/deallocation must be performed by the caller.)doc";
 

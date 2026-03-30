@@ -57,6 +57,16 @@ Volume<Float, Spectrum>::max_per_channel(ScalarFloat * /*out*/) const {
     NotImplementedError("max_per_channel");
 }
 
+// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
+MI_VARIANT typename Volume<Float, Spectrum>::ScalarFloat
+Volume<Float, Spectrum>::min() const { NotImplementedError("min"); }
+
+MI_VARIANT void
+Volume<Float, Spectrum>::min_per_channel(ScalarFloat * /*out*/) const {
+    NotImplementedError("min_per_channel");
+}
+// #ERADIATE_CHANGE_END
+
 // #ERADIATE_CHANGE_BEGIN: Local extremum support
 MI_VARIANT std::pair<Float, Float>
 Volume<Float, Spectrum>::extremum(BoundingBox3f /*bbox*/, Mask /*local*/) const {

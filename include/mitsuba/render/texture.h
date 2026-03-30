@@ -207,6 +207,18 @@ public:
      */
     virtual ScalarFloat max() const;
 
+// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
+    /**
+     * Return the maximum value of the spectrum
+     *
+     * Not every implementation necessarily provides this function. The default
+     * implementation throws an exception.
+     *
+     * Even if the operation is provided, it may only return an approximation.
+     */
+    virtual ScalarFloat min() const;
+// #ERADIATE_CHANGE_END
+
     //! @}
     // ======================================================================
 
@@ -247,5 +259,6 @@ DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::Texture)
     DRJIT_CALL_METHOD(mean)
 
     DRJIT_CALL_GETTER(max)
+    DRJIT_CALL_GETTER(min)
     DRJIT_CALL_GETTER(is_spatially_varying)
 DRJIT_CALL_END()

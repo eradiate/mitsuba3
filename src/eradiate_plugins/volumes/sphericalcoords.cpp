@@ -153,6 +153,8 @@ public:
     }
 
     ScalarFloat max() const override { return dr::maximum(dr::maximum(m_volume->max(), m_fillmin), m_fillmax); }
+    
+    ScalarFloat min() const override { return dr::minimum(dr::minimum(m_volume->min(), m_fillmin), m_fillmax); }
 
     ScalarVector3i resolution() const override { return m_volume->resolution(); };
 

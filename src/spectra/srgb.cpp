@@ -128,6 +128,15 @@ public:
             return dr::max_nested(m_value);
     }
 
+// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
+    ScalarFloat min() const override {
+        if constexpr (is_spectral_v<Spectrum>)
+            return dr::min_nested(srgb_model_mean(m_value));
+        else
+            return dr::min_nested(m_value);
+    }
+// #ERADIATE_CHANGE_END
+
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "SRGBReflectanceSpectrum[" << std::endl

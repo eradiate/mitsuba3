@@ -123,6 +123,12 @@ public:
         return dr::slice(dr::max(m_value));
     }
 
+// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
+    ScalarFloat min() const override {
+        return dr::slice(dr::min(m_value));
+    }
+// #ERADIATE_CHANGE_END
+
     std::string to_string() const override {
         return tfm::format("UniformSpectrum[value=%f]", m_value);
     }
