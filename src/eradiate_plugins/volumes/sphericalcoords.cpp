@@ -176,12 +176,12 @@ public:
         auto [min, maj]= m_volume->extremum(clamped_bounds);
 
         // If the r-range extends below 0 (below rmin), include fillmin
-        auto below_rmin = bbox.min.x() < 0.f;
+        Mask below_rmin = bbox.min.x() < 0.f;
         dr::masked(maj, below_rmin) = dr::maximum(maj, Float(m_fillmin));
         dr::masked(min, below_rmin) = dr::minimum(min, Float(m_fillmin));
 
         // If the r-range extends above 1 (above rmax), include fillmax
-        auto above_rmax = bbox.max.x() > 1.f;
+        Mask above_rmax = bbox.max.x() > 1.f;
         dr::masked(maj, above_rmax) = dr::maximum(maj, Float(m_fillmax));
         dr::masked(min, above_rmax) = dr::minimum(min, Float(m_fillmax));
 
