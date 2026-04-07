@@ -140,7 +140,7 @@ def test_radial_sample_vertical_heterogeneous_1(variants_any_scalar, extremum_st
 
     # Test sampling segment before rmin.
     desired_tau = 0.11
-    res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
     ref_segment = mi.ExtremumSegment(
         mint=0.25,
         maxt=0.5,
@@ -149,11 +149,11 @@ def test_radial_sample_vertical_heterogeneous_1(variants_any_scalar, extremum_st
     )
     ref_tau = 0.05
     assert_compare_segment(ref_segment, res)
-    assert dr.allclose(ref_tau, tau_acc)
+    assert dr.allclose(ref_tau, ot_acc)
 
     # Test sampling segment in rmin.
     desired_tau = 0.7
-    res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
     ref_segment = mi.ExtremumSegment(
         mint=0.5,
         maxt=1.5,
@@ -162,11 +162,11 @@ def test_radial_sample_vertical_heterogeneous_1(variants_any_scalar, extremum_st
     )
     ref_tau = 0.15
     assert_compare_segment(ref_segment, res)
-    assert dr.allclose(ref_tau, tau_acc)
+    assert dr.allclose(ref_tau, ot_acc)
 
     # Test sampling segment passed rmin.
     desired_tau = 1.27
-    res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
     ref_segment = mi.ExtremumSegment(
         mint=1.75,
         maxt=2.0,
@@ -175,11 +175,11 @@ def test_radial_sample_vertical_heterogeneous_1(variants_any_scalar, extremum_st
     )
     ref_tau = 1.25
     assert_compare_segment(ref_segment, res)
-    assert dr.allclose(ref_tau, tau_acc)
+    assert dr.allclose(ref_tau, ot_acc)
 
     # Test sampling passed volume.
     desired_tau = 1.5
-    res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
     ref_segment = mi.ExtremumSegment(
         mint=dr.inf,
         maxt=-dr.inf,
@@ -203,7 +203,7 @@ def test_radial_sample_vertical_heterogeneous_2(variants_any_scalar, extremum_st
 
     # Test ray starting outside of the volume.
     ray.o = mi.ScalarVector3f(0.0, 0.0, 1.2)
-    res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
     ref_segment = mi.ExtremumSegment(
         mint=0.45,
         maxt=0.7,
@@ -212,11 +212,11 @@ def test_radial_sample_vertical_heterogeneous_2(variants_any_scalar, extremum_st
     )
     ref_tau = 0.05
     assert_compare_segment(ref_segment, res)
-    assert dr.allclose(ref_tau, tau_acc)
+    assert dr.allclose(ref_tau, ot_acc)
 
     # Test ray starting in a layer.
     ray.o = mi.ScalarVector3f(0.0, 0.0, 0.8)
-    res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
     ref_segment = mi.ExtremumSegment(
         mint=0.05,
         maxt=0.3,
@@ -225,12 +225,12 @@ def test_radial_sample_vertical_heterogeneous_2(variants_any_scalar, extremum_st
     )
     ref_tau = 0.01
     assert_compare_segment(ref_segment, res)
-    assert dr.allclose(ref_tau, tau_acc)
+    assert dr.allclose(ref_tau, ot_acc)
 
     # Test sampling in rmin, passed the midpoint.
     ray.o = mi.ScalarVector3f(0.0, 0.0, -0.25)
     desired_tau = 0.3
-    res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
     ref_segment = mi.ExtremumSegment(
         mint=0.25,
         maxt=0.5,
@@ -239,11 +239,11 @@ def test_radial_sample_vertical_heterogeneous_2(variants_any_scalar, extremum_st
     )
     ref_tau = 0.25
     assert_compare_segment(ref_segment, res)
-    assert dr.allclose(ref_tau, tau_acc)
+    assert dr.allclose(ref_tau, ot_acc)
 
     # Test sampling passed the volume.
     ray.o = mi.ScalarVector3f(0.0, 0.0, -1.25)
-    res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
     ref_segment = mi.ExtremumSegment(
         mint=dr.inf,
         maxt=-dr.inf,
@@ -269,7 +269,7 @@ def test_radial_sample_tangent_heterogeneous(variants_any_scalar, extremum_struc
     active = True
     desired_tau = 0.2
 
-    res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
     ref_segment = mi.ExtremumSegment(
         mint=0.338562,
         maxt=1.66144,
@@ -278,7 +278,7 @@ def test_radial_sample_tangent_heterogeneous(variants_any_scalar, extremum_struc
     )
     ref_tau = 0.0
     assert_compare_segment(ref_segment, res)
-    assert dr.allclose(ref_tau, tau_acc)
+    assert dr.allclose(ref_tau, ot_acc)
 
 
 def test_radial_sample_rmin_0_heterogeneous(variants_any_scalar):
@@ -316,7 +316,7 @@ def test_radial_sample_rmin_0_heterogeneous(variants_any_scalar):
     active = True
     desired_tau = 0.3
 
-    res, tau_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
     # The segment mint and maxt indicate that rmin is dealt as a tangent.
     ref_segment = mi.ExtremumSegment(
         mint=0.5,
@@ -326,7 +326,7 @@ def test_radial_sample_rmin_0_heterogeneous(variants_any_scalar):
     )
     ref_tau = 0.1
     assert_compare_segment(ref_segment, res)
-    assert dr.allclose(ref_tau, tau_acc)
+    assert dr.allclose(ref_tau, ot_acc)
 
 
 def test_radial_sample_outside_rmax_heterogeneous(variants_any_scalar):

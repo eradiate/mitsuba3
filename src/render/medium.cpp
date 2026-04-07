@@ -86,9 +86,9 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
 
     if (m_has_local_extremum) {
         // Use extremum structure with local majorants
-        auto [segment, tau_acc] = m_extremum_structure->sample_segment(ray, mint, maxt, target_ot, active);
+        auto [segment, ot_acc] = m_extremum_structure->sample_segment(ray, mint, maxt, target_ot, active);
         sampled_t = segment.mint +
-                (target_ot - tau_acc) / dr::maximum(segment.majorant(), dr::Epsilon<Float>);
+                (target_ot - ot_acc) / dr::maximum(segment.majorant(), dr::Epsilon<Float>);
                 
         // Store local majorant in combined_extinction
         combined_extinction[0] = segment.majorant();

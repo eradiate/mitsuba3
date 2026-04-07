@@ -80,6 +80,8 @@ public:
      * \brief Compute local majorant (maximum) over a spatial region
      *
      * Convenience method that returns only the majorant.
+     * The default implementation calls `extremum()` and returns
+     * the second element.
      */
     virtual Float majorant(const BoundingBox3f& bbox, Mask local = true) const {
         return extremum(bbox, local).second;
@@ -89,6 +91,8 @@ public:
      * \brief Compute local minorant (minimum) over a spatial region
      *
      * Convenience method that returns only the minorant.
+     * The default implementation calls `extremum()` and returns
+     * the first element.
      */
     virtual Float minorant(const BoundingBox3f& bbox, Mask local = true) const {
         return extremum(bbox, local).first;

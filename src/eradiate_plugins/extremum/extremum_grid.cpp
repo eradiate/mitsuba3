@@ -103,12 +103,12 @@ public:
         struct DeltaTrackingState {
             ExtremumSegment segment;
             Float target_ot;
-            Float tau_acc;
-            DRJIT_STRUCT(DeltaTrackingState, segment, target_ot, tau_acc)
+            Float ot_acc;
+            DRJIT_STRUCT(DeltaTrackingState, segment, target_ot, ot_acc)
         } state {
             segment,
             target_ot,
-            /*tau_acc =*/0.f
+            /*ot_acc =*/0.f
         };
 
         // if this works then we will be able to move this outside of the grid code
@@ -119,24 +119,24 @@ public:
             Mask& active
         ){
             Float dt = segment.maxt - segment.mint;
-            Float tau_next = dr::fmadd(segment.majorant(), dt, state.tau_acc);
-            Mask exit = tau_next >= state.target_ot;
+            Float next_ot = dr::fmadd(segment.majorant(), dt, state.ot_acc);
+            Mask exit = next_ot >= state.target_ot;
             // update variables
             dr::masked(state.segment, active &&  exit) = segment;
-            dr::masked(state.tau_acc, active && !exit) = tau_next;
+            dr::masked(state.ot_acc, active && !exit) = next_ot;
             active &= !exit;
         };
 
         state = traverse_dda(
             func,
-            state, 
-            ray, 
+            state,
+            ray,
             mint,
             maxt,
             active
         );
 
-        return {state.segment, state.tau_acc};
+        return {state.segment, state.ot_acc};
     }
 
     std::tuple<Float, Float> eval_1(const Interaction3f &it,
