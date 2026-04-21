@@ -9,6 +9,7 @@
 #include <mitsuba/render/sampler.h>
 #include <mitsuba/render/scene.h>
 #include <mitsuba/render/volume.h>
+#include <mitsuba/render/eradiate/extremum.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -154,8 +155,8 @@ template <typename Float, typename Spectrum>
 class PiecewiseMedium final : public Medium<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
-                   m_phase_function)
-    MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume)
+                   m_phase_function, m_extremum_structure)
+    MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, ExtremumStructure)
 
     // Use 32 bit indices to keep track of indices to conserve memory
     using ScalarIndex     = uint32_t;
@@ -174,6 +175,12 @@ public:
             props.get<bool>("has_spectral_extinction", true);
 
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
+
+        // Create a default global extremum structure
+        Properties props_extr("extremum_global");
+        props_extr.set("volume", (Object *) m_sigmat.get());
+        m_extremum_structure = 
+            PluginManager::instance()->create_object<ExtremumStructure>(props_extr);
 
         precompute_optical_thickness();
     }
@@ -544,6 +551,7 @@ public:
             << "  albedo        = " << string::indent(m_albedo) << std::endl
             << "  sigma_t       = " << string::indent(m_sigmat) << std::endl
             << "  scale         = " << string::indent(m_scale) << std::endl
+            << "  extremum      = " << string::indent(m_extremum_structure) << std::endl
             << "]";
         return oss.str();
     }

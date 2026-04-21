@@ -1,5 +1,6 @@
 #include <mitsuba/core/properties.h>
 #include <mitsuba/core/plugin.h>
+#include <mitsuba/render/medium.h>
 #include <mitsuba/render/eradiate/extremum.h>
 #include <mitsuba/render/volume.h>
 #include <mitsuba/render/volumegrid.h>
@@ -49,6 +50,8 @@ public:
     MI_IMPORT_BASE(ExtremumStructure, m_bbox)
     MI_IMPORT_TYPES(Volume)
 
+    using TrackingState    = TrackingState<Float, Spectrum>;
+    using TrackingFunction = TrackingFunction<Float, Spectrum>;
     using FloatStorage = DynamicBuffer<Float>;
 
     ExtremumGrid(const Properties &props) : Base(props) {
@@ -91,52 +94,25 @@ public:
         build_grid(m_volume.get(), m_resolution);
     }
 
-    std::tuple<ExtremumSegment, Float> sample_segment(
+
+    TrackingState traverse_extremum(
         const Ray3f &ray,
-        Float mint, 
+        Float mint,
         Float maxt,
-        Float target_ot,
+        UInt32 channel,
+        TrackingState state,
+        TrackingFunction* func,
         Mask active
     ) const override {
-        ExtremumSegment segment = dr::zeros<ExtremumSegment>();
-
-        struct DeltaTrackingState {
-            ExtremumSegment segment;
-            Float target_ot;
-            Float ot_acc;
-            DRJIT_STRUCT(DeltaTrackingState, segment, target_ot, ot_acc)
-        } state {
-            segment,
-            target_ot,
-            /*ot_acc =*/0.f
-        };
-
-        // if this works then we will be able to move this outside of the grid code
-        auto func = [](
-            ExtremumSegment& segment, 
-            DeltaTrackingState& state, 
-            Mask& /*advance*/,
-            Mask& active
-        ){
-            Float dt = segment.maxt - segment.mint;
-            Float next_ot = dr::fmadd(segment.majorant(), dt, state.ot_acc);
-            Mask exit = next_ot >= state.target_ot;
-            // update variables
-            dr::masked(state.segment, active &&  exit) = segment;
-            dr::masked(state.ot_acc, active && !exit) = next_ot;
-            active &= !exit;
-        };
-
-        state = traverse_dda(
+        return traverse_dda(
             func,
             state,
             ray,
             mint,
             maxt,
+            channel,
             active
         );
-
-        return {state.segment, state.ot_acc};
     }
 
     std::tuple<Float, Float> eval_1(const Interaction3f &it,
@@ -166,7 +142,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS(ExtremumStructure)
+    MI_DECLARE_CLASS(ExtremumGrid)
 
 private:
 
@@ -392,6 +368,7 @@ private:
         const Ray3f& ray, 
         Float mint,
         Float maxt,
+        UInt32 channel,
         Mask active
     ) const {
         using StateD = std::decay_t<StateT>;
@@ -476,7 +453,7 @@ private:
         dr::tie(ls) = dr::while_loop(
             dr::make_tuple(ls),
             [](const LoopState& ls) { return ls.active; },
-            [this, func, step, abs_rcp_d, t_max, mint](LoopState& ls) {
+            [this, func, step, abs_rcp_d, t_max, mint, channel](LoopState& ls) {
             
             ExtremumSegment& segment = ls.segment;
             StateD& state = ls.state;
@@ -506,10 +483,10 @@ private:
                 extremum
             );
 
-            func( segment, state, advance, active);
+            std::tie(advance, active) = func( segment, state, channel, active);
 
             // Advance
-            dt_v = dr::select(mask, abs_rcp_d, dt_v - dt);
+            dr::masked(dt_v, advance) = dr::select(mask, abs_rcp_d, dt_v - dt);
             dr::masked(pi, mask && advance) += step;
             dr::masked(t_rem, advance) -= dt;
 

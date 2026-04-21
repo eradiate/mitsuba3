@@ -254,7 +254,7 @@ public:
                         rgb / dr::maximum((ScalarFloat) 1e-8, scale);
                     ScalarVector3f coeff = srgb_model_fetch(rgb_norm);
                     max = dr::maximum(max, scale);
-                    min = dr::maximum(min, scale);
+                    min = dr::minimum(min, scale);
                     dr::store(scaled_data_ptr,
                               dr::concat(coeff, dr::Array<ScalarFloat, 1>(scale)));
                     ptr += 3;

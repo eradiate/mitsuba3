@@ -150,7 +150,7 @@ template <typename Float, typename Spectrum>
 class HeterogeneousMedium final : public Medium<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
-                    m_phase_function, m_extremum_structure, m_has_local_extremum)
+                    m_phase_function, m_extremum_structure)
     MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, ExtremumStructure, ExtremumStructurePtr)
 
     HeterogeneousMedium(const Properties &props) : Base(props) {
@@ -162,10 +162,25 @@ public:
         m_has_spectral_extinction = props.get<bool>("has_spectral_extinction", true);
 
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
+        m_min_density = dr::opaque<Float>(m_scale * m_sigmat->min());
 
-        if (m_has_local_extremum && m_has_spectral_extinction) {
-            Throw("Local majorants of spectral volumes are not supported.");
+// #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
+        for (auto &prop : props.objects()) {
+            if (auto *extremum = prop.try_get<ExtremumStructure>()) {
+                if (m_extremum_structure)
+                    Throw("Only a single extremum structure can be specified per medium");
+                m_extremum_structure = extremum;
+            }
         }
+
+        if (!m_extremum_structure) {
+            // Create a default global extremum structure
+            Properties props_extr("extremum_global");
+            props_extr.set("volume", (Object *) m_sigmat.get());
+            m_extremum_structure = 
+                PluginManager::instance()->create_object<ExtremumStructure>(props_extr);
+        }
+// #ERADIATE_CHANGE_END
     }
 
     void traverse(TraversalCallback *cb) override {
@@ -177,6 +192,7 @@ public:
 
     void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override {
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
+        m_min_density = dr::opaque<Float>(m_scale * m_sigmat->min());
     }
 
     UnpolarizedSpectrum
@@ -184,6 +200,13 @@ public:
                  Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
         return m_max_density;
+    }
+
+    UnpolarizedSpectrum
+    get_minorant(const MediumInteraction3f & /* mi */,
+                 Mask active) const override {
+        MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
+        return m_min_density;
     }
 
     std::tuple<UnpolarizedSpectrum, UnpolarizedSpectrum, UnpolarizedSpectrum>
@@ -196,17 +219,7 @@ public:
             sigmat *= m_phase_function->projected_area(mi, active);
 
         auto sigmas = sigmat * m_albedo->eval(mi, active);
-        
-// #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
-        Float min, max;
-        if (m_has_local_extremum)
-            std::tie(min, max) = m_extremum_structure->eval_1(mi, active);
-        else
-            max = m_max_density;
-
-        auto sigman = max - sigmat;
-// #ERADIATE_CHANGE_END    
-    
+        auto sigman = m_max_density - sigmat;
         return { sigmas, sigman, sigmat };
     }
 
@@ -221,6 +234,7 @@ public:
             << "  albedo  = " << string::indent(m_albedo) << std::endl
             << "  sigma_t = " << string::indent(m_sigmat) << std::endl
             << "  scale   = " << string::indent(m_scale) << std::endl
+            << "  extremum = "<< string::indent(m_extremum_structure) << std::endl
             << "]";
         return oss.str();
     }
@@ -230,6 +244,7 @@ private:
     ref<Volume> m_sigmat, m_albedo;
     ScalarFloat m_scale;
     Float m_max_density;
+    Float m_min_density;
 
     MI_TRAVERSE_CB(Base, m_sigmat, m_albedo, m_max_density)
 };

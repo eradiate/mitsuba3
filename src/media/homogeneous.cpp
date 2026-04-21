@@ -8,6 +8,7 @@
 #include <mitsuba/render/sampler.h>
 #include <mitsuba/render/scene.h>
 #include <mitsuba/render/volume.h>
+#include <mitsuba/render/eradiate/extremum.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -131,8 +132,8 @@ However, it supports the use of a spatially varying albedo.
 template <typename Float, typename Spectrum>
 class HomogeneousMedium final : public Medium<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction, m_phase_function)
-    MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume)
+    MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction, m_phase_function, m_extremum_structure)
+    MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, ExtremumStructure)
 
     HomogeneousMedium(const Properties &props) : Base(props) {
         m_is_homogeneous = true;
@@ -141,6 +142,14 @@ public:
 
         m_scale = props.get<ScalarFloat>("scale", 1.0f);
         m_has_spectral_extinction = props.get<bool>("has_spectral_extinction", true);
+
+// #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
+        // Create a default global extremum structure
+        Properties props_extr("extremum_global");
+        props_extr.set("volume", (Object *) m_sigmat.get());
+        m_extremum_structure = 
+            PluginManager::instance()->create_object<ExtremumStructure>(props_extr);
+// #ERADIATE_CHANGE_END
     }
 
     void traverse(TraversalCallback *cb) override {
@@ -159,6 +168,13 @@ public:
 
     UnpolarizedSpectrum
     get_majorant(const MediumInteraction3f &mi,
+                 Mask active) const override {
+        MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
+        return eval_sigmat(mi, active) & active;
+    }
+
+    UnpolarizedSpectrum
+    get_minorant(const MediumInteraction3f &mi,
                  Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
         return eval_sigmat(mi, active) & active;
