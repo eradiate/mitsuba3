@@ -1,0 +1,21 @@
+/* Eradiate Mitsuba docs — custom CSS overrides */
+
+/* Parameter table: constrain first two columns, monospace parameter names */
+table.paramstable td:nth-child(1),
+table.paramstable th:nth-child(1) {
+    font-family: var(--font-stack--monospace);
+    white-space: nowrap;
+    min-width: 8em;
+}
+
+table.paramstable td:nth-child(2),
+table.paramstable th:nth-child(2) {
+    white-space: nowrap;
+    min-width: 6em;
+}
+
+table.paramstable td:nth-child(4),
+table.paramstable th:nth-child(4) {
+    text-align: center;
+    min-width: 3em;
+}

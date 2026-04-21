@@ -1,0 +1,5 @@
+generated/*.rst
+!generated/.gitkeep
+_build/
+__pycache__/
+*.pyc
