@@ -1,0 +1,33 @@
+[workspace]
+name = "mitsuba-dev"
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-64", "osx-arm64"]
+
+[activation.env]
+PYTHONPATH = "$PIXI_PROJECT_ROOT/build/python:$PYTHONPATH"
+PATH = "$PIXI_PROJECT_ROOT/build:$PATH"
+
+[dependencies]
+python = "3.10.*"
+cmake = ">=3.20"
+ninja = "*"
+
+[pypi-dependencies]
+sphinx = ">=8.1.3"
+shibuya = "*"
+nbsphinx = "*"
+myst-parser = "*"
+sphinx-copybutton = "*"
+sphinx-design = "*"
+sphinxcontrib-bibtex = ">=2.6.3"
+sphinx-tabs = "*"
+sphinx-autobuild = ">=2024"
+
+[tasks]
+configure = { cmd = "cmake -B build --preset eradiate" }
+build = { cmd = "cmake --build build", depends-on = ["configure"] }
+docs-api = { cmd = "sphinx-build -b html docs_eradiate/docs_api docs_eradiate/_build/html_api", depends-on = ["build"] }
+docs = { cmd = "sphinx-build -b html docs_eradiate docs_eradiate/_build/html", depends-on = ["build", "docs-api"] }
+docs-serve = { cmd = "sphinx-autobuild docs_eradiate docs_eradiate/_build/html --ignore '*/generated/*'", depends-on = ["build", "docs-api"] }
+docs-clean = { cmd = "rm -rf docs_eradiate/_build" }
+clean = { cmd = "rm -rf build" }
