@@ -71,12 +71,12 @@ struct ExtremumSegment {
     }
 
     /// Minorant value over the segment. Accessor to the first element of ``value``.
-    Float minorant() {
+    MI_INLINE Float minorant() const {
         return value.x();
     }
 
     /// Majorant value over the segment. Accessor to the second element of ``value``.
-    Float majorant() {
+    MI_INLINE Float majorant() const {
         return value.y();
     }
 

@@ -35,22 +35,15 @@ MI_PY_EXPORT(ExtremumSegment) {
 }
 
 /// Trampoline for derived types implemented in Python
+// Note that `traverse_extremum` does not appear in this list. This is because
+// it accepts a concrete function pointer as parameter, the binding of which
+// has not been solved yet.
 MI_VARIANT class PyExtremumStructure : public ExtremumStructure<Float, Spectrum> {
 public:
     MI_IMPORT_TYPES(ExtremumStructure)
     NB_TRAMPOLINE(ExtremumStructure, 4);
 
     PyExtremumStructure(const Properties &props) : ExtremumStructure(props) {}
-
-    std::tuple<ExtremumSegment, Float> sample_segment(
-        const Ray3f &ray,
-        Float mint,
-        Float maxt,
-        Float target_ot,
-        Mask active
-    ) const override {
-        NB_OVERRIDE_PURE(sample_segment, ray, mint, maxt, target_ot, active);
-    }
 
     std::tuple<Float, Float> eval_1(
         const Interaction3f &it,
@@ -77,21 +70,13 @@ public:
 template <typename Ptr, typename Cls> void bind_extremum_structure_generic(Cls &cls) {
     MI_PY_IMPORT_TYPES(ExtremumStructure, Medium)
 
-    cls.def("sample_segment",
-            [](Ptr ptr, const Ray3f &ray, Float mint, Float maxt,
-               Float target_ot, Mask active) {
-                return ptr->sample_segment(ray, mint, maxt, target_ot, active);
-            },
-            "ray"_a, "mint"_a, "maxt"_a, "target_ot"_a, "active"_a = true,
-            D(ExtremumStructure, sample_segment))
-        .def("eval_1",
+    cls.def("eval_1",
             [](Ptr ptr, const Interaction3f &it, Mask active) {
                 return ptr->eval_1(it, active);
             },
             "it"_a, "active"_a = true,
             D(ExtremumStructure, eval_1));
 }
-
 
 
 MI_PY_EXPORT(ExtremumStructure) {

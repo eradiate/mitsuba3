@@ -25,6 +25,11 @@ public:
     get_majorant(const MediumInteraction3f &mi,
                  Mask active = true) const = 0;
 
+    /// Returns the medium's minorant used for residual ratio tracking
+     virtual UnpolarizedSpectrum
+     get_minorant(const MediumInteraction3f &/*mi*/,
+                  Mask /*active*/ = true) const { return UnpolarizedSpectrum(0.f); }
+
     /// Returns the medium coefficients Sigma_s, Sigma_n and Sigma_t evaluated
     /// at a given MediumInteraction mi
     virtual std::tuple<UnpolarizedSpectrum, UnpolarizedSpectrum,
@@ -100,15 +105,22 @@ public:
         return m_has_spectral_extinction;
     }
 
-// #ERADIATE_CHANGE_BEGIN: Extremum structure accessor
-    /// Returns the extremum structure for local majorant acceleration (nullptr if not used)
-    MI_INLINE const ExtremumStructure* extremum_structure() const {
+// #ERADIATE_CHANGE_BEGIN: Extremum Structure accessor and traversal helpers
+    std::tuple<MediumInteraction3f, Float, Float> 
+    prepare_medium_traversal(const Ray3f& ray, Mask active) const;
+
+    /// Returns the extremum structure for local extremum acceleration.
+    MI_INLINE const ExtremumStructure *extremum_structure() const {
         return m_extremum_structure.get();
     }
 
     /// Check if medium uses extremum structure
     MI_INLINE bool has_extremum_structure() const {
         return m_extremum_structure.get() != nullptr;
+    }
+
+    MI_INLINE bool use_rrt() const {
+        return m_use_rrt;
     }
 // #ERADIATE_CHANGE_END
 
@@ -129,8 +141,8 @@ protected:
     bool m_is_homogeneous;
     bool m_has_spectral_extinction;
 // #ERADIATE_CHANGE_BEGIN: Extremum structure support
-    bool m_has_local_extremum;
     ref<ExtremumStructure> m_extremum_structure;
+    bool m_use_rrt;
 // #ERADIATE_CHANGE_END
 
     MI_DECLARE_TRAVERSE_CB(m_phase_function, m_extremum_structure)
@@ -156,6 +168,10 @@ DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::Medium)
     DRJIT_CALL_METHOD(sample_interaction_real)
     DRJIT_CALL_METHOD(eval_transmittance_pdf_real)
     DRJIT_CALL_METHOD(get_scattering_coefficients)
+    
+    DRJIT_CALL_GETTER(use_rrt)
+    DRJIT_CALL_GETTER(extremum_structure)
+    DRJIT_CALL_METHOD(prepare_medium_traversal)
 DRJIT_CALL_END()
 
 //! @}

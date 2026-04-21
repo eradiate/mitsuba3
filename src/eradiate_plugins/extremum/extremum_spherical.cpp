@@ -1,5 +1,6 @@
 #include <mitsuba/core/properties.h>
 #include <mitsuba/core/plugin.h>
+#include <mitsuba/render/medium.h>
 #include <mitsuba/render/eradiate/extremum.h>
 #include <mitsuba/render/volume.h>
 #include <mitsuba/render/volumegrid.h>
@@ -62,6 +63,9 @@ public:
     MI_IMPORT_BASE(ExtremumStructure, m_bbox)
     MI_IMPORT_TYPES(Volume)
 
+    using TrackingState    = TrackingState<Float, Spectrum>;
+    using TrackingFunction = TrackingFunction<Float, Spectrum>;
+
     ExtremumSpherical(const Properties &props) : Base(props), m_props(props) {
         ScalarVector3i resolution = props.get<ScalarVector3i>("resolution", ScalarVector3i(1, 1, 1));
 
@@ -103,10 +107,10 @@ public:
     }
 
     // Stub overrides — never called, expand() replaces this object
-    std::tuple<ExtremumSegment, Float> sample_segment(const Ray3f &, Float, Float, Float,
-                           Mask) const override {
-        NotImplementedError("sample_segment");
-        return {dr::zeros<ExtremumSegment>(), Float(0.f)};
+    TrackingState traverse_extremum(const Ray3f &, Float, Float, UInt32, 
+                    TrackingState, TrackingFunction*, Mask) const override {
+        NotImplementedError("traverse_extremum");
+        return TrackingState();
     }
 
     std::tuple<Float, Float> eval_1(const Interaction3f &,
@@ -133,6 +137,8 @@ public:
     MI_IMPORT_BASE(ExtremumStructure, m_bbox)
     MI_IMPORT_TYPES(Volume)
 
+    using TrackingState    = TrackingState<Float, Spectrum>;
+    using TrackingFunction = TrackingFunction<Float, Spectrum>;
     using FloatStorage = DynamicBuffer<Float>;
 
     ExtremumSphericalImpl(const Properties &props) : Base(props) {
@@ -177,57 +183,29 @@ public:
         build_grid(m_volume.get());
     }
 
-    std::tuple<ExtremumSegment, Float> sample_segment(
+    TrackingState traverse_extremum(
         const Ray3f &ray,
-        Float mint, Float maxt,
-        Float target_ot,
+        Float mint,
+        Float maxt,
+        UInt32 channel,
+        TrackingState state,
+        TrackingFunction* func,
         Mask active
     ) const override {
-
-        ExtremumSegment segment = dr::zeros<ExtremumSegment>();
-
-        struct DeltaTrackingState {
-            ExtremumSegment segment;
-            Float target_ot;
-            Float ot_acc;
-            DRJIT_STRUCT(DeltaTrackingState, segment, target_ot, ot_acc)
-        } state {
-            segment,
-            target_ot,
-            /*ot_acc =*/0.f
-        };
-
-        // To be moved to tracking.h in future iterations
-        auto func = [](
-            ExtremumSegment& segment, 
-            DeltaTrackingState& state, 
-            Mask& /*advance*/,
-            Mask& active
-        ){
-            Float dt = segment.maxt - segment.mint;
-            Float next_ot = dr::fmadd(segment.majorant(), dt, state.ot_acc);
-            Mask exit = next_ot >= state.target_ot;
-            // update variables
-            dr::masked(state.segment, active &&  exit) = segment;
-            dr::masked(state.ot_acc, active && !exit) = next_ot;
-            active &= !exit;
-        };
-
         if constexpr (TraversalType == SphericalTraversalType::RadialOnly) {
-            state = traverse_radial(
+            return traverse_radial(
                 func,
                 state, 
                 ray, 
                 mint,
                 maxt,
+                channel,
                 active
             );            
         } else {
             Throw("Full3D spherical traversal is not yet implemented!");
-            return {dr::zeros<ExtremumSegment>(), 0.f};
+            return TrackingState();
         }
-
-        return {state.segment, state.ot_acc};
     }
 
     std::tuple<Float, Float> eval_1(
@@ -412,6 +390,7 @@ private:
         const Ray3f ray,
         Float mint,
         Float maxt,
+        UInt32 channel,
         Mask active
     ) const {
         using StateD = std::decay_t<StateT>;
@@ -478,7 +457,7 @@ private:
         dr::tie(ls) = dr::while_loop(
             dr::make_tuple(ls),
             [](const LoopState &ls) { return ls.active; },
-            [this, func, maxt, a, inv_a, disc_base, b_half](LoopState &ls) {
+            [this, func, maxt, a, inv_a, disc_base, b_half, channel](LoopState &ls) {
 
             // Compute radius at current position
             const Float eps = dr::Epsilon<Float> * 2.f;
@@ -538,7 +517,10 @@ private:
                 );
                 
                 Mask active_update = ls.active && update;
-                func( ls.segment, ls.state, ls.advance, active_update);
+                auto result = 
+                    func( ls.segment, ls.state, channel, active_update);
+                ls.advance    = result.first;
+                active_update &= result.second;
 
                 // Advance state for lanes that haven't reached target
                 dr::masked(ls.current_t, ls.advance && update) = t_next;

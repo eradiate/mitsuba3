@@ -82,6 +82,7 @@ add_library(mitsuba-render OBJECT
 
   ${ER_SRC}/extremum.cpp    ${ER_INC}/extremum.h
                             ${ER_INC}/extremum_segment.h
+                            ${ER_INC}/tracking.h
                             
   ${LIBRENDER_EXTRA_SRC}
 )
