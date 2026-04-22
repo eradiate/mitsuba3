@@ -110,7 +110,6 @@ public:
     TrackingState traverse_extremum(const Ray3f &, Float, Float, UInt32, 
                     TrackingState, TrackingFunction*, Mask) const override {
         NotImplementedError("traverse_extremum");
-        return TrackingState();
     }
 
     std::tuple<Float, Float> eval_1(const Interaction3f &,

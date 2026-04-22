@@ -10,7 +10,7 @@ NAMESPACE_BEGIN(mitsuba)
 .. _extremum-extremum_grid:
 
 Extremum global structure (:monosp:`extremum_global`)
--------------------------------------------------
+-----------------------------------------------------
 
 .. pluginparameters::
 
@@ -53,7 +53,7 @@ public:
         // Register the extremum structure to the volume to trigger 
         // parameter_changed when the volume is modified.
         m_volume->add_extremum_structure(this);
-        m_scale = props.get<ScalarFloat>("scale", 1.0f);
+        m_scale = props.get<ScalarFloat>("scale", 1.f);
         m_bbox = m_volume->bbox();
 
         m_majorant = m_volume->max();
@@ -68,7 +68,7 @@ public:
 
 
     TrackingState traverse_extremum(
-        const Ray3f &ray,
+        const Ray3f &/*ray*/,
         Float mint,
         Float maxt,
         UInt32 channel,
@@ -76,16 +76,6 @@ public:
         TrackingFunction* func,
         Mask active
     ) const override {
-
-        // Clip the tracking interval to the volume's bounding box so that
-        // get_scattering_coefficients is never queried outside the volume's
-        // domain.  This matters when the containing shape is larger than the
-        // volume (the medium's AABB != the volume's AABB).
-        auto [bbox_hit, bbox_mint, bbox_maxt] = m_bbox.ray_intersect(ray);
-        mint  = dr::maximum(mint,  bbox_mint);
-        maxt  = dr::minimum(maxt,  bbox_maxt);
-        active &= bbox_hit && (mint < maxt);
-
         ExtremumSegment segment(mint, maxt, m_scale*m_minorant, m_scale*m_majorant);
 
         struct LoopState {

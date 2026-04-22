@@ -146,8 +146,8 @@ Medium<Float, Spectrum>::prepare_medium_traversal(const Ray3f& ray, Mask active)
     dr::masked(mint, !active) = 0.f;
     dr::masked(maxt, !active) = dr::Infinity<Float>;
 
-    mint = dr::maximum(0.f, mint);
-    maxt = dr::minimum(ray.maxt, maxt);
+    dr::masked(mint, active) = dr::maximum(0.f, mint);
+    dr::masked(maxt, active) = dr::minimum(ray.maxt, maxt);
     mei.mint = mint;
 
     return {mei, mint, maxt};

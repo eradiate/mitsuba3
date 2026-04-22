@@ -26,7 +26,6 @@ ExtremumStructure<Float, Spectrum>::traverse_extremum(
     Mask /*active*/
 ) const {
     NotImplementedError("traverse_extremum");
-    return TrackingState();
 }
 
 MI_INSTANTIATE_CLASS(ExtremumStructure)
