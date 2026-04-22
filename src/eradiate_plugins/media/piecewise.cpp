@@ -176,10 +176,11 @@ public:
 
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
 
-        // Create a default global extremum structure
+        // Create a default global extremum structure.
         Properties props_extr("extremum_global");
         props_extr.set("volume", (Object *) m_sigmat.get());
-        m_extremum_structure = 
+        props_extr.set("scale", m_scale);
+        m_extremum_structure =
             PluginManager::instance()->create_object<ExtremumStructure>(props_extr);
 
         precompute_optical_thickness();
@@ -548,9 +549,9 @@ public:
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "PiecewiseMedium[" << std::endl
-            << "  albedo        = " << string::indent(m_albedo) << std::endl
-            << "  sigma_t       = " << string::indent(m_sigmat) << std::endl
-            << "  scale         = " << string::indent(m_scale) << std::endl
+            << "  albedo        = " << string::indent(m_albedo) << "," << std::endl
+            << "  sigma_t       = " << string::indent(m_sigmat) << "," << std::endl
+            << "  scale         = " << string::indent(m_scale) << "," << std::endl
             << "  extremum      = " << string::indent(m_extremum_structure) << std::endl
             << "]";
         return oss.str();

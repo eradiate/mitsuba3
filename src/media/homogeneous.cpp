@@ -8,7 +8,9 @@
 #include <mitsuba/render/sampler.h>
 #include <mitsuba/render/scene.h>
 #include <mitsuba/render/volume.h>
+// #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
 #include <mitsuba/render/eradiate/extremum.h>
+// #ERADIATE_CHANGE_END
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -132,6 +134,7 @@ However, it supports the use of a spatially varying albedo.
 template <typename Float, typename Spectrum>
 class HomogeneousMedium final : public Medium<Float, Spectrum> {
 public:
+// #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction, m_phase_function, m_extremum_structure)
     MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, ExtremumStructure)
 
@@ -143,10 +146,10 @@ public:
         m_scale = props.get<ScalarFloat>("scale", 1.0f);
         m_has_spectral_extinction = props.get<bool>("has_spectral_extinction", true);
 
-// #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
         // Create a default global extremum structure
         Properties props_extr("extremum_global");
         props_extr.set("volume", (Object *) m_sigmat.get());
+        props_extr.set("scale", m_scale);
         m_extremum_structure = 
             PluginManager::instance()->create_object<ExtremumStructure>(props_extr);
 // #ERADIATE_CHANGE_END
@@ -173,12 +176,14 @@ public:
         return eval_sigmat(mi, active) & active;
     }
 
+// #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
     UnpolarizedSpectrum
     get_minorant(const MediumInteraction3f &mi,
                  Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
         return eval_sigmat(mi, active) & active;
     }
+// #ERADIATE_CHANGE_END
 
     std::tuple<UnpolarizedSpectrum, UnpolarizedSpectrum, UnpolarizedSpectrum>
     get_scattering_coefficients(const MediumInteraction3f &mi,

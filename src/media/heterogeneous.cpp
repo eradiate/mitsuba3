@@ -8,7 +8,9 @@
 #include <mitsuba/render/sampler.h>
 #include <mitsuba/render/scene.h>
 #include <mitsuba/render/volume.h>
+// #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
 #include <mitsuba/render/eradiate/extremum.h>
+// #ERADIATE_CHANGE_END
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -174,10 +176,11 @@ public:
         }
 
         if (!m_extremum_structure) {
-            // Create a default global extremum structure
+            // Create a default global extremum structure.
             Properties props_extr("extremum_global");
             props_extr.set("volume", (Object *) m_sigmat.get());
-            m_extremum_structure = 
+            props_extr.set("scale", m_scale);
+            m_extremum_structure =
                 PluginManager::instance()->create_object<ExtremumStructure>(props_extr);
         }
 // #ERADIATE_CHANGE_END
@@ -192,7 +195,9 @@ public:
 
     void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override {
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
+// #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
         m_min_density = dr::opaque<Float>(m_scale * m_sigmat->min());
+// #ERADIATE_CHANGE_END
     }
 
     UnpolarizedSpectrum
@@ -202,12 +207,14 @@ public:
         return m_max_density;
     }
 
+// #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
     UnpolarizedSpectrum
     get_minorant(const MediumInteraction3f & /* mi */,
                  Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
         return m_min_density;
     }
+// #ERADIATE_CHANGE_END
 
     std::tuple<UnpolarizedSpectrum, UnpolarizedSpectrum, UnpolarizedSpectrum>
     get_scattering_coefficients(const MediumInteraction3f &mi,
@@ -231,10 +238,12 @@ public:
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "HeterogeneousMedium[" << std::endl
-            << "  albedo  = " << string::indent(m_albedo) << std::endl
-            << "  sigma_t = " << string::indent(m_sigmat) << std::endl
-            << "  scale   = " << string::indent(m_scale) << std::endl
+            << "  albedo  = " << string::indent(m_albedo) <<  "," << std::endl
+            << "  sigma_t = " << string::indent(m_sigmat) << "," << std::endl
+            << "  scale   = " << string::indent(m_scale) << "," << std::endl
+// #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
             << "  extremum = "<< string::indent(m_extremum_structure) << std::endl
+// #ERADIATE_CHANGE_END
             << "]";
         return oss.str();
     }
@@ -244,7 +253,9 @@ private:
     ref<Volume> m_sigmat, m_albedo;
     ScalarFloat m_scale;
     Float m_max_density;
+// #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
     Float m_min_density;
+// #ERADIATE_CHANGE_END
 
     MI_TRAVERSE_CB(Base, m_sigmat, m_albedo, m_max_density)
 };

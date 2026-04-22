@@ -11,12 +11,9 @@ NAMESPACE_BEGIN(mitsuba)
  * and its PDF.
  * 
  * Can be used to for delta tracking, ratio tracking, and residual ratio tracking.
- * Note that a seperate ``rng`` is used as the number of required samples is 
- * different for all samples.
+ * Note: Since the number of required dimensions is different for all pixel 
+ * samples, ``rng`` is used to sample distances and event types.
  * 
- * Note that ``throughput`` is shared between algorithm and should be accumulated
- * accordingly. If used for volpathmis, new members and data types will need to 
- * be introduced.
  */
 template< typename Float, typename Spectrum >
 struct TrackingState {
@@ -25,9 +22,17 @@ struct TrackingState {
     Ray3f ray;
     dr::PCG32<UInt32> rng;
     MediumInteraction3f mei;
+    Float target_ot;
+    Mask use_rrt;
+    Mask has_spectral_extinction;
+
+    // Note that ``throughput`` is shared between algorithm and should be accumulated
+    // accordingly. If used for volpathmis, new members and data types will need to 
+    // be introduced.
     UnpolarizedSpectrum throughput;
 
-    DRJIT_STRUCT(TrackingState, ray, rng, mei, throughput)
+    DRJIT_STRUCT(TrackingState, ray, rng, mei, target_ot, use_rrt, \
+        has_spectral_extinction, throughput)
 };
 
 /**
@@ -48,7 +53,7 @@ struct TrackingState {
  * \return A pair (advance, active):
  *      advance:    If true, tracking has exited the segment and requires a
  *                  new one. If false, repeat the loop with the same segment.
- *      active:     Represent active lanes. Lanes that have sample a real 
+ *      active:     Represent active lanes. Lanes that have sampled a real 
  *                  interaction or terminated for other reasons will return 
  *                  ``false``, prompting the termination of the traversal.
  */

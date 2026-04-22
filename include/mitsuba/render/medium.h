@@ -106,6 +106,18 @@ public:
     }
 
 // #ERADIATE_CHANGE_BEGIN: Extremum Structure accessor and traversal helpers
+    /**
+     * \brief Intersects ray with the medium bbox and creates a medium interaction.
+     * 
+     * \param ray   The ray that is used to test the medium bbox.
+     *       
+     * \return
+     *      A tuple (mei, mint, maxt): ``mei`` is a  ``MediumInteraction3f``
+     *      object initialized with the current ray and medium data. ``mint`` 
+     *      and ``maxt`` represent the minimum and maximum intersection 
+     *      distances of the ray with the medium's bbox. In case there are no
+     *      valid intersection, the range defaults to [0, +Inf].
+     */
     std::tuple<MediumInteraction3f, Float, Float> 
     prepare_medium_traversal(const Ray3f& ray, Mask active) const;
 

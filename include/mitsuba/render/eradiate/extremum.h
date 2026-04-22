@@ -33,7 +33,13 @@ public:
 
     /**
      * \brief Traverse the extremum along a ray and applies a callback at each
-     * encountered segment.         .
+     * encountered segment.
+     * 
+     * This method traverses the extremum structure segment by segment. At each
+     * segment, the callback ``func`` is called to advance the ``state``. This
+     * is useful for example to implement Delta Tracking, Ratio Tracking, and
+     * Residual Ratio Tracking. The callback is typically defined in the
+     * integrator.
      *
      * \param ray           Ray along which to sample
      * \param mint          Minimum distance to consider
@@ -62,6 +68,7 @@ public:
         Mask active = true
     ) const;
 
+    // Note: this is currently dead code. It is kept in case it is needed in the future.
     /**
      * \brief Evaluate the minorant and majorant at a medium interaction point.
      *
@@ -75,8 +82,6 @@ public:
      *      The minorant and majorant values at the medium interaction point.
      *      Clamped values outside bounds.
      * 
-     * Note: this is currently dead code. It is kept in case it is needed in the
-     * future.
      */
     virtual std::tuple<Float, Float> eval_1(
         const Interaction3f & it,
