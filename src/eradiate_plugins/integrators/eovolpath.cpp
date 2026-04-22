@@ -25,52 +25,60 @@ EO Volumetric path tracer (:monosp:`eovolpath`)
 
  * - max_depth
    - |int|
-   - Specifies the longest path depth in the generated output image (where -1 corresponds to
-     :math:`\infty`). A value of 1 will only render directly visible light sources. 2 will lead
-     to single-bounce (direct-only) illumination, and so on. (Default: -1)
+   - Specifies the longest path depth in the generated output image (where -1
+     corresponds to :math:`\infty`). A value of 1 will only render directly
+     visible light sources. 2 will lead to single-bounce (direct-only)
+     illumination, and so on. Default: -1
 
  * - rr_depth
    - |int|
-   - Specifies the minimum path depth, after which the implementation will start to use the
-     *russian roulette* path termination criterion. (Default: 5)
+   - Specifies the minimum path depth, after which the implementation will start
+     to use the *russian roulette* path termination criterion. Default: 5
 
  * - rr_factor
    - |float|
-   - Specifies the maximum probability to keep a path when russian roulette is evaluated.
-     (Default: 0.97)
+   - Specifies the maximum probability to keep a path when russian roulette is
+     evaluated. Default: 0.97
 
  * - ddis_threshold
    - |float|
-   - Specifies the probability to importance sample the phase using the emitter as
-     incident direction. Set to a negative value to disable. (Default: 0.1)
+   - Specifies the probability to importance sample the phase using the emitter
+     as incident direction. Set to a negative value to disable. Default: 0.1
 
  * - hide_emitters
    - |bool|
-   - Hide directly visible emitters. (Default: no, i.e. |false|)
+   - Hide directly visible emitters. Default: no, *i.e.* |False|
 
-This plugin provides a volumetric path tracer catered towards Earth Observation simualtions that can
-be used to compute approximate solutions of the radiative transfer equation. Its implementation
-makes use of multiple importance sampling to combine BSDF and phase function sampling with direct
-illumination sampling strategies. On surfaces, it behaves exactly like the standard path tracer.
+This plugin provides a volumetric path tracer catered towards Earth Observation
+simulations that can be used to compute approximate solutions of the radiative
+transfer equation. Its implementation makes use of multiple importance sampling
+to combine BSDF and phase function sampling with direct illumination sampling
+strategies. On surfaces, it behaves exactly like the standard path tracer.
 
-This integrator has special support for index-matched transmission events (i.e. surface scattering
-events that do not change the direction of light). As a consequence, participating media enclosed by
-a stencil shape are rendered considerably more efficiently when this shape
-has a :ref:`null <bsdf-null>` or :ref:`thin dielectric <bsdf-thindielectric>` BSDF assigned
-to it (as compared to, say, a :ref:`dielectric <bsdf-dielectric>` or
+This integrator has special support for index-matched transmission events
+(*i.e.* surface scattering events that do not change the direction of light).
+As a consequence, participating media enclosed by a stencil shape are rendered
+considerably more efficiently when this shape has a :ref:`null <bsdf-null>` or
+:ref:`thin dielectric <bsdf-thindielectric>` BSDF assigned to it (as compared
+to, say, a :ref:`dielectric <bsdf-dielectric>` or
 :ref:`roughdielectric <bsdf-roughdielectric>` BSDF).
 
-In addition, it implements the DDIS variance reduction method (Buras and Mayer, 2011) which reduces
-noise in the presence of strongly peaked phase functions. More variance reduction methods coming up
-soon!
+In addition, it implements the DDIS variance reduction method
+:cite:p:`Buras2011EfficientUnbiasedVariance` which reduces noise in the presence
+of strongly peaked phase functions.
 
-.. note:: This integrator does not implement good sampling strategies to render
-    participating media with a spectrally varying extinction coefficient. For these cases,
-    it is better to use the more advanced :ref:`volumetric path tracer with
-    spectral MIS <integrator-volpathmis>`, which will produce in a significantly less noisy
-    rendered image. Note however that it does not implement the EO features added in this integrator.
+.. note::
 
-.. warning:: This integrator does not support forward-mode differentiation.
+    This integrator does not implement good sampling strategies to render
+    participating media with a spectrally varying extinction coefficient. For
+    these cases, it is better to use the more advanced
+    :ref:`volumetric path tracer with spectral MIS <integrator-volpathmis>`,
+    which will produce in a significantly less noisy rendered image. Note however
+    that it does not implement the EO features added in this integrator.
+
+.. warning::
+
+    This integrator does not support forward-mode differentiation.
 */
 template <typename Float, typename Spectrum>
 class EOVolumetricPathIntegrator : public MonteCarloIntegrator<Float, Spectrum> {

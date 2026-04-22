@@ -28,6 +28,7 @@ EMITTER_ORDERING = [
 EXTREMUM_ORDERING = [
     "extremum_grid",
     "extremum_spherical",
+    "extremum_global",
 ]
 
 INTEGRATOR_ORDERING = [
@@ -40,18 +41,18 @@ MEDIA_ORDERING = [
 ]
 
 PHASE_ORDERING = [
-    "multiphase",
     "rayleigh_polarized",
     "tabphase_irregular",
     "tabphase_polarized",
+    "multiphase",
 ]
 
 SENSOR_ORDERING = [
-    "distantflux",
     "hdistant",
     "mdistant",
     "mpdistant",
     "mradiancemeter",
+    "distantflux",
 ]
 
 SHAPE_ORDERING = [
@@ -153,7 +154,7 @@ def process(path, target, ordering):
 def process_src(target, src_subdir, ordering=None):
     section = "section_" + src_subdir
 
-    with open("src/plugin_reference/" + section + ".rst", "r", encoding="utf-8") as f:
+    with open("plugin_reference/" + section + ".rst", "r", encoding="utf-8") as f:
         target.write(f.read())
     process("../src/eradiate_plugins/{0}".format(src_subdir), target, ordering)
 

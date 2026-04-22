@@ -54,8 +54,8 @@ Lookup table (polarized) phase function (:monosp:`tabphase_polarized`)
  * - nodes
    - |string|
    - A comma-separated list of :math:`\cos \theta` specifying the grid on which
-     `values` are defined. Bounds must be [-1, 1] and values must be strictly
-     increasing. Must have the same length as `values`.
+     ``values`` are defined. Bounds must be [-1, 1] and values must be strictly
+     increasing. Must have the same length as ``values``.
    - |exposed|
 
 This plugin implements a generic phase function model for isotropic media
@@ -74,7 +74,7 @@ function of the cosine of the scattering angle.
    * For polarized phase functions, this assumes (for the time being) the
      structure of a phase function with spherically symmetric particles,
      i.e. there are only four unique elements of the Mueller matrix:
-     `M_{11}`, `M_{12}`, `M_{33}`, and `M_{34}`
+     :math:`M_{11}`, :math:`M_{12}`, :math:`M_{33}`, and :math:`M_{34}`
 */
 
 /**

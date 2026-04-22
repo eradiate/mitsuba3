@@ -7,7 +7,7 @@
 NAMESPACE_BEGIN(mitsuba)
 
 /**!
-.. _extremum-extremum_grid:
+.. _extremum-extremum_global:
 
 Extremum global structure (:monosp:`extremum_global`)
 -----------------------------------------------------
@@ -16,12 +16,12 @@ Extremum global structure (:monosp:`extremum_global`)
 
  * - volume
    - |volume|
-   - Extinction coefficient volume to build extremum grid from
+   - Extinction coefficient volume to build extremum grid from.
    - |exposed|
 
  * - scale
    - |float|
-   - Scale factor for the extremum values (Default: 1.0).
+   - Scale factor for the extremum values. Default: 1.0
 
 This plugin holds the global minorant and majorant values of a volume.
 At runtime, traversal is performed via a single segment determined by the

@@ -5,16 +5,14 @@
 # Adapted from docs/docs_api/conf.py.
 #
 # Build this subsite separately before the main site:
-#   sphinx-build -b html docs_api _build/html_api
+#   sphinx-build -b html _docs_api _build/html_api
 #
 # This build generates docs_eradiate/generated/eradiate_api.rst, which is
-# then included by the main site's src/api_reference/index.rst.
+# then included by the main site's api_reference/index.rst.
 
-import sys
-import os
 import enum
-from os.path import join, realpath, dirname
 import re
+from os.path import dirname, join, realpath
 
 # -- General configuration ------------------------------------------------
 
@@ -87,6 +85,9 @@ api_doc_structure = {
     "Extremum": [
         r"mitsuba\.ExtremumSegment([\w]*)",
         r"mitsuba\.ExtremumStructure([\w]*)",
+    ],
+    "Constants": [
+        r"mitsuba.ERD_MI_([\w]+)",
     ],
 }
 
@@ -162,7 +163,12 @@ def parse_signature_args(signature):
 
 def parse_overload_signature(signature):
     signature = sanitize_types(signature)
-    signature = signature[3:]
+    signature = signature[3:].strip()
+    # Strip RST inline-code backticks that nanobind wraps overload signatures with
+    if signature.startswith("``"):
+        signature = signature[2:]
+    if signature.endswith("``"):
+        signature = signature[:-2]
     name, signature = signature.split("(", 1)
 
     return_type = None
@@ -387,7 +393,7 @@ def process_docstring_callback(app, what, name, obj, options, lines):
 
         extracted_rst.append("\n")
 
-    if not what in ["module", "data"]:
+    if what not in ["module", "data"]:
         for l in lines:
             if l == "":
                 extracted_rst.append("\n")
@@ -450,8 +456,9 @@ html_theme = "alabaster"
 
 def setup(app):
     import inspect
-    from sphinx.util import inspect as sphinx_inspect
+
     import sphinx
+    from sphinx.util import inspect as sphinx_inspect
 
     if sphinx.__version__ != "8.1.3":
         import warnings

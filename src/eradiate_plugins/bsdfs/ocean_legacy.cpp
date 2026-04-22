@@ -19,7 +19,7 @@ NAMESPACE_BEGIN(mitsuba)
 
 .. _plugin-bsdf-ocean_legacy:
 
-(Legacy 6S) Oceanic reflection model (:monosp:`ocean-legacy`)
+(Legacy 6S) Oceanic reflection model (:monosp:`ocean_legacy`)
 -------------------------------------------------------------
 
 .. pluginparameters::
@@ -63,12 +63,19 @@ NAMESPACE_BEGIN(mitsuba)
 
  * - component
    - |int|
-   - Debug: specifies which component of the oceanic reflection model to
-     evaluate. Default: 0 Component 0 is used to evaluate the total oceanic
-     reflectance. Component 1 evaluates the whitecap reflectance. Component 2
-     evaluates the sun glint reflectance. Component 3 evaluates the underlight
-     reflectance. Component 4 evaluates the whitecap and underlight reflectance
-     together.
+   - **Debug:** specifies which component of the oceanic reflection model to
+     evaluate. Default: 0.
+
+     **Component 0:** Used to evaluate the total oceanic reflectance.
+
+     **Component 1:** Evaluates the whitecap reflectance.
+
+     **Component 2:** Evaluates the sun glint reflectance.
+
+     **Component 3:** Evaluates the underlight reflectance.
+
+     **Component 4:** Evaluates the whitecap and underlight reflectance together.
+
    - |exposed|
 
  * - coverage

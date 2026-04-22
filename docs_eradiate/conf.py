@@ -3,11 +3,29 @@
 #
 # Eradiate Mitsuba fork — Sphinx documentation configuration
 
-import sys
 import os
-from pathlib import Path
+import re
+import sys
 
-sys.path.insert(0, os.path.abspath("exts"))
+sys.path.insert(0, os.path.abspath("_exts"))
+
+# -- Version info sourced from mitsuba.h ----------------------------------
+
+
+def _read_version():
+    header = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..",
+        "include",
+        "mitsuba",
+        "mitsuba.h",
+    )
+    text = open(header, encoding="utf-8").read()
+    major, minor, patch = re.findall(
+        r"#define ERD_MI_VERSION_(?:MAJOR|MINOR|PATCH)\s+(\d+)", text
+    )[:3]
+    return f"{major}.{minor}", f"{major}.{minor}.{patch}"
+
 
 # -- General configuration ------------------------------------------------
 
@@ -18,8 +36,7 @@ project = "Eradiate Mitsuba"
 copyright = "2024, Rayference"
 author = "Rayference"
 
-version = "0.4.3"
-release = "0.4.3"
+version, release = _read_version()
 
 extensions = [
     "sphinx.ext.autodoc",
@@ -39,8 +56,10 @@ extensions = [
 exclude_patterns = [
     "_build",
     "**.ipynb_checkpoints",
-    "docs_api/**",
-    "src/plugin_reference/section_*.rst",
+    "_docs_api/**",
+    "plugin_reference/section_*.rst",
+    "generated/extracted_rst_api.rst",
+    "generated/eradiate_api.rst",
 ]
 
 default_role = "any"
@@ -137,7 +156,7 @@ def custom_step(app):
         with open(api_rst, "w", encoding="utf-8") as f:
             f.write(
                 ".. note::\n\n"
-                "   Run ``sphinx-build -b html docs_api _build/html_api`` first\n"
+                "   Run ``sphinx-build -b html _docs_api _build/html_api`` first\n"
                 "   to generate the API reference content.\n"
             )
 

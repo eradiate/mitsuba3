@@ -100,6 +100,14 @@
 
 .. autoclass:: mitsuba.DummyStream
 
+.. autofunction:: mitsuba.ERD_MI_VERSION
+
+.. autofunction:: mitsuba.ERD_MI_VERSION_MAJOR
+
+.. autofunction:: mitsuba.ERD_MI_VERSION_MINOR
+
+.. autofunction:: mitsuba.ERD_MI_VERSION_PATCH
+
 .. autoclass:: mitsuba.Emitter
 
 .. autoclass:: mitsuba.EmitterFlags
@@ -107,6 +115,12 @@
 .. autoclass:: mitsuba.EmitterPtr
 
 .. autoclass:: mitsuba.Endpoint
+
+.. autoclass:: mitsuba.ExtremumSegment
+
+.. autoclass:: mitsuba.ExtremumStructure
+
+.. autoclass:: mitsuba.ExtremumStructurePtr
 
 .. autoclass:: mitsuba.FileResolver
 
@@ -261,8 +275,6 @@
 .. autoclass:: mitsuba.Object
 
 .. autoclass:: mitsuba.ObjectType
-
-.. autoclass:: mitsuba.OptixDenoiser
 
 .. autoclass:: mitsuba.PCG32
 

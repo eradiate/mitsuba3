@@ -10,47 +10,49 @@ NAMESPACE_BEGIN(mitsuba)
 .. _plugin-bsdf-rtls:
 
 Ross-Thick Li-Sparse reflection model (:monosp:`rtls`)
---------------------------------------------------------
+------------------------------------------------------
 
 .. pluginparameters::
 
  * - f_iso
    - |spectrum| or |texture|
-   - :math:`f_{iso}`. Default: 0.209741
+   - :math:`f_\mathrm{iso}`. Default: 0.209741
    - |exposed| |differentiable|
 
  * - f_geo
    - |spectrum| or |texture|
-   - :math:`f_{geo}`. Default: 0.081384
+   - :math:`f_\mathrm{geo}`. Default: 0.081384
    - |exposed| |differentiable|
 
  * - f_vol
    - |spectrum| or |texture|
-   - :math:`f_{vol}`. Default: 0.004140
+   - :math:`f_\mathrm{vol}`. Default: 0.004140
    - |exposed| |differentiable|
 
  * - h
    - |float|
-   - :math:`h`. Default: 2.f
+   - :math:`h`. Default: 2.0
    - |exposed|
 
  * - r
    - |float|
-   - :math:`r`. Default: 1.f
+   - :math:`r`. Default: 1.0
    - |exposed|
 
  * - b
    - |float|
-   - :math:`b`. Default: 1.f
+   - :math:`b`. Default: 1.0
    - |exposed|
 
 The RTLS plugin implement the Ross-Thick, Li-Sparse model proposed by
-(Strahler et al, 1999) for the MODIS operational the BRDF model Version 5.0
+:cite:t:`BU-MODISBRDFAlbedoProductATBD1999` for the MODIS operational BRDF model
+(Version 5.0).
 
-Default parameters for :math:`f_k` parameters are taken from the RAMI4ATM
-benchmark test cases defined by the JRC, for measures done using the Sentinel-2A
-MSI band 8A spectral region (centered around 865nm):
-https://rami-benchmark.jrc.ec.europa.eu
+The default values for the :math:`f_k` parameters are taken from the RAMI4ATM
+benchmark test cases defined by the Joint Research Centre, for measures done
+using the Sentinel-2A MSI band 8A spectral region (centred around 865 nm).
+See the `official RAMI website <https://rami-benchmark.jrc.ec.europa.eu>`__ for
+details.
 
 */
 

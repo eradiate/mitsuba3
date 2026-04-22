@@ -3,14 +3,14 @@ Adds subfigure functionality.
 Verbatim copy from docs/exts/sphinxtr/subfig.py.
 """
 
-from docutils import nodes
+import re
+
 import docutils.parsers.rst.directives as directives
+from docutils import nodes
 from docutils.parsers.rst import Directive
 from docutils.parsers.rst.directives.images import Image
 from docutils.statemachine import ViewList
 from sphinx.util.nodes import nested_parse_with_titles
-
-import re
 
 class_re = re.compile('class="(.*?)"')
 

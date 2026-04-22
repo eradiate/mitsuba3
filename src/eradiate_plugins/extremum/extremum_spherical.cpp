@@ -28,24 +28,27 @@ Extremum spherical structure (:monosp:`extremum_spherical`)
 
  * - to_world
    - |transform|
-   - Specifies an optional 4x4 transformation matrix that will be applied to volume coordinates.
+   - Specifies an optional 4×4 transformation matrix that will be applied to
+     volume coordinates.
 
  * - rmin
    - |float|
-   - Inner shell radius. It should preferrably match the underlying volume (Default: 0).
+   - Inner shell radius. It should preferably match the underlying volume.
+     Default: 0
 
  * - rmax
    - |float|
-   - Outer shell radius. It should preferrably match the underlying volume (Default: 1).
+   - Outer shell radius. It should preferably match the underlying volume.
+     Default: 1
 
  * - resolution
    - |vector|
-   - Grid resolution as (r, theta, phi). Grids with variations on only the
-     radial resolution have optimized traversal (Default: (1, 1, 1)).
+   - Grid resolution as :math:`(r, \theta, \phi)`. Grids with variations on only
+     the radial resolution have optimized traversal. Default: [1,1,1]
 
  * - scale
    - |float|
-   - Scale factor for extinction coefficients (Default: 1.0)
+   - Scale factor for extinction coefficients. Default: 1.0
 
 This plugin creates a spherical extremum structure storing local extremum values
 for efficient delta tracking in spherical media. The grid is constructed by

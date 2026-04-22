@@ -1,9 +1,15 @@
 /* Eradiate Mitsuba docs — custom CSS overrides */
 
+/* Plugin parameter tables: monospace parameter names */
+.paramtype,
+.monosp {
+    font-family: var(--sy-f-mono);
+}
+
 /* Parameter table: constrain first two columns, monospace parameter names */
 table.paramstable td:nth-child(1),
 table.paramstable th:nth-child(1) {
-    font-family: var(--font-stack--monospace);
+    font-family: var(--sy-f-mono);
     white-space: nowrap;
     min-width: 8em;
 }
@@ -18,4 +24,10 @@ table.paramstable td:nth-child(4),
 table.paramstable th:nth-child(4) {
     text-align: center;
     min-width: 3em;
+}
+
+/* API reference: hide method/property entries from the local TOC (keep
+   only section and class-level entries). */
+div.localtoc ul ul ul {
+    display: none;
 }

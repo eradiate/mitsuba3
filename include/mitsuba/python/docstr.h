@@ -2867,13 +2867,42 @@ static const char *__doc_mitsuba_Endpoint_traverse_1_cb_rw = R"doc()doc";
 
 static const char *__doc_mitsuba_Endpoint_world_transform = R"doc(Return the local space to world space transformation)doc";
 
-static const char *__doc_mitsuba_ExtremumSegment = R"doc()doc";
+static const char *__doc_mitsuba_ExtremumSegment =
+R"doc(Stores the extremum (minorant/majorant) data for a ray segment.
 
-static const char *__doc_mitsuba_ExtremumSegment_ExtremumSegment = R"doc()doc";
+Used as the output type of ExtremumStructure traversal. Tracks the
+segment's entry/exit distances and the local extinction coefficient
+bounds within that interval.)doc";
 
-static const char *__doc_mitsuba_ExtremumSegment_ExtremumSegment_2 = R"doc()doc";
+static const char *__doc_mitsuba_ExtremumSegment_ExtremumSegment = R"doc(Default constructor — creates an invalid segment via reset())doc";
 
-static const char *__doc_mitsuba_ExtremumSegment_ExtremumSegment_3 = R"doc()doc";
+static const char *__doc_mitsuba_ExtremumSegment_ExtremumSegment_2 =
+R"doc(Construct from entry/exit distances and a combined extremum vector.
+
+Parameter ``mint``:
+    Segment entry distance
+
+Parameter ``maxt``:
+    Segment exit distance
+
+Parameter ``value``:
+    Extremum vector [minorant, majorant])doc";
+
+static const char *__doc_mitsuba_ExtremumSegment_ExtremumSegment_3 =
+R"doc(Construct from entry/exit distances and separate minorant/majorant
+values.
+
+Parameter ``mint``:
+    Segment entry distance
+
+Parameter ``maxt``:
+    Segment exit distance
+
+Parameter ``minorant``:
+    Lower extinction bound over the segment
+
+Parameter ``majorant``:
+    Upper extinction bound over the segment)doc";
 
 static const char *__doc_mitsuba_ExtremumSegment_ExtremumSegment_4 = R"doc()doc";
 
