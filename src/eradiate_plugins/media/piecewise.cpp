@@ -339,10 +339,10 @@ public:
         return { mei, tr, pdf };
     }
 
-    std::tuple<Float, Float, Mask>
-    eval_transmittance_pdf_real(const Ray3f &ray,
-                                const SurfaceInteraction3f &si, UInt32 channel,
-                                Mask active) const override {
+    Float eval_analytical_transmittance(const Ray3f &ray,
+                                        const SurfaceInteraction3f &si, 
+                                        UInt32 channel,
+                                        Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
 
         // Initial intersection with the medium
@@ -350,8 +350,6 @@ public:
         aabb_its &= (dr::isfinite(mint) || dr::isfinite(maxt));
         active &= aabb_its;
         mint         = dr::maximum(0.f, mint);
-        Mask escaped = active && ((maxt >= ray.maxt) || (maxt >= si.t));
-
         maxt =
             dr::select(active, dr::minimum(ray.maxt, dr::minimum(maxt, si.t)),
                        dr::Infinity<Float>);
@@ -428,12 +426,9 @@ public:
             dr::select(same_cell, (maxt - mint) * s_sigma_t, cum_opt_thick);
 
         Float tr               = dr::zeros<Float>();
-        Float pdf              = dr::zeros<Float>();
         dr::masked(tr, active) = dr::exp(-opt_thick);
-        dr::masked(pdf, active) =
-            dr::select(si.t < maxt || ray.maxt < maxt, tr, tr * e_sigma_t);
 
-        return { tr, pdf, escaped };
+        return tr;
     }
 
     void traverse(TraversalCallback *cb) override {

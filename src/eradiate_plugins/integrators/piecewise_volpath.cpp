@@ -471,7 +471,6 @@ public:
 
             dr::masked(si, active) = scene->ray_intersect(ray, active);
 
-            Mask escaped_medium = false;
             Mask active_medium  = active && (medium != nullptr);
             Mask active_surface = active && si.is_valid();
 
@@ -481,22 +480,13 @@ public:
             dr::masked(total_dist, active_surface && !active_medium) += si.t;
 
             if (dr::any_or<true>(active_medium)) {
+                UnpolarizedSpectrum tr =
+                    medium->eval_analytical_transmittance(ray, si, channel,
+                                                        active_medium);
+                dr::masked(transmittance, active_medium) *= tr; // exact estimation
 
-                Mask is_spectral =
-                    medium->has_spectral_extinction() && active_medium;
-
-                if (dr::any_or<true>(is_spectral)) {
-                    UnpolarizedSpectrum tr = dr::zeros<UnpolarizedSpectrum>();
-                    UnpolarizedSpectrum free_flight_pdf =
-                        dr::zeros<UnpolarizedSpectrum>();
-
-                    std::tie(tr, free_flight_pdf, escaped_medium) =
-                        medium->eval_transmittance_pdf_real(ray, si, channel,
-                                                            active_medium);
-                    dr::masked(transmittance, is_spectral) *= tr; // exact estimation
-                }
-
-                active_medium &= !escaped_medium;
+                // consider we automatically escape the medium.
+                active_medium &= false;
             }
 
             if (dr::any_or<true>(active_surface)) {

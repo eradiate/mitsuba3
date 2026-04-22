@@ -117,13 +117,13 @@ Medium<Float, Spectrum>::sample_interaction_real(const Ray3f &/*ray*/,
 }
 
 MI_VARIANT
-std::tuple<Float, Float, typename Medium<Float, Spectrum>::Mask>
-Medium<Float, Spectrum>::eval_transmittance_pdf_real(const Ray3f &/*ray*/, 
+Float
+Medium<Float, Spectrum>::eval_analytical_transmittance(const Ray3f &/*ray*/, 
                                     const SurfaceInteraction3f &/*si*/,
                                     UInt32 /*channel*/, Mask /*active*/) const {
     // PiecewiseVolPathIntegrator should only be used with piecewise medium
-    NotImplementedError("eval_transmittance_pdf_real");
-    return {0.f, 0.f, false};
+    NotImplementedError("eval_analytical_transmittance");
+    return 0.f;
 }
 // #RAY_CHANGE_END
 
