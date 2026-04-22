@@ -1,0 +1,16 @@
+# Prek hook definitions. See https://prek.j178.dev for more information.
+files: ^(docs_eradiate|src/eradiate_plugins)/
+
+repos:
+  - repo: 'https://github.com/pre-commit/pre-commit-hooks'
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.11
+    hooks:
+      - id: ruff-check
+      - id: ruff-format
