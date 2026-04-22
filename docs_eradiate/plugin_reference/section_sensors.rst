@@ -18,4 +18,3 @@ downward-arriving radiance integrated over specified angular configurations.
   intensity along a single fixed direction.
 - :monosp:`distantflux` — integrates the upwelling radiant flux (irradiance)
   over the entire hemisphere above the scene.
-

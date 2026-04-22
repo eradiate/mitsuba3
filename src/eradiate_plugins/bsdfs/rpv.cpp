@@ -31,7 +31,7 @@ Rahman Pinty Verstraete reflection model (:monosp:`rpv`)
 
  * - rho_c
    - |spectrum| or |texture|
-   - Default: Equal to `rho_0`
+   - Default: Equal to ``rho_0``
    - |exposed| |differentiable|
 
 This plugin implements the reflection model proposed by

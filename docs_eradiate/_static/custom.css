@@ -19,3 +19,9 @@ table.paramstable th:nth-child(4) {
     text-align: center;
     min-width: 3em;
 }
+
+/* API reference: hide method/property entries from the local TOC (keep
+   only section and class-level entries). */
+div.localtoc ul ul ul {
+    display: none;
+}

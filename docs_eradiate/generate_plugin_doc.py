@@ -153,7 +153,7 @@ def process(path, target, ordering):
 def process_src(target, src_subdir, ordering=None):
     section = "section_" + src_subdir
 
-    with open("src/plugin_reference/" + section + ".rst", "r", encoding="utf-8") as f:
+    with open("plugin_reference/" + section + ".rst", "r", encoding="utf-8") as f:
         target.write(f.read())
     process("../src/eradiate_plugins/{0}".format(src_subdir), target, ordering)
 

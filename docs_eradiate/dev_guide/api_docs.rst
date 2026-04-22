@@ -8,7 +8,7 @@ Overview
 
 .. code-block:: text
 
-   docs_eradiate/docs_api/list_api.rst   ← declares what to document
+   docs_eradiate/_docs_api/list_api.rst   ← declares what to document
            │
            │  sphinx-build (docs-api task)
            │  autodoc + nanobind patches
@@ -18,12 +18,12 @@ Overview
            │
            │  sphinx-build (docs task)
            ▼
-   docs_eradiate/_build/html/src/api_reference/index.html
+   docs_eradiate/_build/html/api_reference/index.html
 
 Stage 1 — API subsite (``docs-api``)
---------------------------------------
+------------------------------------
 
-Source directory: ``docs_eradiate/docs_api/``
+Source directory: ``docs_eradiate/_docs_api/``
 
 The sole source file is ``list_api.rst``, which contains standard Sphinx
 ``autoclass`` / ``autofunction`` directives for every eradiate-specific
@@ -68,20 +68,20 @@ The ``conf.py`` for this subsite does several things during the build:
 .. note::
 
    On incremental builds Sphinx reuses its pickled environment and skips
-   re-reading sources, so the autodoc callbacks do not fire.  The
+   re-reading sources, so the autodoc callbacks do not fire. The
    ``build-finished`` handler detects this (``last_block_name is None``) and
    returns early without overwriting the generated files.
 
 Controlling what is documented
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 **Adding a symbol** — append an ``.. autoclass::`` or ``.. autofunction::``
-directive to ``docs_eradiate/docs_api/list_api.rst``.
+directive to ``docs_eradiate/_docs_api/list_api.rst``.
 
 **Organizing into sections** — edit ``api_doc_structure`` in
-``docs_eradiate/docs_api/conf.py``.  Each key becomes a section heading;
+``docs_eradiate/_docs_api/conf.py``. Each key becomes a section heading;
 each value is a list of regex patterns matched against the fully-qualified
-Python name.  Symbols that do not match any pattern are placed in an
+Python name. Symbols that do not match any pattern are placed in an
 "Other" section automatically.
 
 .. code-block:: python
@@ -94,20 +94,19 @@ Python name.  Symbols that do not match any pattern are placed in an
    }
 
 Stage 2 — main site (``docs``)
----------------------------------
+------------------------------
 
 Source directory: ``docs_eradiate/``
 
-``src/api_reference/index.rst`` includes the generated index:
+``api_reference/index.rst`` includes the generated index:
 
 .. code-block:: rst
 
-   .. include:: ../../generated/eradiate_api.rst
+   .. include:: ../generated/eradiate_api.rst
 
 Sphinx then processes ``eradiate_api.rst``, which splices the relevant line
-ranges from ``extracted_rst_api.rst`` into the rendered page.  Both generated
-files must exist before this build runs, which is why ``docs-api`` is listed
-as a dependency of ``docs`` in ``pixi.toml``.
+ranges from ``extracted_rst_api.rst`` into the rendered page. Both generated
+files must exist before this build runs, so ``docs-api`` must be run first.
 
 Build tasks
 -----------
@@ -119,14 +118,14 @@ Build tasks
    * - Task
      - Description
    * - ``pixi run docs-api``
-     - Build only the API subsite.  Run this after changing
+     - Build only the API subsite. Run this after changing
        ``list_api.rst`` or ``api_doc_structure``.
    * - ``pixi run docs``
-     - Build the full site (runs ``docs-api`` first).
+     - Build the main site. Run ``pixi run docs-api`` first.
    * - ``pixi run docs-serve``
-     - Live-reload server.  Watches ``docs_eradiate/`` but ignores
+     - Live-reload server. Watches ``docs_eradiate/`` but ignores
        ``generated/`` to avoid rebuild loops caused by the file-generation
        step.
    * - ``pixi run docs-clean``
-     - Remove ``docs_eradiate/_build/``.  Run before ``docs`` to force a
+     - Remove ``docs_eradiate/_build/``. Run before ``docs`` to force a
        full rebuild.

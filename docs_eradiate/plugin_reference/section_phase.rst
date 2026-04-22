@@ -14,4 +14,3 @@ radiative transfer:
   matrix form) for polarized light transport through anisotropic media.
 - :monosp:`multiphase` — linearly combines multiple phase functions, enabling
   composite media (e.g., a mixture of molecular and aerosol scattering).
-

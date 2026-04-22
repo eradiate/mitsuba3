@@ -20,10 +20,9 @@ interface. Two concrete implementations are provided:
 Both plugins expose a Python API and can be traversed with
 :py:func:`mitsuba.traverse`. The associated :py:class:`mitsuba.ExtremumSegment`
 struct represents a single traversal segment and is documented in the
-:doc:`../../src/api_reference/index`.
+:doc:`../api_reference/index`.
 
 .. note::
 
    This plugin category was introduced after v0.4.3 and is not present in the
    corresponding PyPI release of ``eradiate-mitsuba``.
-

@@ -3588,6 +3588,22 @@
     .. py:method:: __init__()
 
 
+.. py:data:: mitsuba.ERD_MI_VERSION
+    :type: str
+    :value: 0.4.3
+
+.. py:data:: mitsuba.ERD_MI_VERSION_MAJOR
+    :type: int
+    :value: 0
+
+.. py:data:: mitsuba.ERD_MI_VERSION_MINOR
+    :type: int
+    :value: 4
+
+.. py:data:: mitsuba.ERD_MI_VERSION_PATCH
+    :type: int
+    :value: 3
+
 .. py:class:: mitsuba.Emitter
 
     Base class: :py:obj:`mitsuba.Endpoint`
@@ -4293,6 +4309,261 @@
 
         Returns → :py:obj:`mitsuba.AffineTransform4f`:
             *no description available*
+
+.. py:class:: mitsuba.ExtremumSegment
+
+
+    .. py:method:: ``__init__()
+
+
+        Returns → None``:
+            *no description available*
+
+    .. py:method:: ``__init__(self, other)
+
+        Copy constructor
+
+        Parameter ``other`` (:py:obj:`mitsuba.ExtremumSegment`):
+            *no description available*
+
+        Returns → None``:
+            *no description available*
+
+    .. py:method:: ``__init__(self, mint, maxt, minorant, majorant)
+
+
+        Parameter ``mint`` (drjit.llvm.ad.Float):
+            *no description available*
+
+        Parameter ``maxt`` (drjit.llvm.ad.Float):
+            *no description available*
+
+        Parameter ``minorant`` (drjit.llvm.ad.Float):
+            *no description available*
+
+        Parameter ``majorant`` (drjit.llvm.ad.Float):
+            *no description available*
+
+        Returns → None``:
+            *no description available*
+
+    .. py:method:: ``__init__(self, mint, maxt, value)
+
+        Parameter ``mint`` (drjit.llvm.ad.Float):
+            *no description available*
+
+        Parameter ``maxt`` (drjit.llvm.ad.Float):
+            *no description available*
+
+        Parameter ``value`` (:py:obj:`mitsuba.Vector2f`):
+            *no description available*
+
+        Returns → None``:
+            *no description available*
+
+    .. py:method:: mitsuba.ExtremumSegment.assign(self, arg)
+
+        Parameter ``arg`` (:py:obj:`mitsuba.ExtremumSegment`, /):
+            *no description available*
+
+        Returns → None:
+            *no description available*
+
+    .. py:method:: mitsuba.ExtremumSegment.majorant()
+
+        Majorant value over the segment. Accessor to the second element of
+        ``value``.
+
+        Returns → drjit.llvm.ad.Float:
+            *no description available*
+
+    .. py:property:: mitsuba.ExtremumSegment.maxt
+
+        Segment exit distance along ray
+
+    .. py:method:: mitsuba.ExtremumSegment.minorant()
+
+        Minorant value over the segment. Accessor to the first element of
+        ``value``.
+
+        Returns → drjit.llvm.ad.Float:
+            *no description available*
+
+    .. py:property:: mitsuba.ExtremumSegment.mint
+
+        Segment entry distance along ray
+
+    .. py:method:: mitsuba.ExtremumSegment.reset()
+
+        Mark the extremum segment as invalid.
+
+        This operation sets segment's minimum and maximum distances to
+        :math:`\infty` and :math:`-\infty`, respectively.
+
+        Returns → None:
+            *no description available*
+
+    .. py:method:: mitsuba.ExtremumSegment.valid()
+
+        Check whether this is a valid segment
+
+        A segment is considered valid when
+
+        .. code-block:: c
+
+            segment.mint < segment.maxt
+
+
+        Returns → drjit.llvm.ad.Bool:
+            *no description available*
+
+    .. py:property:: mitsuba.ExtremumSegment.value
+
+        Extremum data stored as [minorant, majorant]
+
+    .. py:method:: mitsuba.ExtremumSegment.zero_(self, size=1)
+
+        Overloaded function.
+
+        1. ``zero_(self, size: int = 1) -> None``
+
+
+        2. ``zero_(self, arg: int, /) -> None``
+
+        This callback method is invoked by dr::zeros<>, and takes care of
+        fields that deviate from the standard zero-initialization convention.
+        In ExtremumSegment, the ``mint`` and ``maxt`` fields are set to + and
+        - infinity respectively to to mark invalid intersection records.
+
+        Parameter ``size`` (int):
+            *no description available*
+
+        Returns → None:
+            *no description available*
+
+.. py:class:: mitsuba.ExtremumStructure
+
+    Base class: :py:obj:`mitsuba.Object`
+
+    Abstract base class for extremum structures
+
+    ExtremumStructure provides an interface for spatial data structures
+    that store local extrema (majorant/minorant) of volumetric extinction
+    coefficients. This enables efficient delta tracking with locally-
+    adaptive majorants.
+
+    To minimize virtual function overhead, the ``sample_segment()`` method
+    encapsulates the entire traversal loop internally, requiring only a
+    single virtual call per distance sample.
+
+    .. py:method:: __init__(self, props)
+
+        Parameter ``props`` (:py:obj:`mitsuba.Properties`):
+            *no description available*
+
+
+    .. py:method:: mitsuba.ExtremumStructure.bbox()
+
+        Return the bounding box of the extremum structure
+
+        Returns → :py:obj:`mitsuba.ScalarBoundingBox3f`:
+            *no description available*
+
+    .. py:method:: mitsuba.ExtremumStructure.eval_1(self, it, active=True)
+
+        Evaluate the minorant and majorant at a medium interaction point.
+
+        This method performs point evaluation at interaction point specified
+        in local space.
+
+        Parameter ``it`` (:py:obj:`mitsuba.Interaction3f`):
+            Interaction interaction point in local space
+
+        Parameter ``active`` (drjit.llvm.ad.Bool):
+            Mask for active lanes
+
+        Returns → tuple[drjit.llvm.ad.Float, drjit.llvm.ad.Float]:
+            The minorant and majorant values at the medium interaction point.
+            Clamped values outside bounds.
+
+    .. py:method:: mitsuba.ExtremumStructure.sample_segment(self, ray, mint, maxt, target_ot, active=True)
+
+        Sample a segment along a ray with desired optical thickness
+
+        This method traverses the extremum structure (e.g., via DDA for grids)
+        and returns a segment where the accumulated optical thickness reaches
+        the desired value. The traversal logic is completely encapsulated
+        within this method to minimize virtual call overhead.
+
+        Parameter ``ray`` (:py:obj:`mitsuba.Ray3f`):
+            Ray along which to sample
+
+        Parameter ``mint`` (drjit.llvm.ad.Float):
+            Minimum distance to consider
+
+        Parameter ``maxt`` (drjit.llvm.ad.Float):
+            Maximum distance to consider
+
+        Parameter ``target_ot`` (drjit.llvm.ad.Float):
+            Target optical thickness to accumulate
+
+        Parameter ``active`` (drjit.llvm.ad.Bool):
+            Mask for active lanes
+
+        Returns → tuple[:py:obj:`mitsuba.ExtremumSegment`, drjit.llvm.ad.Float]:
+            ExtremumSegment containing the sampled distance (mint), segment
+            bounds, and local majorant/minorant values. If desired_tau cannot
+            be reached, mint is set to Infinity. Accumulated optical thickness
+            at segment start.
+
+.. py:class:: mitsuba.ExtremumStructurePtr
+
+    .. py:method:: mitsuba.ExtremumStructurePtr.eval_1(self, it, active=True)
+
+        Evaluate the minorant and majorant at a medium interaction point.
+
+        This method performs point evaluation at interaction point specified
+        in local space.
+
+        Parameter ``it`` (:py:obj:`mitsuba.Interaction3f`):
+            Interaction interaction point in local space
+
+        Parameter ``active`` (drjit.llvm.ad.Bool):
+            Mask for active lanes
+
+        Returns → tuple[drjit.llvm.ad.Float, drjit.llvm.ad.Float]:
+            The minorant and majorant values at the medium interaction point.
+            Clamped values outside bounds.
+
+    .. py:method:: mitsuba.ExtremumStructurePtr.sample_segment(self, ray, mint, maxt, target_ot, active=True)
+
+        Sample a segment along a ray with desired optical thickness
+
+        This method traverses the extremum structure (e.g., via DDA for grids)
+        and returns a segment where the accumulated optical thickness reaches
+        the desired value. The traversal logic is completely encapsulated
+        within this method to minimize virtual call overhead.
+
+        Parameter ``ray`` (:py:obj:`mitsuba.Ray3f`):
+            Ray along which to sample
+
+        Parameter ``mint`` (drjit.llvm.ad.Float):
+            Minimum distance to consider
+
+        Parameter ``maxt`` (drjit.llvm.ad.Float):
+            Maximum distance to consider
+
+        Parameter ``target_ot`` (drjit.llvm.ad.Float):
+            Target optical thickness to accumulate
+
+        Parameter ``active`` (drjit.llvm.ad.Bool):
+            Mask for active lanes
+
+        Returns → tuple[:py:obj:`mitsuba.ExtremumSegment`, drjit.llvm.ad.Float]:
+            ExtremumSegment containing the sampled distance (mint), segment
+            bounds, and local majorant/minorant values. If desired_tau cannot
+            be reached, mint is set to Infinity. Accumulated optical thickness
+            at segment start.
 
 .. py:class:: mitsuba.FileResolver
 
@@ -6162,7 +6433,7 @@
 
 .. py:data:: mitsuba.MI_AUTHORS
     :type: str
-    :value: Realistic Graphics Lab, EPFL
+    :value: Realistic Graphics Lab, EPFL; Rayference
 
 .. py:data:: mitsuba.MI_CIE_D65_NORMALIZATION
     :type: float
@@ -6182,11 +6453,11 @@
 
 .. py:data:: mitsuba.MI_ENABLE_CUDA
     :type: bool
-    :value: True
+    :value: False
 
 .. py:data:: mitsuba.MI_ENABLE_EMBREE
     :type: bool
-    :value: True
+    :value: False
 
 .. py:data:: mitsuba.MI_FILTER_RESOLUTION
     :type: int
@@ -7234,6 +7505,23 @@
 
     Base class: :py:obj:`mitsuba.Object`
 
+    .. py:method:: mitsuba.Medium.eval_transmittance_pdf_real(self, ray, si, channel, active)
+
+        Parameter ``ray`` (:py:obj:`mitsuba.Ray3f`):
+            *no description available*
+
+        Parameter ``si`` (:py:obj:`mitsuba.SurfaceInteraction3f`):
+            *no description available*
+
+        Parameter ``channel`` (drjit.llvm.ad.UInt):
+            *no description available*
+
+        Parameter ``active`` (drjit.llvm.ad.Bool):
+            Mask to specify active lanes.
+
+        Returns → tuple[drjit.llvm.ad.Float, drjit.llvm.ad.Float, drjit.llvm.ad.Bool]:
+            *no description available*
+
     .. py:method:: mitsuba.Medium.get_majorant(self, mi, active=True)
 
         Returns the medium's majorant used for delta tracking
@@ -7330,6 +7618,26 @@
             This method returns a MediumInteraction. The MediumInteraction
             will always be valid, except if the ray missed the Medium's
             bounding box.
+
+    .. py:method:: mitsuba.Medium.sample_interaction_real(self, ray, si, sample, channel, active)
+
+        Parameter ``ray`` (:py:obj:`mitsuba.Ray3f`):
+            *no description available*
+
+        Parameter ``si`` (:py:obj:`mitsuba.SurfaceInteraction3f`):
+            *no description available*
+
+        Parameter ``sample`` (drjit.llvm.ad.Float):
+            *no description available*
+
+        Parameter ``channel`` (drjit.llvm.ad.UInt):
+            *no description available*
+
+        Parameter ``active`` (drjit.llvm.ad.Bool):
+            Mask to specify active lanes.
+
+        Returns → tuple[:py:obj:`mitsuba.MediumInteraction3f`, drjit.llvm.ad.Float, drjit.llvm.ad.Float]:
+            *no description available*
 
     .. py:method:: mitsuba.Medium.transmittance_eval_pdf(self, mi, si, active)
 
@@ -7446,6 +7754,23 @@
 
 .. py:class:: mitsuba.MediumPtr
 
+    .. py:method:: mitsuba.MediumPtr.eval_transmittance_pdf_real(self, ray, si, channel, active)
+
+        Parameter ``ray`` (:py:obj:`mitsuba.Ray3f`):
+            *no description available*
+
+        Parameter ``si`` (:py:obj:`mitsuba.SurfaceInteraction3f`):
+            *no description available*
+
+        Parameter ``channel`` (drjit.llvm.ad.UInt):
+            *no description available*
+
+        Parameter ``active`` (drjit.llvm.ad.Bool):
+            Mask to specify active lanes.
+
+        Returns → tuple[drjit.llvm.ad.Float, drjit.llvm.ad.Float, drjit.llvm.ad.Bool]:
+            *no description available*
+
     .. py:method:: mitsuba.MediumPtr.get_majorant(self, mi, active=True)
 
         Returns the medium's majorant used for delta tracking
@@ -7530,6 +7855,26 @@
             This method returns a MediumInteraction. The MediumInteraction
             will always be valid, except if the ray missed the Medium's
             bounding box.
+
+    .. py:method:: mitsuba.MediumPtr.sample_interaction_real(self, ray, si, sample, channel, active)
+
+        Parameter ``ray`` (:py:obj:`mitsuba.Ray3f`):
+            *no description available*
+
+        Parameter ``si`` (:py:obj:`mitsuba.SurfaceInteraction3f`):
+            *no description available*
+
+        Parameter ``sample`` (drjit.llvm.ad.Float):
+            *no description available*
+
+        Parameter ``channel`` (drjit.llvm.ad.UInt):
+            *no description available*
+
+        Parameter ``active`` (drjit.llvm.ad.Bool):
+            Mask to specify active lanes.
+
+        Returns → tuple[:py:obj:`mitsuba.MediumInteraction3f`, drjit.llvm.ad.Float, drjit.llvm.ad.Float]:
+            *no description available*
 
     .. py:method:: mitsuba.MediumPtr.transmittance_eval_pdf(self, mi, si, active)
 
@@ -8199,6 +8544,22 @@
         Returns → drjit.llvm.ad.Float:
             *no description available*
 
+    .. py:method:: mitsuba.MicrofacetDistribution.G_height_correlated(self, wi, wo, m)
+
+        Smith's height-correlated shadowing-masking approximation
+
+        Parameter ``wi`` (:py:obj:`mitsuba.Vector3f`):
+            *no description available*
+
+        Parameter ``wo`` (:py:obj:`mitsuba.Vector3f`):
+            *no description available*
+
+        Parameter ``m`` (:py:obj:`mitsuba.Vector3f`):
+            *no description available*
+
+        Returns → drjit.llvm.ad.Float:
+            *no description available*
+
     .. py:method:: mitsuba.MicrofacetDistribution.alpha()
 
         Return the roughness (isotropic case)
@@ -8216,6 +8577,13 @@
     .. py:method:: mitsuba.MicrofacetDistribution.alpha_v()
 
         Return the roughness along the bitangent direction
+
+        Returns → drjit.llvm.ad.Float:
+            *no description available*
+
+    .. py:method:: mitsuba.MicrofacetDistribution.angle()
+
+        Return the angle of anisotropy
 
         Returns → drjit.llvm.ad.Float:
             *no description available*
@@ -8312,6 +8680,19 @@
             An arbitrary direction
 
         Parameter ``m`` (:py:obj:`mitsuba.Vector3f`):
+            The microfacet normal
+
+        Returns → drjit.llvm.ad.Float:
+            *no description available*
+
+    .. py:method:: mitsuba.MicrofacetDistribution.smith_lambda(self, v)
+
+        Smith's shadowing-masking lambda function for a single direction
+
+        Parameter ``v`` (:py:obj:`mitsuba.Vector3f`):
+            An arbitrary direction
+
+        Parameter ``m``:
             The microfacet normal
 
         Returns → drjit.llvm.ad.Float:
@@ -8550,148 +8931,6 @@
     .. py:data:: ReconstructionFilter
 
         A filter used to reconstruct/resample images
-
-.. py:class:: mitsuba.OptixDenoiser
-
-    Base class: :py:obj:`mitsuba.Object`
-
-    Wrapper for the OptiX AI denoiser
-
-    The OptiX AI denoiser is wrapped in this object such that it can work
-    directly with Mitsuba types and its conventions.
-
-    The denoiser works best when applied to noisy renderings that were
-    produced with a Film which used the `box` ReconstructionFilter. With a
-    filter that spans multiple pixels, the denoiser might identify some
-    local variance as a feature of the scene and will not denoise it.
-
-    .. py:method:: __init__(self, input_size, albedo=False, normals=False, temporal=False, denoise_alpha=False)
-
-        Constructs an OptiX denoiser
-        
-        Parameter ``input_size`` (:py:obj:`mitsuba.ScalarVector2u`):
-            Resolution of noisy images that will be fed to the denoiser.
-        
-        Parameter ``albedo`` (bool):
-            Whether or not albedo information will also be given to the
-            denoiser. This parameter is optional, by default it is false.
-        
-        Parameter ``normals`` (bool):
-            Whether or not shading normals information will also be given to
-            the denoiser. This parameter is optional, by default it is false.
-        
-        Parameter ``temporal`` (bool):
-            Whether or not temporal information will also be given to the
-            denoiser. This parameter is optional, by default it is false.
-        
-        Parameter ``denoise_alpha`` (bool):
-            Whether or not the alpha channel (if specified in the noisy input)
-            should be denoised too. This parameter is optional, by default it
-            is false.
-        
-        Returns:
-            A callable object which will apply the OptiX denoiser.
-
-        
-    .. py:method:: mitsuba.OptixDenoiser.__call__(self, noisy, albedo, normals, to_sensor=None, flow, previous_denoised)
-
-        Overloaded function.
-
-        1. ``__call__(self, noisy: drjit.llvm.ad.TensorXf, albedo: drjit.llvm.ad.TensorXf, normals: drjit.llvm.ad.TensorXf, to_sensor: object | None = None, flow: drjit.llvm.ad.TensorXf, previous_denoised: drjit.llvm.ad.TensorXf) -> drjit.llvm.ad.TensorXf``
-
-        Apply denoiser on inputs which are TensorXf objects.
-
-        Parameter ``noisy`` (drjit.llvm.ad.TensorXf):
-            The noisy input. (tensor shape: (width, height, 3 | 4))
-
-        Parameter ``albedo`` (drjit.llvm.ad.TensorXf):
-            Albedo information of the noisy rendering. This parameter is
-            optional unless the OptixDenoiser was built with albedo support.
-            (tensor shape: (width, height, 3))
-
-        Parameter ``normals`` (drjit.llvm.ad.TensorXf):
-            Shading normal information of the noisy rendering. The normals
-            must be in the coordinate frame of the sensor which was used to
-            render the noisy input. This parameter is optional unless the
-            OptixDenoiser was built with normals support. (tensor shape:
-            (width, height, 3))
-
-        Parameter ``to_sensor`` (object | None):
-            A Transform4f which is applied to the ``normals`` parameter before
-            denoising. This should be used to transform the normals into the
-            correct coordinate frame. This parameter is optional, by default
-            no transformation is applied.
-
-        Parameter ``flow`` (drjit.llvm.ad.TensorXf):
-            With temporal denoising, this parameter is the optical flow
-            between the previous frame and the current one. It should capture
-            the 2D motion of each individual pixel. When this parameter is
-            unknown, it can be set to a zero-initialized TensorXf of the
-            correct size and still produce convincing results. This parameter
-            is optional unless the OptixDenoiser was built with temporal
-            denoising support. (tensor shape: (width, height, 2))
-
-        Parameter ``previous_denoised`` (drjit.llvm.ad.TensorXf):
-            With temporal denoising, the previous denoised frame should be
-            passed here. For the very first frame, the OptiX documentation
-            recommends passing the noisy input for this argument. This
-            parameter is optional unless the OptixDenoiser was built with
-            temporal denoising support. (tensor shape: (width, height, 3 | 4))
-
-        Returns → drjit.llvm.ad.TensorXf:
-            The denoised input.
-
-        2. ``__call__(self, noisy: :py:obj:`mitsuba.Bitmap`, albedo_ch: str = '', normals_ch: str = '', to_sensor: object | None = None, flow_ch: str = '', previous_denoised_ch: str = '', noisy_ch: str = '<root>') -> :py:obj:`mitsuba.Bitmap```
-
-        Apply denoiser on inputs which are Bitmap objects.
-
-        Parameter ``noisy`` (drjit.llvm.ad.TensorXf):
-            The noisy input. When passing additional information like albedo
-            or normals to the denoiser, this Bitmap object must be a
-            MultiChannel bitmap.
-
-        Parameter ``albedo_ch``:
-            The name of the channel in the ``noisy`` parameter which contains
-            the albedo information of the noisy rendering. This parameter is
-            optional unless the OptixDenoiser was built with albedo support.
-
-        Parameter ``normals_ch``:
-            The name of the channel in the ``noisy`` parameter which contains
-            the shading normal information of the noisy rendering. The normals
-            must be in the coordinate frame of the sensor which was used to
-            render the noisy input. This parameter is optional unless the
-            OptixDenoiser was built with normals support.
-
-        Parameter ``to_sensor`` (object | None):
-            A Transform4f which is applied to the ``normals`` parameter before
-            denoising. This should be used to transform the normals into the
-            correct coordinate frame. This parameter is optional, by default
-            no transformation is applied.
-
-        Parameter ``flow_ch``:
-            With temporal denoising, this parameter is name of the channel in
-            the ``noisy`` parameter which contains the optical flow between
-            the previous frame and the current one. It should capture the 2D
-            motion of each individual pixel. When this parameter is unknown,
-            it can be set to a zero-initialized TensorXf of the correct size
-            and still produce convincing results. This parameter is optional
-            unless the OptixDenoiser was built with temporal denoising
-            support.
-
-        Parameter ``previous_denoised_ch``:
-            With temporal denoising, this parameter is name of the channel in
-            the ``noisy`` parameter which contains the previous denoised
-            frame. For the very first frame, the OptiX documentation
-            recommends passing the noisy input for this argument. This
-            parameter is optional unless the OptixDenoiser was built with
-            temporal denoising support.
-
-        Parameter ``noisy_ch``:
-            The name of the channel in the ``noisy`` parameter which contains
-            the shading normal information of the noisy rendering.
-
-        Returns → drjit.llvm.ad.TensorXf:
-            The denoised input.
 
 .. py:class:: mitsuba.PCG32
 
@@ -13513,6 +13752,17 @@
             A detailed surface interaction record. Its ``is_valid()`` method
             should be queried to check if an intersection was actually found.
 
+    .. py:method:: mitsuba.Scene.ray_intersect_naive(self, ray, active=True)
+
+        Parameter ``ray`` (:py:obj:`mitsuba.Ray3f`):
+            *no description available*
+
+        Parameter ``active`` (drjit.llvm.ad.Bool):
+            Mask to specify active lanes.
+
+        Returns → :py:obj:`mitsuba.SurfaceInteraction3f`:
+            *no description available*
+
     .. py:method:: mitsuba.Scene.ray_intersect_preliminary(self, ray, coherent=False, active=True)
 
         Overloaded function.
@@ -15905,6 +16155,10 @@
     .. py:data:: EllipsoidsMesh
 
         Ellipsoids (`ellipsoidsmesh`)
+
+    .. py:data:: AnalyticalRectangle
+
+        AnalyticalRectangle (`arectangle`)
 
     .. py:data:: Invalid
 

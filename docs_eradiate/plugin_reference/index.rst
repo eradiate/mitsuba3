@@ -20,4 +20,4 @@ abbreviations:
    :maxdepth: 1
    :glob:
 
-   ../../generated/plugins_*
+   ../generated/plugins_*

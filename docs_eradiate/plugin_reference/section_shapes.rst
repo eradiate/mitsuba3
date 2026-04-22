@@ -11,4 +11,3 @@ The Eradiate fork provides two shape plugins:
 - :monosp:`instancelist` — efficiently instantiates a large collection of
   identical sub-scenes (e.g., a canopy of identical trees) by referencing a
   shared shape group with per-instance transforms.
-

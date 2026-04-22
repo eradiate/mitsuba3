@@ -10,31 +10,31 @@ simulations.
    :gutter: 3
 
    .. grid-item-card:: User Guide
-      :link: src/user_guide/index
+      :link: user_guide/index
       :link-type: doc
 
       Installation, basic usage, and worked examples.
 
    .. grid-item-card:: Plugin Reference
-      :link: src/plugin_reference/index
+      :link: plugin_reference/index
       :link-type: doc
 
       Documentation for all Eradiate-specific Mitsuba plugins.
 
    .. grid-item-card:: API Reference
-      :link: src/api_reference/index
+      :link: api_reference/index
       :link-type: doc
 
       Python API for Eradiate-specific classes and utilities.
 
    .. grid-item-card:: Developer Guide
-      :link: src/dev_guide/index
+      :link: dev_guide/index
       :link-type: doc
 
       Build instructions, contribution guidelines, and internals.
 
    .. grid-item-card:: Changelog
-      :link: src/changelog
+      :link: changelog
       :link-type: doc
 
       Release history and migration notes.
@@ -43,23 +43,24 @@ simulations.
    :hidden:
    :caption: User Guide
 
-   src/user_guide/index
+   user_guide/index
+   bibliography
 
 .. toctree::
    :hidden:
    :caption: Reference
 
-   src/plugin_reference/index
-   src/api_reference/index
+   plugin_reference/index
+   api_reference/index
 
 .. toctree::
    :hidden:
    :caption: Developer Guide
 
-   src/dev_guide/index
+   dev_guide/index
 
 .. toctree::
    :hidden:
    :caption: About
 
-   src/changelog
+   changelog

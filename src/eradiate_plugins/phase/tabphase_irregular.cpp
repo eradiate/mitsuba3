@@ -17,14 +17,14 @@ Tabulated phase function (irregular angular grid) (:monosp:`tabphase_irregular`)
  * - values
    - |string|
    - A comma-separated list of phase function values parameterized by the
-     cosine of the scattering angle. Must have the same length as `nodes`.
+     cosine of the scattering angle. Must have the same length as ``nodes``.
    - |exposed|
 
  * - nodes
    - |string|
    - A comma-separated list of :math:`\cos \theta` specifying the grid on which
-     `values` are defined. Bounds must be [-1, 1] and values must be strictly
-     increasing. Must have the same length as `values`.
+     ``values`` are defined. Bounds must be [-1, 1] and values must be strictly
+     increasing. Must have the same length as ``values``.
    - |exposed|
 
 This plugin implements a generic phase function model for isotropic media

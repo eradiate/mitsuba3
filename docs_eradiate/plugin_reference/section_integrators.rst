@@ -17,4 +17,3 @@ Mitsuba's :monosp:`volpath` to address Earth observation use cases:
 .. note::
 
    :monosp:`eovolpath` was introduced after v0.4.3.
-

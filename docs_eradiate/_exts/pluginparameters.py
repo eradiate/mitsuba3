@@ -1,15 +1,10 @@
 __docformat__ = "reStructuredText"
 
-import sys
-import os.path
-import csv
 
 from docutils import nodes
-from docutils.utils import SystemMessagePropagation
-from docutils.parsers.rst import Directive, Parser
-import docutils.parsers.rst.directives as directives
 from docutils.parsers.rst.directives.tables import Table
 from docutils.statemachine import ViewList
+from docutils.utils import SystemMessagePropagation
 from sphinx.util.nodes import nested_parse_with_titles
 
 

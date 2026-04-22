@@ -24,4 +24,3 @@ The following models are available:
   data for monochromatic simulations.
 - **Utility**: :monosp:`selectbsdf` — conditionally selects among multiple
   BSDFs based on a scene parameter.
-

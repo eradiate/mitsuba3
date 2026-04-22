@@ -79,7 +79,7 @@ Ray origins are positioned outside of the scene's geometry.
 
 .. important::
 
-   This sensor must be used with a film with size (`N`, 1), where `N` is the
+   This sensor must be used with a film with size (``N``, 1), where ``N`` is the
    number of aggregated sensors, and is best used with a default :monosp:`box`
    reconstruction filter.
 */

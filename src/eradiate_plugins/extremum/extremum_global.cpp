@@ -7,7 +7,7 @@
 NAMESPACE_BEGIN(mitsuba)
 
 /**!
-.. _extremum-extremum_grid:
+.. _extremum-extremum_global:
 
 Extremum global structure (:monosp:`extremum_global`)
 -----------------------------------------------------
