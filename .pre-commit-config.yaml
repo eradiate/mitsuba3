@@ -1,16 +1,28 @@
 # Prek hook definitions. See https://prek.j178.dev for more information.
-files: ^(docs_eradiate|src/eradiate_plugins)/
-
 repos:
+  - repo: local
+    hooks:
+      - id: eradiate-change-fences
+        name: Check Eradiate change fences
+        entry: tools/check_eradiate_fences.py
+        language: script
+        pass_filenames: false  # script calls git diff --cached itself
+        exclude: ^(src/eradiate_plugins|include/eradiate)/
   - repo: 'https://github.com/pre-commit/pre-commit-hooks'
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
+        files: ^(docs_eradiate|src/eradiate_plugins)/
       - id: end-of-file-fixer
+        files: ^(docs_eradiate|src/eradiate_plugins)/
       - id: check-yaml
+        files: ^(docs_eradiate|src/eradiate_plugins)/
       - id: check-added-large-files
+        files: ^(docs_eradiate|src/eradiate_plugins)/
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.11
     hooks:
       - id: ruff-check
+        files: ^(docs_eradiate|src/eradiate_plugins)/
       - id: ruff-format
+        files: ^(docs_eradiate|src/eradiate_plugins)/
