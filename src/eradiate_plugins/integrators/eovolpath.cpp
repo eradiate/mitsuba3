@@ -36,21 +36,21 @@ EO Volumetric path tracer (:monosp:`eovolpath`)
 
  * - rr_factor
    - |float|
-   - Specifies the maximum probability to keep a path when russian roulette is evaluated. 
+   - Specifies the maximum probability to keep a path when russian roulette is evaluated.
      (Default: 0.97)
 
  * - ddis_threshold
    - |float|
-   - Specifies the probability to importance sample the phase using the emitter as 
+   - Specifies the probability to importance sample the phase using the emitter as
      incident direction. Set to a negative value to disable. (Default: 0.1)
 
  * - hide_emitters
    - |bool|
    - Hide directly visible emitters. (Default: no, i.e. |false|)
 
-This plugin provides a volumetric path tracer catered towards Earth Observation simualtions that can 
-be used to compute approximate solutions of the radiative transfer equation. Its implementation 
-makes use of multiple importance sampling to combine BSDF and phase function sampling with direct 
+This plugin provides a volumetric path tracer catered towards Earth Observation simualtions that can
+be used to compute approximate solutions of the radiative transfer equation. Its implementation
+makes use of multiple importance sampling to combine BSDF and phase function sampling with direct
 illumination sampling strategies. On surfaces, it behaves exactly like the standard path tracer.
 
 This integrator has special support for index-matched transmission events (i.e. surface scattering
@@ -60,9 +60,9 @@ has a :ref:`null <bsdf-null>` or :ref:`thin dielectric <bsdf-thindielectric>` BS
 to it (as compared to, say, a :ref:`dielectric <bsdf-dielectric>` or
 :ref:`roughdielectric <bsdf-roughdielectric>` BSDF).
 
-In addition, it implements the DDIS variance reduction method (Buras and Mayer, 2011) which reduces 
+In addition, it implements the DDIS variance reduction method (Buras and Mayer, 2011) which reduces
 noise in the presence of strongly peaked phase functions. More variance reduction methods coming up
-soon! 
+soon!
 
 .. note:: This integrator does not implement good sampling strategies to render
     participating media with a spectrally varying extinction coefficient. For these cases,
@@ -77,10 +77,10 @@ class EOVolumetricPathIntegrator : public MonteCarloIntegrator<Float, Spectrum> 
 
 public:
     MI_IMPORT_BASE(MonteCarloIntegrator, m_max_depth, m_rr_depth, m_hide_emitters)
-    MI_IMPORT_TYPES(Scene, Sampler, Emitter, EmitterPtr, BSDF, BSDFPtr, Medium, 
+    MI_IMPORT_TYPES(Scene, Sampler, Emitter, EmitterPtr, BSDF, BSDFPtr, Medium,
                     MediumPtr, PhaseFunctionContext, ExtremumStructure)
 
-    using TrackingState = TrackingState<Float, Spectrum>;
+    using TrackingStateType = TrackingState<Float, Spectrum>;
 
     EOVolumetricPathIntegrator(const Properties &props) : Base(props) {
         m_ddis_threshold = props.get<ScalarFloat>("ddis_threshold", 0.1f);
@@ -97,10 +97,10 @@ public:
     MI_INLINE
     std::pair<UInt64, UInt64> new_seed_offset(
             Float sample1, Float sample2) const {
-        UInt32 s0 = UInt32(sample1 * 4294967296.f);  // [0,1) -> [0, 2^32)                                                  
-        UInt32 s1 = UInt32(sample2 * 4294967296.f);                                                                         
+        UInt32 s0 = UInt32(sample1 * 4294967296.f);  // [0,1) -> [0, 2^32)
+        UInt32 s1 = UInt32(sample2 * 4294967296.f);
         UInt64 seed, offset;
-        seed   = sample_tea_64(s0, s1);                                                                                                             
+        seed   = sample_tea_64(s0, s1);
         offset = sample_tea_64(s1, s0);
         return {seed, offset};
     }
@@ -206,7 +206,7 @@ public:
             Mask perform_rr = (depth > (uint32_t) m_rr_depth);
             active &= sampler->next_1d(active) < q || !perform_rr;
             dr::masked(throughput, perform_rr) *= dr::rcp(dr::detach(q));
-            
+
             active &= depth < (uint32_t) m_max_depth;
             if (dr::none_or<false>(active))
                 return;
@@ -219,7 +219,7 @@ public:
                  escaped_medium = false;
 
             dr::masked(si, active) = scene->ray_intersect(ray, active);
-            dr::masked(ray.maxt, active) = si.t; 
+            dr::masked(ray.maxt, active) = si.t;
 
             // If the medium does not have a spectrally varying extinction,
             // we can perform a few optimizations to speed up rendering
@@ -232,7 +232,7 @@ public:
 
             Float mint, maxt;
             if (dr::any_or<true>(active_medium)) {
-                std::tie(mei, mint, maxt) = 
+                std::tie(mei, mint, maxt) =
                     medium->prepare_medium_traversal(ray, active_medium);
                 escaped_medium = active_medium && !dr::isfinite(maxt);
                 active_medium &= !escaped_medium;
@@ -250,7 +250,7 @@ public:
 
                 Float target_ot = -dr::log( 1.f - sampler->next_1d(active_medium));
 
-                TrackingState state {
+                TrackingStateType state {
                     ray,
                     rng,
                     mei,
@@ -263,7 +263,7 @@ public:
                 // Traverse extremum segments and perform delta tracking
                 state = extremum->traverse_extremum(
                 ray, mint, maxt, channel, state,
-                [](const ExtremumSegment &segment, TrackingState &state,
+                [](const ExtremumSegment &segment, TrackingStateType &state,
                     const UInt32 &channel, Mask active) {
                     UnpolarizedSpectrum &throughput = state.throughput;
                     PCG32<UInt32> &rng              = state.rng;
@@ -319,7 +319,7 @@ public:
                         Float null_scatter_prob =
                             dr::mean(sigma_n / segment.majorant());
                         Mask null_scatter =
-                            (rng.template next_float<Float>(sampled) < null_scatter_prob) 
+                            (rng.template next_float<Float>(sampled) < null_scatter_prob)
                             && sampled;
                         Mask real_scatter = !null_scatter && sampled;
 
@@ -348,7 +348,7 @@ public:
                             active &= !real_scatter;
                         }
 
-                        dr::masked(state.target_ot, sampled) = 
+                        dr::masked(state.target_ot, sampled) =
                             -dr::log(1.f - state.rng.template next_float<Float>(sampled));
                     }
 
@@ -362,7 +362,7 @@ public:
 
                 // Update throughput by the transmittance and pdf weight
                 dr::masked(throughput, active_medium) *= state.throughput;
-                dr::masked(mei, active_medium) = state.mei; 
+                dr::masked(mei, active_medium) = state.mei;
 
                 escaped_medium |= active_medium && !mei.is_valid();
                 active_medium &= mei.is_valid();
@@ -400,9 +400,9 @@ public:
                         // Set ddis incoming direction towards emitter
                         dr::masked(ddis_mei.wi, perform_ddis) = -ds.d;
                         dr::masked(ddis_mei.sh_frame, perform_ddis) = Frame3f(-ds.d);
-                        
+
                         Float ddis_phase_pdf;
-                        std::tie(std::ignore, ddis_phase_pdf) = 
+                        std::tie(std::ignore, ddis_phase_pdf) =
                             phase->eval_pdf(phase_ctx, ddis_mei, ds.d, perform_ddis);
 
                         // Compute mixture pdf accounting for DDIS probability
@@ -445,7 +445,7 @@ public:
             }
 
             // --------------------- Surface Interactions ---------------------
-            // Interact with the surface only if we haven't interacted with the 
+            // Interact with the surface only if we haven't interacted with the
             // medium before and there is a valid intersection (already accounted).
             active_surface |= escaped_medium;
 
@@ -611,13 +611,13 @@ public:
             Mask active_medium  = active && (medium != nullptr);
 
             dr::masked(si, active) = scene->ray_intersect(ray, active);
-            dr::masked(ray.maxt, active) = dr::minimum(si.t, remaining_dist); 
+            dr::masked(ray.maxt, active) = dr::minimum(si.t, remaining_dist);
             dr::masked(total_dist, active) += ray.maxt;
-            
+
             MediumInteraction3f mei;
             Float mint, maxt;
             if (dr::any_or<true>(active_medium)) {
-                std::tie(mei, mint, maxt) = 
+                std::tie(mei, mint, maxt) =
                     medium->prepare_medium_traversal(ray, active_medium);
                 active_medium &= dr::isfinite(maxt);
             }
@@ -625,7 +625,7 @@ public:
             if (dr::any_or<true>(active_medium)) {
                 // Prepare extremum traversal
                 auto extremum = medium->extremum_structure();
-                // auto [mei, mint, maxt] = 
+                // auto [mei, mint, maxt] =
                 //     medium->prepare_medium_traversal(ray, active_medium);
 
                 Float sample1 = sampler->next_1d();
@@ -636,7 +636,7 @@ public:
 
                 Float target_ot = -dr::log( 1.f - sampler->next_1d(active_medium));
 
-                TrackingState state {
+                TrackingStateType state {
                     ray,
                     rng,
                     mei,
@@ -651,25 +651,25 @@ public:
                 // devolves the algorithm to Ratio Tracking.
                 state = extremum->traverse_extremum(
                 ray, mint, maxt, channel, state,
-                [](const ExtremumSegment& segment, TrackingState& state, 
+                [](const ExtremumSegment& segment, TrackingStateType& state,
                    const UInt32& channel, Mask active) {
 
                     UnpolarizedSpectrum &throughput = state.throughput;
                     PCG32<UInt32> &rng       = state.rng;
-                    MediumInteraction3f& mei = state.mei; 
+                    MediumInteraction3f& mei = state.mei;
                     Mask use_rrt             = state.use_rrt;
                     MediumPtr medium         = mei.medium;
-                    Mask act_spectral = 
+                    Mask act_spectral =
                         state.has_spectral_extinction && active;
-                    Mask act_not_spectral = 
+                    Mask act_not_spectral =
                         !state.has_spectral_extinction && active;
-                    
+
                     Float control = dr::select(use_rrt, segment.minorant(), 0.f);
                     Float residual_majorant = segment.majorant() - control;
 
                     Float mint = dr::select(
                         mei.is_valid(),
-                        dr::maximum(segment.mint, mei.t), 
+                        dr::maximum(segment.mint, mei.t),
                         segment.mint
                     );
 
@@ -690,7 +690,7 @@ public:
                         // We accumulate control transmittance every interaction
                         // instead of accumulating the optical thickness.
                         // Choice of simplicity vs performance.
-                        dr::masked(state.throughput, active && use_rrt) *= 
+                        dr::masked(state.throughput, active && use_rrt) *=
                             dr::exp(-dt * control);
                     }
 
@@ -698,10 +698,10 @@ public:
                         // Account for distance sampling weight in spectral mode
                         UnpolarizedSpectrum tr = dr::exp(-dt*residual_majorant);
                         Float pdf = index_spectrum<Float, Spectrum>(
-                            dr::select(sampled, tr*residual_majorant, tr), 
+                            dr::select(sampled, tr*residual_majorant, tr),
                             channel);
                         dr::masked(throughput, act_spectral)  *= tr / pdf;
-                    } 
+                    }
 
                     if (dr::any_or<true>(sampled)) {
                         mei.t = maxt;
@@ -709,7 +709,7 @@ public:
 
                         // Retrieve scattering coefficients at position.
                         UnpolarizedSpectrum sigma_t, sigma_n;
-                        std::tie( std::ignore, std::ignore, sigma_t) = 
+                        std::tie( std::ignore, std::ignore, sigma_t) =
                             medium->get_scattering_coefficients(mei, sampled);
                         sigma_n = segment.majorant() - sigma_t;
 
@@ -717,9 +717,9 @@ public:
                             // Both RT and RRT spectral mode simplify to sigma_n.
                             dr::masked(throughput, sampled && act_spectral) *= sigma_n;
                         }
-                        
+
                         if(dr::any_or<true>(act_not_spectral)) {
-                            dr::masked(throughput, sampled && act_not_spectral) *= 
+                            dr::masked(throughput, sampled && act_not_spectral) *=
                                 dr::maximum((1.f - (sigma_t - control)/residual_majorant), 0.f);
                         }
 
@@ -728,7 +728,7 @@ public:
                     }
                     dr::masked(mei.t, !sampled) = dr::Infinity<Float>;
                     dr::masked(state.target_ot, !sampled && active) -= segment_ot;
-                    
+
                     // Never disable the loop, continue until maxt
                     Mask step = !sampled;
                     return std::pair<Mask,Mask>(step, active);

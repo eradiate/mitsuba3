@@ -40,15 +40,15 @@ Extremum spherical structure (:monosp:`extremum_spherical`)
 
  * - resolution
    - |vector|
-   - Grid resolution as (r, theta, phi). Grids with variations on only the 
+   - Grid resolution as (r, theta, phi). Grids with variations on only the
      radial resolution have optimized traversal (Default: (1, 1, 1)).
 
  * - scale
    - |float|
    - Scale factor for extinction coefficients (Default: 1.0)
 
-This plugin creates a spherical extremum structure storing local extremum values 
-for efficient delta tracking in spherical media. The grid is constructed by 
+This plugin creates a spherical extremum structure storing local extremum values
+for efficient delta tracking in spherical media. The grid is constructed by
 querying the underlying volume's extrema over each spherical cell.
 
 At runtime, concentric shell traversal provides tight-fitting local extremum for
@@ -63,8 +63,8 @@ public:
     MI_IMPORT_BASE(ExtremumStructure, m_bbox)
     MI_IMPORT_TYPES(Volume)
 
-    using TrackingState    = TrackingState<Float, Spectrum>;
-    using TrackingFunction = TrackingFunction<Float, Spectrum>;
+    using TrackingStateType    = TrackingState<Float, Spectrum>;
+    using TrackingFunctionType = TrackingFunction<Float, Spectrum>;
 
     ExtremumSpherical(const Properties &props) : Base(props), m_props(props) {
         ScalarVector3i resolution = props.get<ScalarVector3i>("resolution", ScalarVector3i(1, 1, 1));
@@ -107,8 +107,8 @@ public:
     }
 
     // Stub overrides — never called, expand() replaces this object
-    TrackingState traverse_extremum(const Ray3f &, Float, Float, UInt32, 
-                    TrackingState, TrackingFunction*, Mask) const override {
+    TrackingStateType traverse_extremum(const Ray3f &, Float, Float, UInt32,
+                    TrackingStateType, TrackingFunctionType*, Mask) const override {
         NotImplementedError("traverse_extremum");
     }
 
@@ -136,9 +136,9 @@ public:
     MI_IMPORT_BASE(ExtremumStructure, m_bbox)
     MI_IMPORT_TYPES(Volume)
 
-    using TrackingState    = TrackingState<Float, Spectrum>;
-    using TrackingFunction = TrackingFunction<Float, Spectrum>;
-    using FloatStorage = DynamicBuffer<Float>;
+    using TrackingStateType    = TrackingState<Float, Spectrum>;
+    using TrackingFunctionType = TrackingFunction<Float, Spectrum>;
+    using FloatStorage         = DynamicBuffer<Float>;
 
     ExtremumSphericalImpl(const Properties &props) : Base(props) {
         // Get volume
@@ -182,28 +182,28 @@ public:
         build_grid(m_volume.get());
     }
 
-    TrackingState traverse_extremum(
+    TrackingStateType traverse_extremum(
         const Ray3f &ray,
         Float mint,
         Float maxt,
         UInt32 channel,
-        TrackingState state,
-        TrackingFunction* func,
+        TrackingStateType state,
+        TrackingFunctionType* func,
         Mask active
     ) const override {
         if constexpr (TraversalType == SphericalTraversalType::RadialOnly) {
             return traverse_radial(
                 func,
-                state, 
-                ray, 
+                state,
+                ray,
                 mint,
                 maxt,
                 channel,
                 active
-            );            
+            );
         } else {
             Throw("Full3D spherical traversal is not yet implemented!");
-            return TrackingState();
+            return TrackingStateType();
         }
     }
 
@@ -220,7 +220,7 @@ public:
         Mask fill = fillval > 0.f;
         Vector2f extremum = dr::zeros<Vector2f>();
 
-        if constexpr (TraversalType == SphericalTraversalType::RadialOnly) { 
+        if constexpr (TraversalType == SphericalTraversalType::RadialOnly) {
             // Note that this is only valid for radial only for now
             UInt32 ir = dr::clip(
                 dr::floor2int<UInt32>((r - m_rmin) * m_idr),
@@ -228,10 +228,10 @@ public:
             );
             extremum = dr::gather<Vector2f>(m_extremum_grid, ir, active && !fill);
 
-        } else if constexpr (TraversalType == SphericalTraversalType::Full3D) { 
+        } else if constexpr (TraversalType == SphericalTraversalType::Full3D) {
             Throw("Full3D spherical evaluation is not yet implemented!");
         }
-        
+
         extremum = dr::select(
                 fill, Vector2f(fillval, fillval), extremum
         );
@@ -277,7 +277,7 @@ private:
         size_t n = dr::prod(m_resolution);
 
         ScalarVector2f safety_factor(
-            1.f - dr::Epsilon<Float>, 
+            1.f - dr::Epsilon<Float>,
             1.f + dr::Epsilon<Float>
         );
 
@@ -358,27 +358,27 @@ private:
     // RadialOnly shell traversal
     // ------------------------------------------------------------------
     /** \brief General radial traversal algorithm.
-     * 
-     * This method traverses the regular concentric-shell structure along the 
+     *
+     * This method traverses the regular concentric-shell structure along the
      * provided ray. At each traversed cell, it calls the function ``func``,
      * that can perform actions on the passed ``segment``, ``state``,``advance``,
-     * and ``active``. This function can be used for sampling segments and 
+     * and ``active``. This function can be used for sampling segments and
      * perform various tracking algorithms.
-     * 
+     *
      * \param func  Function to be called at each step of the traversal. Must have
-     *              the signature: 
-     *              (ExtremumSegment& segment, 
-     *               StateD& state, 
-     *               Mask& condition, 
+     *              the signature:
+     *              (ExtremumSegment& segment,
+     *               StateD& state,
+     *               Mask& condition,
      *               Mask active) -> StateD
-     * 
+     *
      *              Changes to the segment, state, and condition can be done in place.
      * \param state The payload passed to ``func``.
      * \param ray   The ray along which the structure is traversed.
      * \param mint  The minimum distance along the ray.
      * \param maxt  The maximum distance along the ray.
-     * \param active 
-     * 
+     * \param active
+     *
      * \return
      *      Returns the final state at the end of the traversal.
      */
@@ -441,16 +441,16 @@ private:
                 LoopState, segment, state, advance, active, reached, current_t,\
                  layer_idx, step, padding                                      \
             )
-        } ls = { 
+        } ls = {
             segment,
-            state, 
+            state,
             /*advance=*/active,
             active,
-            reached, 
-            current_t, 
-            layer_idx, 
+            reached,
+            current_t,
+            layer_idx,
             step,
-            shell_padding, 
+            shell_padding,
         };
 
         dr::tie(ls) = dr::while_loop(
@@ -460,7 +460,7 @@ private:
 
             // Compute radius at current position
             const Float eps = dr::Epsilon<Float> * 2.f;
-            
+
             // Passed midpoint == exiting the concentric spheres
             const Int32 shell_idx = dr::clip(ls.layer_idx + ls.padding, 0, m_resolution.x());
 
@@ -472,7 +472,7 @@ private:
 
             // Test intersection with the shell
             const Float r_test = m_rmin + Float(shell_idx) * m_dr;
-            
+
             const Float disc = disc_base + a * dr::square(r_test);
             const Mask valid_test = disc >= 0.f;
             const Float sqrt_disc = dr::sqrt(disc);
@@ -480,8 +480,8 @@ private:
             const Float t_test_far  = (-b_half + sqrt_disc) * inv_a;
 
             // Update if there is valid intersection that is not tangent.
-            Mask update = ls.active 
-                          && valid_test 
+            Mask update = ls.active
+                          && valid_test
                           && dr::abs(t_test_far - t_test_near) > eps;
             const Mask pass_midpoint = !update || ls.layer_idx == -1;
 
@@ -492,7 +492,7 @@ private:
             dr::masked(ls.step, pass_midpoint)    = 1;
 
             if( dr::any_or<true>(update) ) {
-            
+
                 // Find smallest t > current_t + epsilon among the 4 candidates
                 const Float threshold = ls.current_t + eps;
                 Float t_next = maxt;
@@ -505,7 +505,7 @@ private:
 
                 consider(t_test_near, valid_test);
                 consider(t_test_far,  valid_test);
-                
+
                 // Look up extremum values for this shell
                 Vector2f extremum = dr::gather<Vector2f>(
                     m_extremum_grid, ls.layer_idx, ls.active && !fill);
@@ -514,9 +514,9 @@ private:
                 dr::masked(ls.segment, update) = ExtremumSegment(
                     ls.current_t, t_next, extremum
                 );
-                
+
                 Mask active_update = ls.active && update;
-                auto result = 
+                auto result =
                     func( ls.segment, ls.state, channel, active_update);
                 ls.advance    = result.first;
                 active_update &= result.second;

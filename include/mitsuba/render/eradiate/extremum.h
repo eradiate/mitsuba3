@@ -16,7 +16,7 @@ NAMESPACE_BEGIN(mitsuba)
  * store local extrema (majorant/minorant) of volumetric extinction coefficients.
  * This enables efficient delta tracking with locally-adaptive majorants.
  *
- * To minimize virtual function overhead, the ``traverse_extremum()`` method 
+ * To minimize virtual function overhead, the ``traverse_extremum()`` method
  * encapsulates the entire traversal loop internally, requiring only a single
  * virtual call per distance sample.
  */
@@ -25,8 +25,8 @@ class MI_EXPORT_LIB ExtremumStructure : public JitObject<ExtremumStructure<Float
 public:
     MI_IMPORT_TYPES(Medium, Sampler)
 
-    using TrackingState    = TrackingState<Float, Spectrum>;
-    using TrackingFunction = TrackingFunction<Float, Spectrum>;
+    using TrackingStateType    = TrackingState<Float, Spectrum>;
+    using TrackingFunctionType = TrackingFunction<Float, Spectrum>;
 
     /// Destructor
     ~ExtremumStructure();
@@ -34,7 +34,7 @@ public:
     /**
      * \brief Traverse the extremum along a ray and applies a callback at each
      * encountered segment.
-     * 
+     *
      * This method traverses the extremum structure segment by segment. At each
      * segment, the callback ``func`` is called to advance the ``state``. This
      * is useful for example to implement Delta Tracking, Ratio Tracking, and
@@ -49,22 +49,22 @@ public:
      * \param func          Callback function called at every segment.
      * \param active        Mask for active lanes
      *
-     * \return 
-     *      The final tracking state, that includes the medium interaction if 
+     * \return
+     *      The final tracking state, that includes the medium interaction if
      *      a real scattering event was sampled, and the throughput and pdfs
      *      accumulated throughout the traversal.
-     * 
+     *
      * Note that this function cannot be made abstract because of it would
-     * force the requirement for bindings, which are incompatible with 
+     * force the requirement for bindings, which are incompatible with
      * function types.
      */
-    virtual TrackingState traverse_extremum(
+    virtual TrackingStateType traverse_extremum(
         const Ray3f &ray,
         Float mint,
         Float maxt,
         UInt32 channel,
-        TrackingState state,
-        TrackingFunction *func,
+        TrackingStateType state,
+        TrackingFunctionType *func,
         Mask active = true
     ) const;
 
@@ -72,16 +72,16 @@ public:
     /**
      * \brief Evaluate the minorant and majorant at a medium interaction point.
      *
-     * This method performs point evaluation at interaction point specified in 
+     * This method performs point evaluation at interaction point specified in
      * local space.
      *
      * \param it            Interaction interaction point in local space
      * \param active        Mask for active lanes
      *
-     * \return 
+     * \return
      *      The minorant and majorant values at the medium interaction point.
      *      Clamped values outside bounds.
-     * 
+     *
      */
     virtual std::tuple<Float, Float> eval_1(
         const Interaction3f & it,

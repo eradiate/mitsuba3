@@ -31,11 +31,11 @@ Extremum grid structure (:monosp:`extremum_grid`)
 
  * - resolution
    - |vector|
-   - Grid resolution along the XYZ axis. Does not have to be a multiple of 
-     the underlying volume. Set to [0,0,0] to trigger an adaptive resolution 
+   - Grid resolution along the XYZ axis. Does not have to be a multiple of
+     the underlying volume. Set to [0,0,0] to trigger an adaptive resolution
      routine (Default: [1,1,1]).
 
-This plugin creates a regular grid structure storing local extremum values for 
+This plugin creates a regular grid structure storing local extremum values for
 efficient delta tracking in heterogeneous media. The grid is constructed
 by querying the extinction volume's extrema over each grid cell.
 
@@ -50,9 +50,9 @@ public:
     MI_IMPORT_BASE(ExtremumStructure, m_bbox)
     MI_IMPORT_TYPES(Volume)
 
-    using TrackingState    = TrackingState<Float, Spectrum>;
-    using TrackingFunction = TrackingFunction<Float, Spectrum>;
-    using FloatStorage = DynamicBuffer<Float>;
+    using TrackingStateType    = TrackingState<Float, Spectrum>;
+    using TrackingFunctionType = TrackingFunction<Float, Spectrum>;
+    using FloatStorage         = DynamicBuffer<Float>;
 
     ExtremumGrid(const Properties &props) : Base(props) {
         // Volume Parameters
@@ -66,8 +66,8 @@ public:
 
         if (!m_volume)
             Throw("ExtremumGrid requires at least one volume");
-        
-        // Register the extremum structure to the volume to trigger 
+
+        // Register the extremum structure to the volume to trigger
         // parameter_changed when the volume is modified.
         m_volume->add_extremum_structure(this);
         m_bbox = m_volume->bbox();
@@ -77,7 +77,7 @@ public:
 
         // Resolution Parameters
         m_resolution = props.get<ScalarVector3i>("resolution", ScalarVector3i(1,1,1));
-        
+
         m_adaptive = false;
         if (dr::all(m_resolution <= ScalarVector3i(0))) {
             m_adaptive = true;
@@ -95,13 +95,13 @@ public:
     }
 
 
-    TrackingState traverse_extremum(
+    TrackingStateType traverse_extremum(
         const Ray3f &ray,
         Float mint,
         Float maxt,
         UInt32 channel,
-        TrackingState state,
-        TrackingFunction* func,
+        TrackingStateType state,
+        TrackingFunctionType* func,
         Mask active
     ) const override {
         return traverse_dda(
@@ -149,7 +149,7 @@ private:
     /**
      * \brief Find the best resolution for a given volume.
      *
-     * This method performs a ternary search to find the best extremum grid 
+     * This method performs a ternary search to find the best extremum grid
      * resoluton for a given volume. Note that this is currently a costly
      * operation.
      */
@@ -315,14 +315,14 @@ private:
 
             UInt32 idx = dr::arange<UInt32>((uint32_t) n);
 
-            UInt32 x = idx % resolution.x() ; 
-            UInt32 y = (idx / resolution.x())  % resolution.y(); 
-            UInt32 z =  idx / (resolution.x() * resolution.y()); 
+            UInt32 x = idx % resolution.x() ;
+            UInt32 y = (idx / resolution.x())  % resolution.y();
+            UInt32 z =  idx / (resolution.x() * resolution.y());
 
             Point3f cell_min = Vector3f(x, y, z) * cell_size;
             Point3f cell_max = cell_min + cell_size;
             BoundingBox3f cell_bounds(
-                            cell_min + math::RayEpsilon<Float>, 
+                            cell_min + math::RayEpsilon<Float>,
                             cell_max - math::RayEpsilon<Float>
                         );
 
@@ -337,35 +337,35 @@ private:
     }
 
     /** \brief General regular grid DDA traversal algorithm.
-     * 
-     * This method traverses the regular grid along the provided ray using the 
+     *
+     * This method traverses the regular grid along the provided ray using the
      * DDA algorithm. At each traversed cell, it calls the function ``func``,
-     * that can perform actions on the passed ``segment``, ``state``, 
-     * ``advance``, and ``active``. This function can be used for sampling 
+     * that can perform actions on the passed ``segment``, ``state``,
+     * ``advance``, and ``active``. This function can be used for sampling
      * segments and perform various tracking algorithms.
-     * 
+     *
      * \param func  Function to be called at each step of the traversal. Must have
-     *              the signature: 
-     *              (ExtremumSegment& segment, 
-     *               StateD& state, 
-     *               Mask& advance, 
+     *              the signature:
+     *              (ExtremumSegment& segment,
+     *               StateD& state,
+     *               Mask& advance,
      *               Mask active) -> StateD
-     * 
+     *
      *              Changes to the segment, state, and condition can be done in place.
      * \param state The payload passed to ``func``.
      * \param ray   The ray along which the structure is traversed.
      * \param mint  The minimum distance along the ray.
      * \param maxt  The maximum distance along the ray.
-     * \param active 
-     * 
+     * \param active
+     *
      * \return
      *      Returns the final state at the end of the traversal.
      */
     template<typename FuncT, typename StateT>
     std::decay_t<StateT> traverse_dda(
-        FuncT&& func, 
-        StateT&& state, 
-        const Ray3f& ray, 
+        FuncT&& func,
+        StateT&& state,
+        const Ray3f& ray,
         Float mint,
         Float maxt,
         UInt32 channel,
@@ -375,7 +375,7 @@ private:
 
         ExtremumSegment segment = dr::zeros<ExtremumSegment>();
 
-        // Currently assuming that the majorant aligns perfectly with the 
+        // Currently assuming that the majorant aligns perfectly with the
         // volume and that values outside the bbox cannot be evaluated.
         // Transform ray to local grid coordinates [0,res]³
         Vector3f res = Vector3f(m_resolution);
@@ -449,12 +449,12 @@ private:
             pi,
             t_max
         };
-        
+
         dr::tie(ls) = dr::while_loop(
             dr::make_tuple(ls),
             [](const LoopState& ls) { return ls.active; },
             [this, func, step, abs_rcp_d, t_max, mint, channel](LoopState& ls) {
-            
+
             ExtremumSegment& segment = ls.segment;
             StateD& state = ls.state;
             Mask& advance    = ls.advance;
@@ -490,8 +490,8 @@ private:
             dr::masked(pi, mask && advance) += step;
             dr::masked(t_rem, advance) -= dt;
 
-            active &= dr::all((pi >= 0) 
-                      && (pi < m_resolution)) 
+            active &= dr::all((pi >= 0)
+                      && (pi < m_resolution))
                       && (t_rem > 0.f);
         },
         "DDA Traversal");
@@ -503,7 +503,7 @@ private:
 private:
     /// Grid storing pre-computed local majorants
     FloatStorage m_extremum_grid;
-    
+
     ref<Volume> m_volume;
     ScalarFloat m_scale;
 

@@ -24,7 +24,7 @@ Extremum global structure (:monosp:`extremum_global`)
    - Scale factor for the extremum values (Default: 1.0).
 
 This plugin holds the global minorant and majorant values of a volume.
-At runtime, traversal is performed via a single segment determined by the 
+At runtime, traversal is performed via a single segment determined by the
 passed ``mint`` and ``maxt`` values.
 */
 
@@ -34,8 +34,8 @@ public:
     MI_IMPORT_BASE(ExtremumStructure, m_bbox)
     MI_IMPORT_TYPES(Volume)
 
-    using TrackingState    = TrackingState<Float, Spectrum>;
-    using TrackingFunction = TrackingFunction<Float, Spectrum>;
+    using TrackingStateType    = TrackingState<Float, Spectrum>;
+    using TrackingFunctionType = TrackingFunction<Float, Spectrum>;
 
     ExtremumGlobal(const Properties &props) : Base(props) {
         // Volume Parameters
@@ -49,8 +49,8 @@ public:
 
         if (!m_volume)
             Throw("ExtremumGlobal requires at least one volume");
-        
-        // Register the extremum structure to the volume to trigger 
+
+        // Register the extremum structure to the volume to trigger
         // parameter_changed when the volume is modified.
         m_volume->add_extremum_structure(this);
         m_scale = props.get<ScalarFloat>("scale", 1.f);
@@ -67,20 +67,20 @@ public:
     }
 
 
-    TrackingState traverse_extremum(
+    TrackingStateType traverse_extremum(
         const Ray3f &/*ray*/,
         Float mint,
         Float maxt,
         UInt32 channel,
-        TrackingState state,
-        TrackingFunction* func,
+        TrackingStateType state,
+        TrackingFunctionType* func,
         Mask active
     ) const override {
         ExtremumSegment segment(mint, maxt, m_scale*m_minorant, m_scale*m_majorant);
 
         struct LoopState {
             ExtremumSegment segment;
-            TrackingState state;
+            TrackingStateType state;
             Mask advance;
             Mask active;
 
@@ -96,7 +96,7 @@ public:
         dr::make_tuple(ls),
         [](const LoopState &ls){ return ls.active; },
         [func, channel](LoopState &ls){
-            std::tie(ls.advance, ls.active) = 
+            std::tie(ls.advance, ls.active) =
                 func(ls.segment, ls.state, channel, ls.active);
             ls.active &= !ls.advance;
         });
