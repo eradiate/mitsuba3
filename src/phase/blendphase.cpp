@@ -1,6 +1,9 @@
 #include <mitsuba/core/properties.h>
 #include <mitsuba/render/phase.h>
 #include <mitsuba/render/volume.h>
+// #ERADIATE_CHANGE_BEGIN: DDIS
+#include <mitsuba/render/eradiate/phase_utils.h>
+// #ERADIATE_CHANGE_END
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -193,6 +196,21 @@ public:
         return oss.str();
     }
 
+// #ERADIATE_CHANGE_BEGIN: DDIS
+    void get_nodes(std::vector<ScalarFloat> &nodes) const override {
+        std::vector<ScalarFloat> nodes0, nodes1;
+        m_nested_phase[0]->get_nodes(nodes0);
+        m_nested_phase[1]->get_nodes(nodes1);
+        auto result = merge_nodes<ScalarFloat>({nodes0, nodes1});
+        nodes  = std::move(result);
+    }
+
+    void eval_max(const std::vector<ScalarFloat> &nodes,
+                  std::vector<ScalarFloat> &values) const override {
+        m_nested_phase[0]->eval_max(nodes, values);
+        m_nested_phase[1]->eval_max(nodes, values);
+    }
+// #ERADIATE_CHANGE_END
     MI_DECLARE_CLASS(BlendPhaseFunction)
 protected:
     ref<Volume> m_weight;

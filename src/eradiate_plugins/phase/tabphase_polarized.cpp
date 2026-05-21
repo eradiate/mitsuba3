@@ -405,10 +405,11 @@ public:
     }
 
     void
-    parameters_changed(const std::vector<std::string> & /*keys*/) override {
+    parameters_changed(const std::vector<std::string> & keys) override {
         m_m11.update();
         m_mvec.nodes() = m_m11.nodes();
         m_mvec.update();
+        Base::parameters_changed(keys);
     }
 
     std::string to_string() const override {
@@ -417,6 +418,14 @@ public:
             << "  distr = " << string::indent(m_m11) << std::endl
             << "]";
         return oss.str();
+    }
+
+    void get_nodes(std::vector<ScalarFloat> &nodes) const override {
+        const size_t n = m_m11.size();
+        nodes.resize(n);
+        for (size_t i = 0; i < n; ++i) {
+            nodes[i]  = dr::slice(m_m11.nodes(), i);
+        }
     }
 
     MI_DECLARE_CLASS(TabulatedPolarizedPhaseFunction)

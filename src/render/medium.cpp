@@ -35,6 +35,9 @@ MI_VARIANT Medium<Float, Spectrum>::Medium(const Properties &props)
     }
 
     m_sample_emitters = props.get<bool>("sample_emitters", true);
+// #ERADIATE_CHANGE_BEGIN: DDIS
+    m_ddis_threshold = props.get<ScalarFloat>("ddis_threshold", 0.1f);
+// #ERADIATE_CHANGE_END
 }
 
 MI_VARIANT Medium<Float, Spectrum>::~Medium() { }
