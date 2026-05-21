@@ -2,6 +2,7 @@
 #include <mitsuba/core/properties.h>
 #include <mitsuba/core/warp.h>
 #include <mitsuba/render/phase.h>
+#include <mitsuba/render/eradiate/phase_utils.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -103,8 +104,9 @@ public:
     }
 
     void
-    parameters_changed(const std::vector<std::string> & /*keys*/) override {
+    parameters_changed(const std::vector<std::string> & keys) override {
         m_distr.update();
+        Base::parameters_changed(keys);
     }
 
     std::tuple<Vector3f, Spectrum, Float>
@@ -155,6 +157,14 @@ public:
             << "  distr = " << string::indent(m_distr) << std::endl
             << "]";
         return oss.str();
+    }
+
+    void get_nodes(std::vector<ScalarFloat> &nodes) const override {
+        const size_t n = m_distr.size();
+        nodes.resize(n);
+        for (size_t i = 0; i < n; ++i) {
+            nodes[i]  = dr::slice(m_distr.nodes(), i);
+        }
     }
 
     MI_DECLARE_CLASS(IrregularTabulatedPhaseFunction)

@@ -25,60 +25,53 @@ EO Volumetric path tracer (:monosp:`eovolpath`)
 
  * - max_depth
    - |int|
-   - Specifies the longest path depth in the generated output image (where -1
-     corresponds to :math:`\infty`). A value of 1 will only render directly
-     visible light sources. 2 will lead to single-bounce (direct-only)
-     illumination, and so on. Default: -1
+   - Specifies the longest path depth in the generated output image (where -1 corresponds to
+     :math:`\infty`). A value of 1 will only render directly visible light sources. 2 will lead
+     to single-bounce (direct-only) illumination, and so on. (Default: -1)
 
  * - rr_depth
    - |int|
-   - Specifies the minimum path depth, after which the implementation will start
-     to use the *russian roulette* path termination criterion. Default: 5
+   - Specifies the minimum path depth, after which the implementation will start to use the
+     *russian roulette* path termination criterion. (Default: 5)
 
  * - rr_factor
    - |float|
-   - Specifies the maximum probability to keep a path when russian roulette is
-     evaluated. Default: 0.97
+   - Specifies the maximum probability to keep a path when russian roulette is evaluated.
+     (Default: 0.97)
 
- * - ddis_threshold
-   - |float|
-   - Specifies the probability to importance sample the phase using the emitter
-     as incident direction. Set to a negative value to disable. Default: 0.1
+ * - enable_ddis
+   - |bool|
+   - Activate the DDIS variance reduction method. The `ddis_threshold` used to determine the
+     probability of sampling usin the emitter direction is set in the media plugins.
+     (Default: false)
 
  * - hide_emitters
    - |bool|
-   - Hide directly visible emitters. Default: no, *i.e.* |False|
+   - Hide directly visible emitters. (Default: no, i.e. |false|)
 
-This plugin provides a volumetric path tracer catered towards Earth Observation
-simulations that can be used to compute approximate solutions of the radiative
-transfer equation. Its implementation makes use of multiple importance sampling
-to combine BSDF and phase function sampling with direct illumination sampling
-strategies. On surfaces, it behaves exactly like the standard path tracer.
+This plugin provides a volumetric path tracer catered towards Earth Observation simualtions that can
+be used to compute approximate solutions of the radiative transfer equation. Its implementation
+makes use of multiple importance sampling to combine BSDF and phase function sampling with direct
+illumination sampling strategies. On surfaces, it behaves exactly like the standard path tracer.
 
-This integrator has special support for index-matched transmission events
-(*i.e.* surface scattering events that do not change the direction of light).
-As a consequence, participating media enclosed by a stencil shape are rendered
-considerably more efficiently when this shape has a :ref:`null <bsdf-null>` or
-:ref:`thin dielectric <bsdf-thindielectric>` BSDF assigned to it (as compared
-to, say, a :ref:`dielectric <bsdf-dielectric>` or
+This integrator has special support for index-matched transmission events (i.e. surface scattering
+events that do not change the direction of light). As a consequence, participating media enclosed by
+a stencil shape are rendered considerably more efficiently when this shape
+has a :ref:`null <bsdf-null>` or :ref:`thin dielectric <bsdf-thindielectric>` BSDF assigned
+to it (as compared to, say, a :ref:`dielectric <bsdf-dielectric>` or
 :ref:`roughdielectric <bsdf-roughdielectric>` BSDF).
 
-In addition, it implements the DDIS variance reduction method
-:cite:p:`Buras2011EfficientUnbiasedVariance` which reduces noise in the presence
-of strongly peaked phase functions.
+In addition, it implements the DDIS variance reduction method (Buras and Mayer, 2011) which reduces
+noise in the presence of strongly peaked phase functions. More variance reduction methods coming up
+soon!
 
-.. note::
+.. note:: This integrator does not implement good sampling strategies to render
+    participating media with a spectrally varying extinction coefficient. For these cases,
+    it is better to use the more advanced :ref:`volumetric path tracer with
+    spectral MIS <integrator-volpathmis>`, which will produce in a significantly less noisy
+    rendered image. Note however that it does not implement the EO features added in this integrator.
 
-    This integrator does not implement good sampling strategies to render
-    participating media with a spectrally varying extinction coefficient. For
-    these cases, it is better to use the more advanced
-    :ref:`volumetric path tracer with spectral MIS <integrator-volpathmis>`,
-    which will produce in a significantly less noisy rendered image. Note however
-    that it does not implement the EO features added in this integrator.
-
-.. warning::
-
-    This integrator does not support forward-mode differentiation.
+.. warning:: This integrator does not support forward-mode differentiation.
 */
 template <typename Float, typename Spectrum>
 class EOVolumetricPathIntegrator : public MonteCarloIntegrator<Float, Spectrum> {
@@ -86,19 +79,17 @@ class EOVolumetricPathIntegrator : public MonteCarloIntegrator<Float, Spectrum> 
 public:
     MI_IMPORT_BASE(MonteCarloIntegrator, m_max_depth, m_rr_depth, m_hide_emitters)
     MI_IMPORT_TYPES(Scene, Sampler, Emitter, EmitterPtr, BSDF, BSDFPtr, Medium,
-                    MediumPtr, PhaseFunctionContext, ExtremumStructure)
+                    MediumPtr, PhaseFunction, PhaseFunctionContext, ExtremumStructure)
 
     using TrackingStateType = TrackingState<Float, Spectrum>;
 
     EOVolumetricPathIntegrator(const Properties &props) : Base(props) {
-        m_ddis_threshold = props.get<ScalarFloat>("ddis_threshold", 0.1f);
         m_rr_factor = props.get<ScalarFloat>("rr_factor", 0.97f);
-
-        if (m_ddis_threshold > 1.f)
-            Throw("`ddis_threshold` is larger than 1.");
 
         if (m_rr_factor < 0.f || m_rr_factor > 1.f)
             Throw("`rr_factor` is outside range [0.,1.].");
+
+        m_enable_ddis = props.get<bool>("enable_ddis", false);
     }
 
     /// Create seed and offsets that can be used to generate a new PCG32 rng.
@@ -233,9 +224,14 @@ public:
             // we can perform a few optimizations to speed up rendering
             Mask is_spectral = active_medium;
             Mask not_spectral = false;
+            Float ddis_threshold = -1.f;
+
             if (dr::any_or<true>(active_medium)) {
                 is_spectral &= medium->has_spectral_extinction();
                 not_spectral = !is_spectral && active_medium;
+
+                dr::masked(ddis_threshold, active_medium && m_enable_ddis) =
+                    medium->ddis_threshold();
             }
 
             Float mint, maxt;
@@ -388,6 +384,7 @@ public:
 
                 PhaseFunctionContext phase_ctx(sampler);
                 auto phase = mei.medium->phase_function();
+                auto ddis_phase_function = mei.medium->ddis_phase_function();
 
                 // --------------------- Emitter sampling ---------------------
                 Mask sample_emitters = mei.medium->use_emitter_sampling();
@@ -397,7 +394,7 @@ public:
 
                 Mask active_e = act_medium_scatter && sample_emitters;
 
-                Mask perform_ddis = m_ddis_threshold > 0.f && active_e;
+                Mask perform_ddis = ddis_threshold > 0.f && active_e;
                 MediumInteraction3f ddis_mei = mei;
 
                 if (dr::any_or<true>(active_e)) {
@@ -411,11 +408,11 @@ public:
 
                         Float ddis_phase_pdf;
                         std::tie(std::ignore, ddis_phase_pdf) =
-                            phase->eval_pdf(phase_ctx, ddis_mei, ds.d, perform_ddis);
+                            ddis_phase_function->eval_pdf(phase_ctx, ddis_mei, ds.d, perform_ddis);
 
                         // Compute mixture pdf accounting for DDIS probability
                         dr::masked(phase_pdf, perform_ddis) =
-                            (1.f - m_ddis_threshold) * phase_pdf + m_ddis_threshold * ddis_phase_pdf;
+                            (1.f - ddis_threshold) * phase_pdf + ddis_threshold * ddis_phase_pdf;
                     }
 
                     dr::masked(result, active_e) += throughput * phase_val * emitted *
@@ -426,23 +423,26 @@ public:
                 dr::masked(phase, !act_medium_scatter) = nullptr;
 
                 Float eps = sampler->next_1d(active_medium);
-                Mask active_ddis = (eps < m_ddis_threshold) && act_medium_scatter && perform_ddis;
+                Mask active_ddis = (eps < ddis_threshold) && act_medium_scatter && perform_ddis;
+
                 MediumInteraction3f sample_mei = dr::select(active_ddis, ddis_mei, mei);
+                auto sample_phase = dr::select(active_ddis, ddis_phase_function, phase);
 
                 // ddis off -> phase_weight: p(mu)/pdf(mu); phase_pdf: pdf(mu);
                 // ddis on  -> phase_weight: p(mu')/pdf(mu'); phase_pdf: pdf(mu');
-                auto [wo, phase_weight, phase_pdf] = phase->sample(phase_ctx, sample_mei,
+                auto [wo, phase_weight, phase_pdf] = sample_phase->sample(phase_ctx, sample_mei,
                     sampler->next_1d(act_medium_scatter),
                     sampler->next_2d(act_medium_scatter),
                     act_medium_scatter);
+
                 act_medium_scatter &= phase_pdf > 0.f;
 
                 if (dr::any_or<true>(perform_ddis)) {
                     auto [natural_val, natural_pdf] = phase->eval_pdf(phase_ctx, mei, wo, perform_ddis);
-                    auto [ddis_val, ddis_pdf] = phase->eval_pdf(phase_ctx, ddis_mei, wo, perform_ddis);
+                    auto [ddis_val, ddis_pdf] = ddis_phase_function->eval_pdf(phase_ctx, ddis_mei, wo, perform_ddis);
 
                     dr::masked(phase_pdf, perform_ddis) =
-                        ((1.f - m_ddis_threshold) * natural_pdf + m_ddis_threshold * ddis_pdf);
+                        ((1.f - ddis_threshold) * natural_pdf + ddis_threshold * ddis_pdf);
                     dr::masked(phase_weight, perform_ddis) = natural_val / phase_pdf;
                 }
 
@@ -482,6 +482,7 @@ public:
                 EmitterPtr emitter = si.emitter(scene);
                 Mask active_e = active_surface && (emitter != nullptr) &&
                                 !((depth == 0u) && m_hide_emitters);
+
                 if (dr::any_or<true>(active_e)) {
                     Float emitter_pdf = 1.0f;
                     if (dr::any_or<true>(active_e && !count_direct)) {
@@ -502,9 +503,23 @@ public:
                 BSDFPtr bsdf  = si.bsdf(ray);
                 Mask active_e = active_surface && has_flag(bsdf->flags(), BSDFFlags::Smooth) && (depth + 1 < (uint32_t) m_max_depth);
 
+                // Initialize variables required for a DDIS
+                Mask perform_ddis = (medium != nullptr) && (ddis_threshold > 0.f) && active_e;
+                MediumInteraction3f ddis_mei = dr::zeros<MediumInteraction3f>();
+                ddis_mei.p = si.p;
+                ddis_mei.time = si.time;
+                ddis_mei.wavelengths = ddis_mei.wavelengths;
+                ddis_mei.medium = medium;
+                PhaseFunctionContext phase_ctx(sampler);
+
                 if (likely(dr::any_or<true>(active_e))) {
-                    // auto [emitted, ds] = sample_emitter(si, scene, sampler, medium, channel, active_e);
                     auto [emitted, ds] = sample_emitter(si, scene, sampler, medium, channel, active_e);
+
+                    if (dr::any_or<true>(perform_ddis)) {
+                        // Set ddis incoming direction towards emitter
+                        dr::masked(ddis_mei.wi, perform_ddis) = -ds.d;
+                        dr::masked(ddis_mei.sh_frame, perform_ddis) = Frame3f(-ds.d);
+                    }
 
                     // Query the BSDF for that emitter-sampled direction
                     Vector3f wo       = si.to_local(ds.d);
@@ -520,6 +535,53 @@ public:
                 // ----------------------- BSDF sampling ----------------------
                 auto [bs, bsdf_val] = bsdf->sample(ctx, si, sampler->next_1d(active_surface),
                                                    sampler->next_2d(active_surface), active_surface);
+
+                if (dr::any_or<true>(perform_ddis)) {
+
+                    auto ddis_phase_function = medium->ddis_phase_function();
+                    Spectrum natural_val = bsdf_val * bs.pdf;
+                    Float natural_pdf = bs.pdf;
+
+                    // DDIS is active if the emitter is in the same lobe as the ray,
+                    // and that the BSDF is neither Null or Delta.
+                    Float eps = sampler->next_1d(perform_ddis);
+                    Mask active_ddis = (eps < ddis_threshold) && perform_ddis;
+                    active_ddis &= dr::dot(-ray.d, -ddis_mei.wi) > 0.f;
+                    active_ddis &= !has_flag(bs.sampled_type, BSDFFlags::Null)
+                                && !has_flag(bs.sampled_type, BSDFFlags::Delta);
+
+                    // Sample from the ddis phase function
+                    if (dr::any_or<true>(active_ddis)) {
+                        auto [wo, phase_weight, phase_pdf] =
+                            ddis_phase_function->sample(phase_ctx, ddis_mei,
+                                sampler->next_1d(active_ddis),
+                                sampler->next_2d(active_ddis),
+                                active_ddis);
+
+                        dr::masked(bs.wo, active_ddis)  = si.to_local(wo);
+                        dr::masked(bs.eta, active_ddis) = 1.f;
+
+                        BSDFContext ddis_ctx;
+                        ddis_ctx.type_mask = +BSDFFlags::Reflection;
+
+                        // Update the bsdf value with the evalutation from the new outgoing direction
+                        auto [new_natural_val, new_natural_pdf] =
+                            bsdf->eval_pdf(ddis_ctx, si , bs.wo, active_ddis);
+                        dr::masked(natural_val, active_ddis) = new_natural_val;
+                        dr::masked(natural_pdf, active_ddis) = new_natural_pdf;
+                    }
+
+                    Float ddis_pdf;
+                    std::tie(std::ignore, ddis_pdf) =
+                        ddis_phase_function->eval_pdf(phase_ctx, ddis_mei,
+                                                      si.to_world(bs.wo),
+                                                      perform_ddis);
+
+                    dr::masked(bs.pdf, perform_ddis) =
+                        ((1.f - ddis_threshold) * natural_pdf + ddis_threshold * ddis_pdf);
+                    dr::masked(bsdf_val, perform_ddis) = natural_val / bs.pdf;
+                }
+
                 bsdf_val = si.to_world_mueller(bsdf_val, -bs.wo, si.wi);
 
                 dr::masked(throughput, active_surface) *= bsdf_val;
@@ -794,7 +856,8 @@ public:
     MI_DECLARE_CLASS(EOVolumetricPathIntegrator)
 private:
     ScalarFloat m_rr_factor;
-    ScalarFloat m_ddis_threshold;
+
+    bool m_enable_ddis;
 };
 
 MI_EXPORT_PLUGIN(EOVolumetricPathIntegrator)

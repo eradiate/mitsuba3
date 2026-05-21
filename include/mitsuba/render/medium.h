@@ -127,6 +127,12 @@ public:
     MI_INLINE const PhaseFunction *phase_function() const {
         return m_phase_function.get();
     }
+// #ERADIATE_CHANGE_BEGIN: DDIS
+    /// Return the phase function of this medium, non const
+    MI_INLINE PhaseFunction *phase_function() {
+        return m_phase_function.get();
+    }
+// #ERADIATE_CHANGE_END
 
     /// Returns whether this specific medium instance uses emitter sampling
     MI_INLINE bool use_emitter_sampling() const { return m_sample_emitters; }
@@ -170,6 +176,34 @@ public:
     }
 // #ERADIATE_CHANGE_END
 
+// #ERADIATE_CHANGE_BEGIN: DDIS
+    /**
+     * \brief Return the ddis phase function of this medium. Can be null for
+     * medium that don't specify such phase function.
+     */
+    MI_INLINE const PhaseFunction *ddis_phase_function() const {
+        return m_ddis_phase_function.get();
+    }
+
+    MI_INLINE ScalarFloat ddis_threshold() const {
+        return m_ddis_threshold;
+    }
+
+    /**
+     * \brief Rebuild any DDIS-related derived data when the phase function has
+     * changed.
+     *
+     * This method is called by the scene's parameters_changed() for every
+     * medium whose phase function is marked dirty. The default implementation
+     * is a no-op; subclasses that maintain a DDIS phase function override it.
+     *
+     * This is intentionally separate from parameters_changed() so that the
+     * scene can drive all media to completion before clearing dirty flags,
+     * which is required when multiple media share the same phase function via
+     * a scene-level reference.
+     */
+    virtual void update_ddis_phase_function() {}
+// #ERADIATE_CHANGE_END
     void traverse(TraversalCallback *callback) override;
 
     /// Return a human-readable representation of the Medium
@@ -191,8 +225,13 @@ protected:
     bool m_use_rrt;
 // #ERADIATE_CHANGE_END
 
-    MI_DECLARE_TRAVERSE_CB(m_phase_function, m_extremum_structure)
-    // MI_DECLARE_TRAVERSE_CB(m_phase_function)
+// #ERADIATE_CHANGE_BEGIN: DDIS
+    ref<PhaseFunction> m_ddis_phase_function;
+    ScalarFloat m_ddis_threshold;
+    
+    MI_DECLARE_TRAVERSE_CB(m_phase_function, m_extremum_structure, 
+                           m_ddis_phase_function, m_ddis_threshold)
+// #ERADIATE_CHANGE_END
 };
 
 MI_EXTERN_CLASS(Medium)
@@ -217,9 +256,13 @@ DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::Medium)
 // #ERADIATE_CHANGE_END
     DRJIT_CALL_METHOD(get_scattering_coefficients)
     
+// #ERADIATE_CHANGE_BEGIN: Extremum Support && Residual Ratio Tracking && DDIS
+    DRJIT_CALL_GETTER(ddis_phase_function)
+    DRJIT_CALL_GETTER(ddis_threshold)
     DRJIT_CALL_GETTER(use_rrt)
     DRJIT_CALL_GETTER(extremum_structure)
     DRJIT_CALL_METHOD(prepare_medium_traversal)
+// #ERADIATE_CHANGE_END
 DRJIT_CALL_END()
 
 //! @}

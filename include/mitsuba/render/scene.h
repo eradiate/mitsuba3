@@ -6,6 +6,9 @@
 #include <mitsuba/render/fwd.h>
 #include <mitsuba/render/sensor.h>
 #include <mitsuba/render/shapegroup.h>
+// #ERADIATE_CHANGE_BEGIN: DDIS
+#include <mitsuba/render/phase.h>
+// #ERADIATE_CHANGE_END
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -36,9 +39,11 @@ NAMESPACE_BEGIN(mitsuba)
 template <typename Float, typename Spectrum>
 class MI_EXPORT_LIB Scene final : public JitObject<Scene<Float, Spectrum>> {
 public:
+// #ERADIATE_CHANGE_BEGIN: DDIS
     MI_IMPORT_TYPES(BSDF, Emitter, EmitterPtr, SensorPtr, Film, Sampler, Shape,
                     ShapePtr, ShapeGroup, Sensor, Integrator, Medium, MediumPtr,
-                    Mesh)
+                    Mesh, PhaseFunction)
+// #ERADIATE_CHANGE_END
 
     /// Instantiate a scene from a \ref Properties object
     Scene(const Properties &props);
@@ -812,6 +817,9 @@ protected:
 
     std::vector<ref<Emitter>> m_emitters;
     DynamicBuffer<EmitterPtr> m_emitters_dr;
+// #ERADIATE_CHANGE_BEGIN: DDIS phase dirty tracking
+    std::vector<ref<Medium>> m_media;
+// #ERADIATE_CHANGE_END
 
     std::vector<ref<Shape>> m_shapes;
     DynamicBuffer<ShapePtr> m_shapes_dr;
