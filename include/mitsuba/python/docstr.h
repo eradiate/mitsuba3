@@ -2934,9 +2934,9 @@ that store local extrema (majorant/minorant) of volumetric extinction
 coefficients. This enables efficient delta tracking with locally-
 adaptive majorants.
 
-To minimize virtual function overhead, the ``sample_segment()`` method
-encapsulates the entire traversal loop internally, requiring only a
-single virtual call per distance sample.)doc";
+To minimize virtual function overhead, the ``traverse_extremum()``
+method encapsulates the entire traversal loop internally, requiring
+only a single virtual call per distance sample.)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure_2 = R"doc()doc";
 
@@ -2980,13 +2980,15 @@ Returns:
 
 static const char *__doc_mitsuba_ExtremumStructure_m_bbox = R"doc(Bounding box of the extremum structure in world space)doc";
 
-static const char *__doc_mitsuba_ExtremumStructure_sample_segment =
-R"doc(Sample a segment along a ray with desired optical thickness
+static const char *__doc_mitsuba_ExtremumStructure_traverse_extremum =
+R"doc(Traverse the extremum along a ray and applies a callback at each
+encountered segment.
 
-This method traverses the extremum structure (e.g., via DDA for grids)
-and returns a segment where the accumulated optical thickness reaches
-the desired value. The traversal logic is completely encapsulated
-within this method to minimize virtual call overhead.
+This method traverses the extremum structure segment by segment. At
+each segment, the callback ``func`` is called to advance the
+``state``. This is useful for example to implement Delta Tracking,
+Ratio Tracking, and Residual Ratio Tracking. The callback is typically
+defined in the integrator.
 
 Parameter ``ray``:
     Ray along which to sample
@@ -2997,17 +2999,26 @@ Parameter ``mint``:
 Parameter ``maxt``:
     Maximum distance to consider
 
-Parameter ``target_ot``:
-    Target optical thickness to accumulate
+Parameter ``channel``:
+    Channel from which to sample
+
+Parameter ``state``:
+    Mutable tracking state carried through the traversal loop
+
+Parameter ``func``:
+    Callback function called at every segment.
 
 Parameter ``active``:
     Mask for active lanes
 
 Returns:
-    ExtremumSegment containing the sampled distance (mint), segment
-    bounds, and local majorant/minorant values. If desired_tau cannot
-    be reached, mint is set to Infinity. Accumulated optical thickness
-    at segment start.)doc";
+    The final tracking state, that includes the medium interaction if
+    a real scattering event was sampled, and the throughput and pdfs
+    accumulated throughout the traversal.
+
+Note that this function cannot be made abstract because of it would
+force the requirement for bindings, which are incompatible with
+function types.)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure_type = R"doc()doc";
 
@@ -4750,13 +4761,11 @@ static const char *__doc_mitsuba_Medium_Medium_2 = R"doc()doc";
 
 static const char *__doc_mitsuba_Medium_class_name = R"doc()doc";
 
-static const char *__doc_mitsuba_Medium_eval_transmittance_pdf_real = R"doc()doc";
-
-static const char *__doc_mitsuba_Medium_extremum_structure =
-R"doc(Returns the extremum structure for local majorant acceleration
-(nullptr if not used))doc";
+static const char *__doc_mitsuba_Medium_extremum_structure = R"doc(Returns the extremum structure for local extremum acceleration.)doc";
 
 static const char *__doc_mitsuba_Medium_get_majorant = R"doc(Returns the medium's majorant used for delta tracking)doc";
+
+static const char *__doc_mitsuba_Medium_get_minorant = R"doc(Returns the medium's minorant used for residual ratio tracking)doc";
 
 static const char *__doc_mitsuba_Medium_get_scattering_coefficients =
 R"doc(Returns the medium coefficients Sigma_s, Sigma_n and Sigma_t evaluated
@@ -4772,8 +4781,6 @@ static const char *__doc_mitsuba_Medium_is_homogeneous = R"doc(Returns whether t
 
 static const char *__doc_mitsuba_Medium_m_extremum_structure = R"doc()doc";
 
-static const char *__doc_mitsuba_Medium_m_has_local_extremum = R"doc()doc";
-
 static const char *__doc_mitsuba_Medium_m_has_spectral_extinction = R"doc()doc";
 
 static const char *__doc_mitsuba_Medium_m_is_homogeneous = R"doc()doc";
@@ -4782,7 +4789,22 @@ static const char *__doc_mitsuba_Medium_m_phase_function = R"doc()doc";
 
 static const char *__doc_mitsuba_Medium_m_sample_emitters = R"doc()doc";
 
+static const char *__doc_mitsuba_Medium_m_use_rrt = R"doc()doc";
+
 static const char *__doc_mitsuba_Medium_phase_function = R"doc(Return the phase function of this medium)doc";
+
+static const char *__doc_mitsuba_Medium_prepare_medium_traversal =
+R"doc(Intersects ray with the medium bbox and creates a medium interaction.
+
+Parameter ``ray``:
+    The ray that is used to test the medium bbox.
+
+Returns:
+    A tuple (mei, mint, maxt): ``mei`` is a ``MediumInteraction3f``
+    object initialized with the current ray and medium data. ``mint``
+    and ``maxt`` represent the minimum and maximum intersection
+    distances of the ray with the medium's bbox. In case there are no
+    valid intersection, the range defaults to [0, +Inf].)doc";
 
 static const char *__doc_mitsuba_Medium_sample_interaction =
 R"doc(Sample a free-flight distance in the medium.
@@ -4807,9 +4829,46 @@ Returns:
     will always be valid, except if the ray missed the Medium's
     bounding box.)doc";
 
-static const char *__doc_mitsuba_Medium_sample_interaction_real = R"doc()doc";
+static const char *__doc_mitsuba_Medium_sample_interaction_analytical =
+R"doc(Sample a free-flight distance in the medium analytically.
+
+This function samples a (tentative) free-flight distance according to
+an exponential transmittance. It is then up to the integrator to then
+decide whether the MediumInteraction corresponds to a real or null
+scattering event.
+
+Parameter ``ray``:
+    Ray, along which a distance should be sampled
+
+Parameter ``it``:
+    The boundary interaction that the sampled distance cannot exceed.
+
+Parameter ``sample``:
+    A uniformly distributed random sample
+
+Parameter ``channel``:
+    The channel according to which we will sample the free-flight
+    distance. This argument is only used when rendering in RGB modes.
+
+Returns:
+    This method returns a MediumInteraction. The MediumInteraction
+    will always be valid, except if the ray missed the Medium's
+    bounding box.)doc";
 
 static const char *__doc_mitsuba_Medium_to_string = R"doc(Return a human-readable representation of the Medium)doc";
+
+static const char *__doc_mitsuba_Medium_transmittance_eval_analytical =
+R"doc(Compute the analytical transmittance along a ray to an interaction.
+
+Parameter ``ray``:
+    Ray, along which to compute the transmittance, use mint
+
+Parameter ``si``:
+    Interaction that marks the end of the segment along which to
+    compute the transmittance.
+
+Returns:
+    The transmittance along a ray)doc";
 
 static const char *__doc_mitsuba_Medium_transmittance_eval_pdf =
 R"doc(Compute the transmittance and PDF
@@ -4839,6 +4898,8 @@ static const char *__doc_mitsuba_Medium_traverse_1_cb_rw = R"doc()doc";
 static const char *__doc_mitsuba_Medium_type = R"doc()doc";
 
 static const char *__doc_mitsuba_Medium_use_emitter_sampling = R"doc(Returns whether this specific medium instance uses emitter sampling)doc";
+
+static const char *__doc_mitsuba_Medium_use_rrt = R"doc()doc";
 
 static const char *__doc_mitsuba_Medium_variant_name = R"doc()doc";
 
@@ -10653,23 +10714,14 @@ static const char *__doc_mitsuba_Timer_start = R"doc()doc";
 
 static const char *__doc_mitsuba_Timer_value = R"doc()doc";
 
-static const char *__doc_mitsuba_TrackingEstimator = R"doc()doc";
+static const char *__doc_mitsuba_TrackingState =
+R"doc(State carried through extremum traversal to accumulate the throughput
+and its PDF.
 
-static const char *__doc_mitsuba_TrackingEstimatorType = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingEstimatorType_RatioTracking = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingEstimatorType_ResidualRatioTracking = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingEstimator_estimator = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingEstimator_ratio_tracking = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingEstimator_residual_ratio_tracking = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingEstimator_transmittance = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingState = R"doc()doc";
+Can be used to for delta tracking, ratio tracking, and residual ratio
+tracking. Note: Since the number of required dimensions is different
+for all pixel samples, ``rng`` is used to sample distances and event
+types.)doc";
 
 static const char *__doc_mitsuba_TrackingState_TrackingState = R"doc()doc";
 
@@ -10681,9 +10733,11 @@ static const char *__doc_mitsuba_TrackingState_fields = R"doc()doc";
 
 static const char *__doc_mitsuba_TrackingState_fields_2 = R"doc()doc";
 
+static const char *__doc_mitsuba_TrackingState_has_spectral_extinction = R"doc()doc";
+
 static const char *__doc_mitsuba_TrackingState_labels = R"doc()doc";
 
-static const char *__doc_mitsuba_TrackingState_medium = R"doc()doc";
+static const char *__doc_mitsuba_TrackingState_mei = R"doc()doc";
 
 static const char *__doc_mitsuba_TrackingState_name = R"doc()doc";
 
@@ -10693,15 +10747,13 @@ static const char *__doc_mitsuba_TrackingState_operator_assign_2 = R"doc()doc";
 
 static const char *__doc_mitsuba_TrackingState_ray = R"doc()doc";
 
-static const char *__doc_mitsuba_TrackingState_sampler = R"doc()doc";
+static const char *__doc_mitsuba_TrackingState_rng = R"doc()doc";
 
 static const char *__doc_mitsuba_TrackingState_target_ot = R"doc()doc";
 
-static const char *__doc_mitsuba_TrackingState_tau_acc = R"doc()doc";
+static const char *__doc_mitsuba_TrackingState_throughput = R"doc()doc";
 
-static const char *__doc_mitsuba_TrackingState_transmittance_one = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingState_transmittance_two = R"doc()doc";
+static const char *__doc_mitsuba_TrackingState_use_rrt = R"doc()doc";
 
 static const char *__doc_mitsuba_Transform =
 R"doc(Unified homogeneous coordinate transformation
@@ -11136,7 +11188,8 @@ static const char *__doc_mitsuba_Volume_m_to_local = R"doc(Used to bring points 
 static const char *__doc_mitsuba_Volume_majorant =
 R"doc(Compute local majorant (maximum) over a spatial region
 
-Convenience method that returns only the majorant.)doc";
+Convenience method that returns only the majorant. The default
+implementation calls `extremum()` and returns the second element.)doc";
 
 static const char *__doc_mitsuba_Volume_max = R"doc(Returns the maximum value of the volume over all dimensions.)doc";
 
@@ -11157,7 +11210,8 @@ Pointer allocation/deallocation must be performed by the caller.)doc";
 static const char *__doc_mitsuba_Volume_minorant =
 R"doc(Compute local minorant (minimum) over a spatial region
 
-Convenience method that returns only the minorant.)doc";
+Convenience method that returns only the minorant. The default
+implementation calls `extremum()` and returns the first element.)doc";
 
 static const char *__doc_mitsuba_Volume_pin = R"doc()doc";
 
@@ -11941,6 +11995,8 @@ static const char *__doc_mitsuba_hash_combine = R"doc()doc";
 static const char *__doc_mitsuba_hasher = R"doc()doc";
 
 static const char *__doc_mitsuba_hasher_operator_call = R"doc()doc";
+
+static const char *__doc_mitsuba_index_spectrum = R"doc(Helper function to index the channel of an ``UnpolarizedSpectrum``.)doc";
 
 static const char *__doc_mitsuba_ior_from_file = R"doc()doc";
 

@@ -79,8 +79,34 @@ public:
                            Mask active) const;
 
 // #ERADIATE_CHANGE_BEGIN, NM 05/06/2024 : add function that calculates the transmittance and pdf  
-    virtual std::tuple<MediumInteraction3f, Float, Float> 
-    sample_interaction_real(const Ray3f &ray, const SurfaceInteraction3f &si,
+    /**
+     * \brief Sample a free-flight distance in the medium analytically.
+     *
+     * This function samples a (tentative) free-flight distance according to an
+     * exponential transmittance. It is then up to the integrator to then decide
+     * whether the MediumInteraction corresponds to a real or null scattering
+     * event.
+     *
+     * \param ray      Ray, along which a distance should be sampled
+     * \param it       The boundary interaction that the sampled distance cannot
+     * exceed.
+     * \param sample   A uniformly distributed random sample
+     * \param channel  The channel according to which we will sample the
+     * free-flight distance. This argument is only used when rendering in RGB
+     * modes.
+     *
+     * \return         This method returns a tuple 
+     *                 (MediumInteraction, Transmittance, PDF).
+     *                 The MediumInteraction if an interaction was sampled within
+     *                 the medium boudning box and before the bouding iteraction 
+     *                 \ref it.
+     *                 The transmittance and PDF are both computed for all channels
+     *                 even if the sampling operation is performed on one channel.
+     *                 
+     */
+    virtual 
+    std::tuple<MediumInteraction3f, UnpolarizedSpectrum, UnpolarizedSpectrum> 
+    sample_interaction_analytical(const Ray3f &ray, const Interaction3f &it,
                             Float sample, UInt32 channel, Mask active) const;
 
     /** \brief Compute the analytical transmittance along a ray to an interaction.
@@ -185,8 +211,8 @@ DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::Medium)
     DRJIT_CALL_METHOD(intersect_aabb)
     DRJIT_CALL_METHOD(sample_interaction)
     DRJIT_CALL_METHOD(transmittance_eval_pdf)
-    DRJIT_CALL_METHOD(sample_interaction_real)
 // #ERADIATE_CHANGE_BEGIN: Add function that calculates the transmittance and pdf 
+    DRJIT_CALL_METHOD(sample_interaction_analytical)
     DRJIT_CALL_METHOD(transmittance_eval_analytical)
 // #ERADIATE_CHANGE_END
     DRJIT_CALL_METHOD(get_scattering_coefficients)

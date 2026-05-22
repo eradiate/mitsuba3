@@ -186,9 +186,8 @@ public:
         precompute_optical_thickness();
     }
 
-    std::tuple<typename Medium<Float, Spectrum>::MediumInteraction3f, Float,
-               Float>
-    sample_interaction_real(const Ray3f &ray, const SurfaceInteraction3f &si,
+    std::tuple<MediumInteraction3f, UnpolarizedSpectrum, UnpolarizedSpectrum>
+    sample_interaction_analytical(const Ray3f &ray, const Interaction3f &it,
                             Float sample, UInt32 channel,
                             Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumSample, active);
@@ -201,7 +200,7 @@ public:
         dr::masked(maxt, !active) = dr::Infinity<Float>;
 
         mint = dr::maximum(0.f, mint);
-        maxt = dr::minimum(si.t, dr::minimum(ray.maxt, maxt));
+        maxt = dr::minimum(it.t, dr::minimum(ray.maxt, maxt));
 
         Mask escaped = !active;
 
@@ -223,10 +222,10 @@ public:
         const ScalarPoint3f min = m_sigmat->bbox().min;
 
         const ScalarVector3f layer_norm(0.f, 0.f, 1.f);
-        Float cum_opt_thick = dr::zeros<Float>();
-        Float sampled_t     = dr::Infinity<Float>;
-        Float tr            = dr::zeros<Float>();
-        Float pdf           = dr::zeros<Float>();
+        Float sampled_t                   = dr::Infinity<Float>;
+        UnpolarizedSpectrum cum_opt_thick = dr::zeros<UnpolarizedSpectrum>();
+        UnpolarizedSpectrum tr            = dr::zeros<UnpolarizedSpectrum>();
+        UnpolarizedSpectrum pdf           = dr::zeros<UnpolarizedSpectrum>();
 
         // Calculate the distance between layers used as multiplication factor
         // to the distance
@@ -262,36 +261,33 @@ public:
         s_mei.p                   = ray(mint);
         std::tie(s_mei.sigma_s, s_mei.sigma_n, s_mei.sigma_t) =
             get_scattering_coefficients(s_mei, active);
-        Float sigma_t = extract_channel(s_mei.sigma_t[0], channel);
+        Float sigma_t = extract_channel(s_mei.sigma_t0;, channel);
 
-        Float opt_thick_offset = dr::zeros<Float>();
-        opt_thick_offset       = dr::select(
+        UnpolarizedSpectrum opt_thick_offset = dr::select(
             going_up,
-            extract_channel(dr::gather<UnpolarizedSpectrum>(m_cum_opt_thickness, opt_start_idx, active), channel),
-            extract_channel(dr::gather<UnpolarizedSpectrum>(m_reverse_cum_opt_thickness, opt_start_idx, active),channel));
-        opt_thick_offset -= start_height * sigma_t;
+            dr::gather<UnpolarizedSpectrum>(
+                m_cum_opt_thickness, opt_start_idx, active),
+            dr::gather<UnpolarizedSpectrum>(
+                m_reverse_cum_opt_thickness, opt_start_idx, active));
+        opt_thick_offset -= start_height * s_mei.sigma_t;
+        Float opt_thick_offset_c = extract_channel(opt_thick_offset, channel);
 
         Float log_sample = dr::log(1.f - sample);
         Mask sampled     = dr::zeros<Mask>();
         Mask search      = active && !same_cell;
 
         if (dr::any_or<true>(search)) {
-            UnpolarizedSpectrum spectral_value =
-                dr::zeros<UnpolarizedSpectrum>();
-
             // Find the piecewise boundary in CDF space using binary search
             dr::masked(index, search) = dr::binary_search<Index>(
                 opt_start_idx, opt_end_idx,
                 [&](Index index) DRJIT_INLINE_LAMBDA {
-                    spectral_value = dr::select(
+                    Float value = dr::select(
                         going_up,
-                        dr::gather<UnpolarizedSpectrum>(m_cum_opt_thickness, index, search),
-                        dr::gather<UnpolarizedSpectrum>(m_reverse_cum_opt_thickness, index,
-                                          search));
-                    Float value = extract_channel(spectral_value, channel);
+                        gather_channel(m_cum_opt_thickness, index, channel, search),
+                        gather_channel(m_reverse_cum_opt_thickness, index, channel, search));
 
                     Float a = -log_sample * idelta;
-                    Float b = (value - opt_thick_offset);
+                    Float b = (value - opt_thick_offset_c);
                     return a > b;
                 });
         }
@@ -302,13 +298,14 @@ public:
         dr::masked(mei.t, search) +=
             (start_height + (Float) (index - opt_start_idx - 1)) * delta;
 
-        Float cum_opt_at_index                 = dr::zeros<Float>();
-        dr::masked(cum_opt_at_index, going_up) = extract_channel(
-            dr::gather<UnpolarizedSpectrum>(m_cum_opt_thickness, index_minus_one, search),channel);
-        dr::masked(cum_opt_at_index, !going_up) = extract_channel(
-            dr::gather<UnpolarizedSpectrum>(m_reverse_cum_opt_thickness,index_minus_one, search),channel);
+        UnpolarizedSpectrum cum_opt_at_index    = dr::zeros<UnpolarizedSpectrum>();
+        dr::masked(cum_opt_at_index, going_up)  =
+            dr::gather<UnpolarizedSpectrum>(m_cum_opt_thickness, index_minus_one, search);
+        dr::masked(cum_opt_at_index, !going_up) =
+            dr::gather<UnpolarizedSpectrum>(m_reverse_cum_opt_thickness,index_minus_one, search);
         dr::masked(cum_opt_thick, search) =
             (cum_opt_at_index - opt_thick_offset) * delta;
+        Float cum_opt_thick_c = extract_channel(cum_opt_thick, channel);
 
         mei.p = min + voxel_size * 0.5 +
                 (Float) dr::select(going_up, index, res.z() - 1 - index) * step;
@@ -321,16 +318,16 @@ public:
         sampled |= !escaped;
 
         dr::masked(sampled_t, sampled) =
-            -dr::rcp(sigma_t) * (log_sample + cum_opt_thick) + mei.t;
+            -dr::rcp(sigma_t) * (log_sample + cum_opt_thick_c) + mei.t;
         escaped |= (sampled && sampled_t > maxt);
         sampled |= escaped;
 
         // need to calculate transmittance and pdf for escaped rays too
         dr::masked(sampled_t, sampled) = dr::select(escaped, maxt, sampled_t);
         dr::masked(tr, sampled) =
-            dr::exp(-(sampled_t - mei.t) * sigma_t - cum_opt_thick);
+            dr::exp(-(sampled_t - mei.t) * mei.sigma_t - cum_opt_thick);
         dr::masked(pdf, sampled) =
-            dr::select(sampled_t == maxt, tr, tr * sigma_t);
+            dr::select(sampled_t == maxt, tr, tr * mei.sigma_t);
 
         mei.t = dr::select(!escaped, sampled_t, dr::Infinity<Float>);
         dr::masked(mei.p, !escaped)                   = ray(mei.t);
@@ -559,6 +556,18 @@ public:
         }
 
         return result;
+    }
+
+    // Gather a single float from a spectral storage buffer for a given layer
+    // index and channel, avoiding fetching the full UnpolarizedSpectrum packet.
+    static Float gather_channel(const FloatStorage &storage, Index layer_idx,
+                                UInt32 channel, Mask active) {
+        static constexpr uint32_t SpectralSize =
+            (uint32_t) dr::size_v<UnpolarizedSpectrum>;
+        Index flat_idx = layer_idx * SpectralSize;
+        if constexpr (is_rgb_v<Spectrum>)
+            flat_idx += channel;
+        return dr::gather<Float>(storage, flat_idx, active);
     }
 
     MI_DECLARE_CLASS(PiecewiseMedium)
