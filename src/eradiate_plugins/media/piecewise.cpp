@@ -339,9 +339,8 @@ public:
         return { mei, tr, pdf };
     }
 
-    Float eval_analytical_transmittance(const Ray3f &ray,
-                                        const SurfaceInteraction3f &si, 
-                                        UInt32 channel,
+    UnpolarizedSpectrum transmittance_eval_analytical(const Ray3f &ray,
+                                        const Interaction3f &it,
                                         Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
 
@@ -351,7 +350,7 @@ public:
         active &= aabb_its;
         mint         = dr::maximum(0.f, mint);
         maxt =
-            dr::select(active, dr::minimum(ray.maxt, dr::minimum(maxt, si.t)),
+            dr::select(active, dr::minimum(ray.maxt, dr::minimum(maxt, it.t)),
                        dr::Infinity<Float>);
         maxt = dr::maximum(0.f, maxt);
 
@@ -396,8 +395,8 @@ public:
             get_scattering_coefficients(s_mei, active);
         std::tie(e_mei.sigma_s, e_mei.sigma_n, e_mei.sigma_t) =
             get_scattering_coefficients(e_mei, active);
-        Float s_sigma_t = extract_channel(s_mei.sigma_t, channel);
-        Float e_sigma_t = extract_channel(e_mei.sigma_t, channel);
+        UnpolarizedSpectrum s_sigma_t = s_mei.sigma_t;
+        UnpolarizedSpectrum e_sigma_t = e_mei.sigma_t;
 
         Int32 max_idx = dr::select(
             active, dr::maximum(dr::maximum(start_idx, end_idx) - 1, 0), 0);
@@ -405,17 +404,15 @@ public:
             active, dr::maximum(dr::minimum(start_idx, end_idx), 0), 0);
         Mask use_precomputed = active && max_idx > min_idx;
 
-        Float opt_thick     = dr::zeros<Float>();
-        Float cum_opt_thick = dr::zeros<Float>();
-        Float start_cum_opt = dr::zeros<Float>();
-        Float end_cum_opt   = dr::zeros<Float>();
+        UnpolarizedSpectrum opt_thick     = dr::zeros<UnpolarizedSpectrum>();
+        UnpolarizedSpectrum cum_opt_thick = dr::zeros<UnpolarizedSpectrum>();
+        UnpolarizedSpectrum start_cum_opt = dr::zeros<UnpolarizedSpectrum>();
+        UnpolarizedSpectrum end_cum_opt   = dr::zeros<UnpolarizedSpectrum>();
 
-        dr::masked(start_cum_opt, use_precomputed) = extract_channel(
-            dr::gather<UnpolarizedSpectrum>(m_cum_opt_thickness, min_idx, use_precomputed),
-            channel);
-        dr::masked(end_cum_opt, use_precomputed) = extract_channel(
-            dr::gather<UnpolarizedSpectrum>(m_cum_opt_thickness, max_idx, use_precomputed),
-            channel);
+        dr::masked(start_cum_opt, use_precomputed) =
+            dr::gather<UnpolarizedSpectrum>(m_cum_opt_thickness, min_idx, use_precomputed);
+        dr::masked(end_cum_opt, use_precomputed) =
+            dr::gather<UnpolarizedSpectrum>(m_cum_opt_thickness, max_idx, use_precomputed);
         dr::masked(cum_opt_thick, use_precomputed) =
             end_cum_opt - start_cum_opt;
 
@@ -425,10 +422,10 @@ public:
         dr::masked(opt_thick, active) =
             dr::select(same_cell, (maxt - mint) * s_sigma_t, cum_opt_thick);
 
-        Float tr               = dr::zeros<Float>();
+        UnpolarizedSpectrum tr = dr::zeros<UnpolarizedSpectrum>();
         dr::masked(tr, active) = dr::exp(-opt_thick);
 
-        return tr;
+        return UnpolarizedSpectrum(tr);
     }
 
     void traverse(TraversalCallback *cb) override {

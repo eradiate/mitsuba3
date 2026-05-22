@@ -89,17 +89,19 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
                 return ptr->transmittance_eval_pdf(mi, si, active); },
             "mi"_a, "si"_a, "active"_a,
             D(Medium, transmittance_eval_pdf))
+// #ERADIATE_CHANGE_BEGIN: Add function that calculates the transmittance and pdf 
         .def("sample_interaction_real",
             [](Ptr ptr, const Ray3f &ray, const SurfaceInteraction3f &si, Float sample, UInt32 channel, Mask active) {
                 return ptr->sample_interaction_real(ray, si, sample, channel, active); },
             "ray"_a, "si"_a, "sample"_a, "channel"_a, "active"_a,
             D(Medium, sample_interaction_real))
-        .def("eval_analytical_transmittance",
+        .def("transmittance_eval_analytical",
             [](Ptr ptr, const Ray3f &ray,  
-                const SurfaceInteraction3f &si, UInt32 channel, Mask active) {
-                return ptr->eval_analytical_transmittance(ray, si, channel, active); },
-            "ray"_a, "si"_a, "channel"_a, "active"_a,
+                const Interaction3f &it, Mask active) {
+                return ptr->transmittance_eval_analytical(ray, it, active); },
+            "ray"_a, "it"_a, "active"_a,
             D(Medium, eval_transmittance_pdf_real))
+// #ERADIATE_CHANGE_END
        .def("get_scattering_coefficients",
             [](Ptr ptr, const MediumInteraction3f &mi, Mask active = true) {
                 return ptr->get_scattering_coefficients(mi, active); },
