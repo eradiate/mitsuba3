@@ -221,8 +221,8 @@ public:
             }
 
             if (dr::any_or<true>(active_medium)) {
-                Float tr  = dr::zeros<Float>();
-                Float pdf = dr::zeros<Float>();
+                UnpolarizedSpectrum tr  = dr::zeros<UnpolarizedSpectrum>();
+                UnpolarizedSpectrum pdf = dr::zeros<UnpolarizedSpectrum>();
 
                 Mask intersect = needs_intersection && active_medium;
                 if (dr::any_or<true>(intersect))
@@ -230,7 +230,7 @@ public:
                         scene->ray_intersect(ray, intersect);
                 needs_intersection &= !active_medium;
 
-                std::tie(mei, tr, pdf) = medium->sample_interaction_real(
+                std::tie(mei, tr, pdf) = medium->sample_interaction_analytical(
                     ray, si, sampler->next_1d(active_medium), channel,
                     active_medium);
                 dr::masked(ray.maxt, active_medium &&

@@ -106,14 +106,14 @@ Medium<Float, Spectrum>::transmittance_eval_pdf(const MediumInteraction3f &mi,
 
 // #ERADIATE_CHANGE_BEGIN, NM 05/06/2024 : add function that calculates the transmittance and pdf  
 MI_VARIANT
-std::tuple<typename Medium<Float, Spectrum>::MediumInteraction3f, Float, Float>
-Medium<Float, Spectrum>::sample_interaction_real(const Ray3f &/*ray*/, 
-                                            const SurfaceInteraction3f &/*si*/, Float /*sample*/,
+std::tuple<typename Medium<Float, Spectrum>::MediumInteraction3f, 
+           typename Medium<Float, Spectrum>::UnpolarizedSpectrum,
+           typename Medium<Float, Spectrum>::UnpolarizedSpectrum>
+Medium<Float, Spectrum>::sample_interaction_analytical(const Ray3f &/*ray*/, 
+                                            const Interaction3f &/*it*/, Float /*sample*/,
                                             UInt32 /*channel*/, Mask /*active*/) const {
     // PiecewiseVolPathIntegrator should only be used with piecewise medium                                                
-    NotImplementedError("sample_interaction_real");
-    MediumInteraction3f mi = dr::zeros<MediumInteraction3f>(); 
-    return {mi,0.f,0.f};
+    NotImplementedError("sample_interaction_analytical");
 }
 
 MI_VARIANT

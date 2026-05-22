@@ -22,9 +22,11 @@ def create_medium_dict():
     exp_volume_grid = mi.VolumeGrid(ext_coefs)
     sigma_scale = 1.0
 
-    medium_transform = mi.ScalarTransform4f().translate(
-        [-100000 / 2, -100000 / 2, 0.0]
-    ).scale([100000.0, 100000.0, 100000.0])
+    medium_transform = (
+        mi.ScalarTransform4f()
+        .translate([-100000 / 2, -100000 / 2, 0.0])
+        .scale([100000.0, 100000.0, 100000.0])
+    )
 
     return mi.load_dict(
         {
@@ -66,7 +68,7 @@ def test01_sample_distances_down(variant_scalar_mono_double):
     trs = []
     pdfs = []
     for sample in samples:
-        mei, tr, pdf = medium.sample_interaction_real(ray, si, sample, 0, True)
+        mei, tr, pdf = medium.sample_interaction_analytical(ray, si, sample, 0, True)
         dists.append(mei.t)
         trs.append(tr)
         pdfs.append(pdf)
@@ -100,7 +102,7 @@ def test02_sample_distances_up(variant_scalar_mono_double):
     trs = []
     pdfs = []
     for sample in samples:
-        mei, tr, pdf = medium.sample_interaction_real(ray, si, sample, 0, True)
+        mei, tr, pdf = medium.sample_interaction_analytical(ray, si, sample, 0, True)
 
         dists.append(mei.t)
         trs.append(tr)
@@ -135,7 +137,7 @@ def test03_sample_distances_horizontal(variant_scalar_mono_double):
     trs = []
     pdfs = []
     for sample in samples:
-        mei, tr, pdf = medium.sample_interaction_real(ray, si, sample, 0, True)
+        mei, tr, pdf = medium.sample_interaction_analytical(ray, si, sample, 0, True)
 
         dists.append(mei.t)
         trs.append(tr)
@@ -162,7 +164,7 @@ def test04_sample_distances_diag(variant_scalar_mono_double):
     trs = []
     pdfs = []
     for idx, sample in enumerate(samples):
-        mei, tr, pdf = medium.sample_interaction_real(ray, si, sample, 0, True)
+        mei, tr, pdf = medium.sample_interaction_analytical(ray, si, sample, 0, True)
         dists.append(mei.t)
         trs.append(tr)
         pdfs.append(pdf)
@@ -203,7 +205,7 @@ def test05_sample_distances_heights(variant_scalar_mono_double):
     trs = []
     pdfs = []
     for idx, ray in enumerate(rays):
-        mei, tr, pdf = medium.sample_interaction_real(ray, si, sample, 0, True)
+        mei, tr, pdf = medium.sample_interaction_analytical(ray, si, sample, 0, True)
         dists.append(mei.t)
         trs.append(tr)
         pdfs.append(pdf)
@@ -240,11 +242,9 @@ def test06_eval_transmittance_up(variant_scalar_mono_double):
         rays.append(mi.Ray3f(origin, direction))
 
     trs = []
-    pdfs = []
     for ray in rays:
-        tr, pdf, _ = medium.eval_transmittance_pdf_real(ray, si, 0, True)
+        tr = medium.transmittance_eval_analytical(ray, si, True)
         trs.append(tr)
-        pdfs.append(pdf)
 
     assert dr.allclose(trs, gt_trs)
 
@@ -273,10 +273,90 @@ def test07_eval_transmittance_down(variant_scalar_mono):
         rays.append(mi.Ray3f(origin, direction))
 
     trs = []
-    pdfs = []
     for ray in rays:
-        tr, pdf, _ = medium.eval_transmittance_pdf_real(ray, si, 0, True)
+        tr = medium.transmittance_eval_analytical(ray, si, True)
         trs.append(tr)
-        pdfs.append(pdf)
 
     assert dr.allclose(trs, gt_trs)
+
+
+# ── RGB tests ─────────────────────────────────────────────────────────────────
+
+# 2-layer unit medium, z ∈ [0, 1], sigma_t per channel.
+_RGB_SIGMA_T = np.array(
+    [[1.0, 2.0, 3.0], [3.0, 1.0, 2.0]],
+    dtype=np.float64,
+)
+_LAYER_H = 0.5  # 2 layers over height 1.0
+
+
+def _create_rgb_medium():
+    n = len(_RGB_SIGMA_T)
+    grid = _RGB_SIGMA_T.reshape(n, 1, 1, 3).astype(np.float32)
+    return mi.load_dict(
+        {
+            "type": "piecewise",
+            "albedo": 0.5,
+            "sigma_t": {
+                "type": "gridvolume",
+                "grid": mi.VolumeGrid(grid),
+                "use_grid_bbox": True,
+                "filter_type": "nearest",
+                "to_world": mi.ScalarTransform4f.translate([-0.5, -0.5, 0.0]),
+            },
+        }
+    )
+
+
+def _ref_tr_rgb(z_start, z_end):
+    """Per-channel transmittance for segment [z_start, z_end] (upward ray)."""
+    ot = np.zeros(3)
+    for i, sigma in enumerate(_RGB_SIGMA_T):
+        seg = min(z_end, (i + 1) * _LAYER_H) - max(z_start, i * _LAYER_H)
+        if seg > 0:
+            ot += sigma * seg
+    return np.exp(-ot)
+
+
+def _ref_distance_rgb(xi, channel):
+    """
+    Scatter distance along an upward ray from z=0 for sample xi in channel.
+    Returns (t, layer_idx), or (inf, -1) if the ray escapes.
+    """
+    log_target = -np.log(1.0 - xi)
+    cum = 0.0
+    for i, sigma in enumerate(_RGB_SIGMA_T):
+        contrib = sigma[channel] * _LAYER_H
+        if cum + contrib >= log_target:
+            return i * _LAYER_H + (log_target - cum) / sigma[channel], i
+        cum += contrib
+    return np.inf, -1
+
+
+def test09_sample_interaction_rgb(variant_scalar_rgb):
+    medium = _create_rgb_medium()
+    si = dr.zeros(mi.SurfaceInteraction3f)
+    ray = mi.Ray3f(mi.Point3f(0.0, 0.0, 0.0), mi.Vector3f(0.0, 0.0, 1.0))
+
+    # (xi, channel): chosen so each channel scatters in a different layer
+    for xi, channel in ((0.5, 0), (0.5, 1), (0.3, 2)):
+        mei, tr, pdf = medium.sample_interaction_analytical(ray, si, xi, channel, True)
+        expected_t, layer_idx = _ref_distance_rgb(xi, channel)
+        expected_tr = _ref_tr_rgb(0.0, expected_t)
+        expected_pdf = expected_tr * _RGB_SIGMA_T[layer_idx]
+
+        assert dr.allclose(float(mei.t), float(expected_t), atol=1e-5)
+        assert dr.allclose(tr, expected_tr.tolist(), atol=1e-5)
+        assert dr.allclose(pdf, expected_pdf.tolist(), atol=1e-5)
+
+
+def test08_transmittance_eval_rgb(variant_scalar_rgb):
+    medium = _create_rgb_medium()
+    si = dr.zeros(mi.SurfaceInteraction3f)
+
+    # Three starting heights: full medium, top layer only, mid-layer start
+    for z0 in (0.0, 0.5, 0.25):
+        ray = mi.Ray3f(mi.Point3f(0.0, 0.0, z0), mi.Vector3f(0.0, 0.0, 1.0))
+        tr = medium.transmittance_eval_analytical(ray, si, True)
+        expected = _ref_tr_rgb(z0, 1.0)
+        assert dr.allclose(tr, expected.tolist(), atol=1e-5)
