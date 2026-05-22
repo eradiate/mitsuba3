@@ -281,7 +281,7 @@ public:
                 Mask active_e = act_medium_scatter && sample_emitters;
                 if (dr::any_or<true>(active_e)) {
                     auto [emitted, ds] = sample_emitter(
-                        mei, scene, sampler, medium, channel, active_e);
+                        mei, scene, sampler, medium, active_e);
                     auto [phase_val, phase_pdf] =
                         phase->eval_pdf(phase_ctx, mei, ds.d, active_e);
                     dr::masked(result, active_e) +=
@@ -348,7 +348,7 @@ public:
 
                 if (likely(dr::any_or<true>(active_e))) {
                     auto [emitted, ds] = sample_emitter(
-                        si, scene, sampler, medium, channel, active_e);
+                        si, scene, sampler, medium, active_e);
 
                     // Query the BSDF for that emitter-sampled direction
                     Vector3f wo       = si.to_local(ds.d);
@@ -405,8 +405,7 @@ public:
     template <typename Interaction>
     std::tuple<Spectrum, DirectionSample3f>
     sample_emitter(const Interaction &ref_interaction, const Scene *scene,
-                   Sampler *sampler, MediumPtr medium, UInt32 channel,
-                   Mask active) const {
+                   Sampler *sampler, MediumPtr medium, Mask active) const {
 
         Spectrum transmittance(1.0f);
 
@@ -454,7 +453,7 @@ public:
         dr::tie(ls) = dr::while_loop(dr::make_tuple(ls),
             [](const LoopState& ls) { return dr::detach(ls.active); },
             // uncomment this if needed to access any member variable or functions.
-            [/*this,*/ scene, channel, max_dist](LoopState& ls) {
+            [/*this,*/ scene, max_dist](LoopState& ls) {
 
             Mask& active = ls.active;
             Ray3f& ray = ls.ray;
@@ -481,8 +480,7 @@ public:
 
             if (dr::any_or<true>(active_medium)) {
                 UnpolarizedSpectrum tr =
-                    medium->eval_analytical_transmittance(ray, si, channel,
-                                                        active_medium);
+                    medium->transmittance_eval_analytical(ray, si, active_medium);
                 dr::masked(transmittance, active_medium) *= tr; // exact estimation
 
                 // consider we automatically escape the medium.

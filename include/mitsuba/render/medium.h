@@ -78,21 +78,24 @@ public:
                            const SurfaceInteraction3f &si,
                            Mask active) const;
 
-// #RAY_CHANGE_BEGIN, NM 05/06/2024 : add function that calculates the transmittance and pdf  
+// #ERADIATE_CHANGE_BEGIN, NM 05/06/2024 : add function that calculates the transmittance and pdf  
     virtual std::tuple<MediumInteraction3f, Float, Float> 
     sample_interaction_real(const Ray3f &ray, const SurfaceInteraction3f &si,
                             Float sample, UInt32 channel, Mask active) const;
-    
-    /** \brief Eval the analytical transmittance from the ray start to si.
+
+    /** \brief Compute the analytical transmittance along a ray to an interaction.
+     * 
+     * \param ray      Ray, along which to compute the transmittance, use mint
+     * \param si       Interaction that marks the end of the segment along which
+     *                 to compute the transmittance.
      * 
      * \return
-     *      The transmittance between the ray start and si.
+     *      The transmittance along a ray
     */
-    virtual Float
-    eval_analytical_transmittance(const Ray3f &ray, 
-                                  const SurfaceInteraction3f &si,
-                                  UInt32 channel, Mask active) const;
-// #RAY_CHANGE_END
+    virtual UnpolarizedSpectrum
+    transmittance_eval_analytical(const Ray3f &ray, const Interaction3f &it, 
+                                  Mask active) const;
+// #ERADIATE_CHANGE_END
 
     /// Return the phase function of this medium
     MI_INLINE const PhaseFunction *phase_function() const {
@@ -183,7 +186,9 @@ DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::Medium)
     DRJIT_CALL_METHOD(sample_interaction)
     DRJIT_CALL_METHOD(transmittance_eval_pdf)
     DRJIT_CALL_METHOD(sample_interaction_real)
-    DRJIT_CALL_METHOD(eval_analytical_transmittance)
+// #ERADIATE_CHANGE_BEGIN: Add function that calculates the transmittance and pdf 
+    DRJIT_CALL_METHOD(transmittance_eval_analytical)
+// #ERADIATE_CHANGE_END
     DRJIT_CALL_METHOD(get_scattering_coefficients)
     
     DRJIT_CALL_GETTER(use_rrt)
