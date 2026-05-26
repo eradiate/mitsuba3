@@ -39,6 +39,9 @@ UPSTREAM_PREFIXES = ("src/", "include/")
 # Eradiate-specific subtrees that live inside the upstream directories above
 ERADIATE_PREFIXES = ("src/eradiate_plugins/", "include/eradiate/")
 
+# Generated files that should not be checked for fences
+GENERATED_FILES = ("include/mitsuba/python/docstr.h",)
+
 
 # ------------------------------------------------------------------------------
 #                               File classification
@@ -46,8 +49,10 @@ ERADIATE_PREFIXES = ("src/eradiate_plugins/", "include/eradiate/")
 
 
 def is_upstream(path: str) -> bool:
-    return any(path.startswith(p) for p in UPSTREAM_PREFIXES) and not any(
-        path.startswith(p) for p in ERADIATE_PREFIXES
+    return (
+        any(path.startswith(p) for p in UPSTREAM_PREFIXES)
+        and not any(path.startswith(p) for p in ERADIATE_PREFIXES)
+        and path not in GENERATED_FILES
     )
 
 
