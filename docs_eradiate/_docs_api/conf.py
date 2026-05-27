@@ -7,7 +7,7 @@
 # Build this subsite separately before the main site:
 #   sphinx-build -b html _docs_api _build/html_api
 #
-# This build generates docs_eradiate/generated/eradiate_api.rst, which is
+# This build generates docs_eradiate/generated/eradiate_mitsuba_api.rst, which is
 # then included by the main site's api_reference/index.rst.
 
 import enum
@@ -64,7 +64,7 @@ autoclass_content = "both"
 autodoc_member_order = "bysource"
 
 # Set the Mitsuba variant used for autodoc introspection.
-import mitsuba
+import mitsuba  # noqa: E402
 
 mitsuba.set_variant("scalar_rgb")
 variant_prefix = "mitsuba.scalar_rgb."
@@ -74,7 +74,8 @@ drjit_variant_alias = "drjit.scalar"
 
 docs_path = realpath(join(dirname(realpath(__file__)), ".."))
 extracted_rst_filename = join(docs_path, "generated/extracted_rst_api.rst")
-lib_api_filename = join(docs_path, "generated/eradiate_api.rst")
+lib_api_filename = join(docs_path, "generated/eradiate_mitsuba_api.rst")
+list_api_filename = join(dirname(realpath(__file__)), "list_api.rst")
 
 # -- API structure --------------------------------------------------------
 
@@ -82,12 +83,15 @@ lib_api_filename = join(docs_path, "generated/eradiate_api.rst")
 # Only eradiate-specific additions are documented here; the base Mitsuba API
 # is documented upstream at https://mitsuba.readthedocs.io.
 api_doc_structure = {
+    "Constants": [
+        r"mitsuba.ERD_MI_([\w]+)",
+    ],
+    "Medium": [
+        r"mitsuba\.Medium",
+    ],
     "Extremum": [
         r"mitsuba\.ExtremumSegment([\w]*)",
         r"mitsuba\.ExtremumStructure([\w]*)",
-    ],
-    "Constants": [
-        r"mitsuba.ERD_MI_([\w]+)",
     ],
 }
 
@@ -145,7 +149,7 @@ def parse_signature_args(signature):
                 p_type, p_default = result
 
             if p_default:
-                new_signature += "%s=%s" % (p_name, p_default)
+                new_signature += f"{p_name}={p_default}"
             else:
                 new_signature += p_name
 
@@ -157,7 +161,7 @@ def parse_signature_args(signature):
 
             parameters.append([p_name, p_type, p_default])
 
-        new_signature = "(%s)" % new_signature
+        new_signature = f"({new_signature})"
         return new_signature, parameters
 
 
@@ -190,11 +194,11 @@ def insert_params_and_return_docstring(lines, params, next_idx, indent=""):
         is_return = p_name == "__return"
 
         if is_return:
-            key = "%sReturns:" % indent
-            new_line = "%sReturns → %s:" % (indent, p_type)
+            key = f"{indent}Returns:"
+            new_line = f"{indent}Returns → {p_type}:"
         else:
-            key = "%sParameter ``%s``:" % (indent, p_name)
-            new_line = "%sParameter ``%s`` (%s):" % (indent, p_name, p_type)
+            key = f"{indent}Parameter ``{p_name}``:"
+            new_line = f"{indent}Parameter ``{p_name}`` ({p_type}):"
 
         found = False
         for i, l in enumerate(lines):
@@ -206,11 +210,7 @@ def insert_params_and_return_docstring(lines, params, next_idx, indent=""):
             lines.insert(next_idx, new_line)
             lines.insert(
                 next_idx + 1,
-                "    %s%s"
-                % (
-                    indent,
-                    active_descr_str if p_name == "active" else param_no_descr_str,
-                ),
+                f"    {indent}{active_descr_str if p_name == 'active' else param_no_descr_str}",
             )
             lines.insert(next_idx + 2, "")
             next_idx += 3
@@ -235,7 +235,7 @@ def process_overload_block(lines, what):
         idx += offset
         name, params, signature = parse_overload_signature(lines[idx])
 
-        lines[idx] = ".. py:%s:: %s%s" % (what, name, signature)
+        lines[idx] = f".. py:{what}:: {name}{signature}"
 
         if i == len(overload_indices) - 1:
             next_idx = len(lines)
@@ -284,7 +284,7 @@ def process_docstring_callback(app, what, name, obj, options, lines):
             if len(obj.__bases__) > 0:
                 full_base_name = str(obj.__bases__[0])[8:-2]
                 if full_base_name.startswith("mitsuba"):
-                    lines.insert(0, "Base class: %s" % sanitize_types(full_base_name))
+                    lines.insert(0, f"Base class: {sanitize_types(full_base_name)}")
                     lines.insert(1, "")
 
             is_enum = issubclass(obj, enum.Enum)
@@ -292,9 +292,9 @@ def process_docstring_callback(app, what, name, obj, options, lines):
                 lines.append("Valid values are as follows:")
                 lines.append("")
                 for value in obj:
-                    lines.append(".. py:data:: %s" % (value.__name__))
+                    lines.append(f".. py:data:: {value.__name__}")
                     lines.append("")
-                    lines.append("    %s" % " ".join(value.__doc__.splitlines()))
+                    lines.append(f"    {' '.join(value.__doc__.splitlines())}")
                     lines.append("")
 
             if len(lines) > 0 and "Overloaded function." in lines[0]:
@@ -304,7 +304,7 @@ def process_docstring_callback(app, what, name, obj, options, lines):
             if not cached_signature == "(overloaded)":
                 for i, l in enumerate(lines):
                     lines[i] = "    " + l
-                lines.insert(0, ".. py:method:: %s%s" % ("__init__", cached_signature))
+                lines.insert(0, f".. py:method:: __init__{cached_signature}")
                 lines.insert(1, "")
                 lines.insert(len(lines) - 1, "")
                 insert_params_and_return_docstring(
@@ -351,7 +351,7 @@ def process_docstring_callback(app, what, name, obj, options, lines):
                 r"(?<!`)(mitsuba(?:\.[a-zA-Z\_0-9]+)+)", r":py:obj:`\1`", lines[i]
             )
 
-    local_class = what == "class" and re.fullmatch(r"%s\.[\w]+" % last_block_name, name)
+    local_class = what == "class" and re.fullmatch(rf"{last_block_name}\.[\w]+", name)
 
     if (
         what in ["function", "class", "module", "data"]
@@ -377,7 +377,7 @@ def process_docstring_callback(app, what, name, obj, options, lines):
 
     if not (what == "class" and last_class_name == name):
         directive_type = what
-        directive = "%s.. py:%s:: %s" % (directive_indent, directive_type, name)
+        directive = f"{directive_indent}.. py:{directive_type}:: {name}"
 
         if what in ["method", "function"] and cached_signature:
             directive += cached_signature
@@ -388,8 +388,8 @@ def process_docstring_callback(app, what, name, obj, options, lines):
         extracted_rst.append(directive + "\n")
 
         if what == "data":
-            extracted_rst.append(doc_indent + ":type: %s\n" % str(type(obj))[8:-2])
-            extracted_rst.append(doc_indent + ":value: %s\n" % str(obj))
+            extracted_rst.append(f"{doc_indent}:type: {str(type(obj))[8:-2]}\n")
+            extracted_rst.append(f"{doc_indent}:value: {str(obj)}\n")
 
         extracted_rst.append("\n")
 
@@ -410,45 +410,102 @@ def write_rst_file_callback(app, exception):
 
     def write_block(f, block_name):
         f.write(".. include:: /generated/extracted_rst_api.rst\n")
-        f.write("  :start-line: %i\n" % rst_block_range[block_name][0])
-        f.write("  :end-line: %i\n" % rst_block_range[block_name][1])
+        f.write(f"  :start-line: {rst_block_range[block_name][0]}\n")
+        f.write(f"  :end-line: {rst_block_range[block_name][1]}\n")
         f.write("\n")
         f.write("------------\n")
         f.write("\n")
 
     with open(extracted_rst_filename, "w", encoding="utf-8") as f:
-        print("Extract API doc into: %s" % extracted_rst_filename)
+        print(f"Extract API doc into: {extracted_rst_filename}")
         for l in extracted_rst:
             f.write(l)
 
+    import io
+
+    buf = io.StringIO()
+    print(f"Generate API RST file: {lib_api_filename}")
+
+    added_block = []
+
+    for section_name in api_doc_structure.keys():
+        buf.write(f"{section_name}\n")
+        buf.write("-" * len(section_name) + "\n")
+        buf.write("\n")
+
+        for pattern in api_doc_structure[section_name]:
+            for block_name in rst_block_range.keys():
+                if re.fullmatch(pattern, block_name):
+                    write_block(buf, block_name)
+                    added_block.append(block_name)
+
+    remaining = [b for b in rst_block_range if b not in added_block]
+    if remaining:
+        buf.write("Other\n")
+        buf.write("-----\n")
+        buf.write("\n")
+        for block_name in remaining:
+            write_block(buf, block_name)
+
     with open(lib_api_filename, "w", encoding="utf-8") as f:
-        print("Generate API RST file: %s" % lib_api_filename)
-
-        added_block = []
-
-        for section_name in api_doc_structure.keys():
-            f.write("%s\n" % section_name)
-            f.write("-" * len(section_name) + "\n")
-            f.write("\n")
-
-            for pattern in api_doc_structure[section_name]:
-                for block_name in rst_block_range.keys():
-                    if re.fullmatch(pattern, block_name):
-                        write_block(f, block_name)
-                        added_block.append(block_name)
-
-        remaining = [b for b in rst_block_range if b not in added_block]
-        if remaining:
-            f.write("Other\n")
-            f.write("-----\n")
-            f.write("\n")
-            for block_name in remaining:
-                write_block(f, block_name)
+        # Note: Delete any line separator at the end of the file (Sphinx warns
+        # about it otherwise)
+        f.write(buf.getvalue().rstrip("\n-") + "\n")
 
 
 # -- Theme (minimal fallback for standalone HTML output) ------------------
 
 html_theme = "alabaster"
+
+
+# -- List API generation --------------------------------------------------
+
+
+def generate_list_api_callback(app):
+    """Generate list_api.rst from eradiate-specific mitsuba symbols.
+
+    Walks the top-level ``mitsuba`` namespace and includes every symbol whose
+    fully-qualified name matches a regex pattern defined in
+    ``api_doc_structure``.  The autodoc directive is chosen based on the
+    object's type:
+
+    - ``autoclass`` for classes,
+    - ``autofunction`` for other callables,
+    - ``autodata`` for non-callable attributes (constants, etc.).
+    """
+    import importlib
+    from inspect import isclass
+
+    all_patterns = [p for patterns in api_doc_structure.values() for p in patterns]
+
+    def is_eradiate_symbol(full_name):
+        return any(re.fullmatch(p, full_name) for p in all_patterns)
+
+    module = importlib.import_module("mitsuba")
+    entries = {}
+
+    for name in dir(module):
+        if re.match(r"__[a-zA-Z_0-9]+__", name) or re.match(r"_[a-zA-Z_0-9]+", name):
+            continue
+        obj = getattr(module, name)
+        full_name = f"mitsuba.{name}"
+        if is_eradiate_symbol(full_name):
+            if isclass(obj):
+                specifier = "class"
+            elif callable(obj):
+                specifier = "function"
+            else:
+                specifier = "data"
+            entries[full_name] = specifier
+
+    print(f"Generate API list file: {list_api_filename}")
+    with open(list_api_filename, "w", encoding="utf-8") as f:
+        f.write("Eradiate Mitsuba API\n")
+        f.write("====================\n")
+        f.write("\n")
+        for full_name in sorted(entries):
+            f.write(f".. auto{entries[full_name]}:: {full_name}\n")
+            f.write("\n")
 
 
 # -- Event hooks ----------------------------------------------------------
@@ -485,6 +542,7 @@ def setup(app):
     sphinx_inspect.ismethod = mpatch_ismethod
     sphinx_inspect.isclassmethod = mpatch_isclassmethod
 
+    app.connect("builder-inited", generate_list_api_callback)
     app.connect("autodoc-process-docstring", process_docstring_callback)
     app.connect("autodoc-process-signature", process_signature_callback)
     app.connect("build-finished", write_rst_file_callback)

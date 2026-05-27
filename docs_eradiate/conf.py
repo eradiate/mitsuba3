@@ -59,7 +59,7 @@ exclude_patterns = [
     "_docs_api/**",
     "plugin_reference/section_*.rst",
     "generated/extracted_rst_api.rst",
-    "generated/eradiate_api.rst",
+    "generated/eradiate_mitsuba_api.rst",
 ]
 
 default_role = "any"
@@ -149,9 +149,9 @@ def custom_step(app):
     if not os.path.exists(build_dir):
         os.mkdir(build_dir)
     generate_plugin_doc.generate(build_dir)
-    # Create a placeholder eradiate_api.rst if the docs_api subsite hasn't been
+    # Create a placeholder eradiate_mitsuba_api.rst if the docs_api subsite hasn't been
     # built yet, so the include in src/api_reference/index.rst doesn't fail.
-    api_rst = os.path.join(build_dir, "eradiate_api.rst")
+    api_rst = os.path.join(build_dir, "eradiate_mitsuba_api.rst")
     if not os.path.exists(api_rst):
         with open(api_rst, "w", encoding="utf-8") as f:
             f.write(

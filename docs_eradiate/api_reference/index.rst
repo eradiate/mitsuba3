@@ -16,4 +16,4 @@ documented in the
 
    These steps are automated by the ``pixi run docs-api`` task. Then rebuild this site normally.
 
-.. include:: ../generated/eradiate_api.rst
+.. include:: ../generated/eradiate_mitsuba_api.rst

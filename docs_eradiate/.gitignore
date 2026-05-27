@@ -1,5 +1,4 @@
-generated/*.rst
-!generated/.gitkeep
+generated/plugins_*.rst
 _build/
 __pycache__/
 *.pyc
