@@ -35,6 +35,15 @@ Extremum grid structure (:monosp:`extremum_grid`)
      the underlying volume. Set to [0,0,0] to trigger an adaptive resolution
      routine. Default: [1,1,1]
 
+ * - wrap_mode
+   - |string|
+   - **EXPERIMENTAL** Specifies how to handle extremum queries and traversal
+     outside its data definition. Values should be one of :monosp:`clamp`,
+     :monosp`repeat`, :monosp`mirror`. Should match the underlying volume to
+     ensure consistent extremum representation. Note that this is experimental
+     until proper periodic boundary conditions are defined for media.
+     Default: clamp
+
 This plugin creates a regular grid structure storing local extremum values for
 efficient delta tracking in heterogeneous media. The grid is constructed
 by querying the extinction volume's extrema over each grid cell.
@@ -75,6 +84,17 @@ public:
         m_to_local = props.get<ScalarAffineTransform4f>("to_world", ScalarAffineTransform4f()).inverse();
         m_scale = props.get<ScalarFloat>("scale", 1.0f);
 
+        std::string_view wrap_mode_str = props.get<std::string_view>("wrap_mode", "clamp");
+        if (wrap_mode_str == "repeat")
+            m_wrap_mode = dr::WrapMode::Repeat;
+        else if (wrap_mode_str == "mirror")
+            m_wrap_mode = dr::WrapMode::Mirror;
+        else if (wrap_mode_str == "clamp")
+            m_wrap_mode = dr::WrapMode::Clamp;
+        else
+            Throw("Invalid wrap_mode \"%s\", must be one of: \"repeat\", "
+                  "\"mirror\", or \"clamp\"!", wrap_mode_str);
+
         // Resolution Parameters
         m_resolution = props.get<ScalarVector3i>("resolution", ScalarVector3i(1,1,1));
 
@@ -84,12 +104,19 @@ public:
             m_resolution = find_resolution(m_volume);
         }
 
+        for (size_t i = 0; i < 3; ++i)
+            m_inv_resolution[i] = dr::divisor<int32_t>((int32_t) m_resolution[i]);
+
+
         build_grid(m_volume.get(), m_resolution);
     }
 
     void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override {
         if (m_adaptive) {
             m_resolution = find_resolution(m_volume.get());
+
+            for (size_t i = 0; i < 3; ++i)
+                m_inv_resolution[i] = dr::divisor<int32_t>((int32_t) m_resolution[i]);
         }
         build_grid(m_volume.get(), m_resolution);
     }
@@ -119,10 +146,10 @@ public:
                                     Mask active) const override {
         Point3f po = m_to_local * it.p;
         // Effectively acts as a clamp wrapping policy
-        Vector3i pi =
-            dr::clip(Vector3i(po * m_resolution), 0, m_resolution - 1);
-        UInt32 idx = dr::fmadd(dr::fmadd(pi.z(), m_resolution.y(), pi.y()),
-                               m_resolution.x(), pi.x());
+        Vector3i piw = wrap(dr::floor2int<Vector3i>(po * m_resolution));
+
+        UInt32 idx = dr::fmadd(dr::fmadd(piw.z(), m_resolution.y(), piw.y()),
+                               m_resolution.x(), piw.x());
         Vector2f extremum = dr::gather<Vector2f>(m_extremum_grid, idx, active);
         return { extremum.x(), extremum.y() };
     }
@@ -386,29 +413,10 @@ private:
         auto inf_t     = local_ray.d == 0.f;
         auto d_pos     = local_ray.d >= 0.f;
 
-        // Per-axis intersection of the ray with the grid bounds
-        Vector3f t_min_v  = -local_ray.o * rcp_d;
-        Vector3f t_max_v  = (res - local_ray.o) * rcp_d;
-        Vector3f t_min_v2 = dr::minimum(t_min_v, t_max_v);
-        Vector3f t_max_v2 = dr::maximum(t_min_v, t_max_v);
+        Float t_min = mint;
+        Float t_max = maxt;
 
-        // Disable extent computation for dims where the ray direction is zero
-        dr::masked(t_max_v2, inf_t) = dr::Infinity<Float>;
-        dr::masked(t_min_v2, inf_t) = -dr::Infinity<Float>;
-
-        // Reduce constraints to a single ray interval
-        Float t_min = dr::maximum(dr::max(t_min_v2), mint);
-        Float t_max = dr::minimum(dr::min(t_max_v2), maxt);
-        mint        = t_min;
-        maxt        = t_max;
-
-        // Only run the DDA algorithm if the interval is nonempty
-        active &= (t_max > t_min) & dr::isfinite(t_max);
-
-        // Deactivate rays that have zero direction along any axis
-        // and whose origin along that axis is outside the grid bounds
-        active &=
-            dr::all(!inf_t || ((0.f <= local_ray.o) && (local_ray.o <= res)));
+        active &= t_max > t_min;
 
         // Advance the ray to the start of the interval
         local_ray.o = dr::fmadd(local_ray.d, t_min, local_ray.o);
@@ -420,7 +428,7 @@ private:
         Vector3f abs_rcp_d = abs(rcp_d);
 
         // Integer grid coordinates
-        Vector3i pi = dr::clip(Vector3i(local_ray.o), 0, m_resolution - 1);
+        Vector3i pi = dr::floor2int<Vector3i>(local_ray.o);
 
         // Fractional entry position
         Vector3f p0 = local_ray.o - Vector3f(pi);
@@ -470,8 +478,9 @@ private:
 
             // Note: not multiplying the index by 2 because we gather using
             // Vector2f.
-            UInt32 idx = dr::fmadd(dr::fmadd(pi.z(), m_resolution.y(), pi.y()),
-                                   m_resolution.x(), pi.x());
+            Vector3i piw = wrap(pi);
+            UInt32 idx = dr::fmadd(dr::fmadd(piw.z(), m_resolution.y(), piw.y()),
+                                   m_resolution.x(), piw.x());
 
             const Vector2f extremum    = dr::gather<Vector2f>(m_extremum_grid, idx);
 
@@ -490,15 +499,39 @@ private:
             dr::masked(pi, mask && advance) += step;
             dr::masked(t_rem, advance) -= dt;
 
-            active &= dr::all((pi >= 0)
-                      && (pi < m_resolution))
-                      && (t_rem > 0.f);
+            active &= t_rem > 0.f;
         },
         "DDA Traversal");
 
         return ls.state;
     };
 
+    /**
+     * \brief Applies the configured texture wrapping mode to an integer
+     * position
+     */
+    Vector3i wrap(const Vector3i &pos) const {
+        if (m_wrap_mode == dr::WrapMode::Clamp) {
+            return dr::clip(pos, 0, m_resolution - 1);
+        } else {
+            Vector3i value_shift_neg = dr::select(pos < 0, pos + 1, pos);
+
+            Vector3i div;
+            for (size_t i = 0; i < 3; ++i)
+                div[i] = m_inv_resolution[i](value_shift_neg[i]);
+
+            Vector3i mod = pos - div * m_resolution;
+            mod[mod < 0] += Vector3i(m_resolution);
+
+            if (m_wrap_mode == dr::WrapMode::Mirror)
+                // Starting at 0, flip the texture every other repetition
+                // (flip when: even number of repetitions in negative direction,
+                // or odd number of repetitions in positive direction)
+                mod = dr::select(((div & 1) == 0) ^ (pos < 0), mod, m_resolution - 1 - mod);
+
+            return mod;
+        }
+    }
 
 private:
     /// Grid storing pre-computed local majorants
@@ -509,6 +542,9 @@ private:
 
     bool m_adaptive;
     ScalarVector3i m_resolution;
+    dr::divisor<int32_t> m_inv_resolution[3] { };
+    dr::WrapMode m_wrap_mode;
+
     ScalarAffineTransform4f m_to_local;
 };
 
