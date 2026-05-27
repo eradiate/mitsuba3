@@ -261,7 +261,7 @@ public:
         s_mei.p                   = ray(mint);
         std::tie(s_mei.sigma_s, s_mei.sigma_n, s_mei.sigma_t) =
             get_scattering_coefficients(s_mei, active);
-        Float sigma_t = extract_channel(s_mei.sigma_t0;, channel);
+        Float sigma_t = extract_channel(s_mei.sigma_t, channel);
 
         UnpolarizedSpectrum opt_thick_offset = dr::select(
             going_up,
