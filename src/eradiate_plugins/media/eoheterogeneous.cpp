@@ -62,6 +62,11 @@ EOHeterogeneous medium (:monosp:`eoheterogeneous`)
    - Specifies the probability to importance sample the phase using the emitter as
       incident direction. Set to a negative value to disable. (Default: 0.1)
 
+ * - aabb_min, aabb_max
+   - |point3f|
+   - Optional override to the medium bounding box. Uses the bounding box of the
+     sigma_t volume by default.
+
 This plugin provides a flexible heterogeneous medium implementation, which acquires its data
 from nested volume instances. These can be constant, use a procedural function, or fetch data from
 disk, e.g. using a 3D grid.
@@ -218,6 +223,13 @@ public:
             props_ddis.set("values", ss_values.str());
             m_ddis_phase_function = static_cast<PhaseFunction*>(pmgr->create_object<PhaseFunction>(props_ddis));
         }
+
+        // Optional user-provided bbox override
+        if (props.has_property("aabb_min") && props.has_property("aabb_max")) {
+            ScalarPoint3f aabb_min = props.get<ScalarPoint3f>("aabb_min");
+            ScalarPoint3f aabb_max = props.get<ScalarPoint3f>("aabb_max");
+            m_aabb = ScalarBoundingBox3f(aabb_min, aabb_max);
+        }
     }
 
     void traverse(TraversalCallback *cb) override {
@@ -292,6 +304,9 @@ public:
 
     std::tuple<Mask, Float, Float>
     intersect_aabb(const Ray3f &ray) const override {
+        if (m_aabb.valid()) {
+            return m_aabb.ray_intersect(ray);
+        }
         return m_sigmat->bbox().ray_intersect(ray);
     }
 
@@ -313,8 +328,9 @@ private:
     ScalarFloat m_scale;
     Float m_max_density;
     Float m_min_density;
+    ScalarBoundingBox3f m_aabb;
 
-    MI_TRAVERSE_CB(Base, m_sigmat, m_albedo, m_max_density)
+    MI_TRAVERSE_CB(Base, m_sigmat, m_albedo, m_max_density, m_aabb)
 };
 
 MI_EXPORT_PLUGIN(EOHeterogeneousMedium)
