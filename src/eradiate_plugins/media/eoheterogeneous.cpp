@@ -57,10 +57,10 @@ EOHeterogeneous medium (:monosp:`eoheterogeneous`)
      isotropic.
    - |exposed|, |differentiable|
 
-  * - ddis_threshold
-    - |float|
+ * - ddis_threshold
+   - |float|
    - Specifies the probability to importance sample the phase using the emitter as
-     incident direction. Set to a negative value to disable. (Default: 0.1)
+      incident direction. Set to a negative value to disable. (Default: 0.1)
 
 This plugin provides a flexible heterogeneous medium implementation, which acquires its data
 from nested volume instances. These can be constant, use a procedural function, or fetch data from
