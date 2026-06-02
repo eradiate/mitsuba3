@@ -10,8 +10,8 @@ build:
     python: "3.10"
 
 sphinx:
-   configuration: docs/conf.py
+   configuration: docs_eradiate/conf.py
 
 python:
    install:
-   - requirements: docs/requirements.txt
+   - requirements: docs_eradiate/requirements.txt

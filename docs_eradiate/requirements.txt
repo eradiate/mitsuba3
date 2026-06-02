@@ -1,4 +1,3 @@
-# Building the API reference also requires eradiate-mitsuba to be installed.
 sphinx==8.1.3
 shibuya
 nbsphinx
