@@ -1,0 +1,4 @@
+generated/plugins_*.rst
+_build/
+__pycache__/
+*.pyc

@@ -30,7 +30,7 @@ Distant astronomical object (:monosp:`astroobject`)
 
  * - direction
    - |vector|
-   - Alternative (and exclusive) to `to_world`. Direction in which the emitter
+   - Alternative (and exclusive) to ``to_world``. Direction in which the emitter
      is visible in world coordinates.
    - —
 
@@ -41,7 +41,7 @@ Distant astronomical object (:monosp:`astroobject`)
 
 This emitter plugin implements an environment light source simulating a
 distant astronomical object. It radiates a specified power per unit area within
-a solid angle specified by the `angular_diameter` parameter.  By default, the
+a solid angle specified by the ``angular_diameter`` parameter.  By default, the
 emitter radiates in the direction of the positive Z axis, i.e. :math:`(0, 0, 1)`,
 with an angular diameter equal to the average apparent size of the Sun from Earth.
 

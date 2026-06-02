@@ -22,17 +22,17 @@ Polarized reflection model by Maignan et al. (:monosp:`maignan`)
 
  * - ndvi
    - |spectrum| or |texture|
-   - :math:`0 \le ndvi \le 1`. Default: 0.8
+   - :math:`0 \le \mathrm{ndvi} \le 1`. Default: 0.8
    - |exposed| |differentiable|
 
  * - refr_re
    - |spectrum| or |texture|
-   - :math:`1 \le refr{_re} \le \infty`. Default: 1.5
+   - :math:`1 \le \mathrm{refr}_\mathrm{re} \le \infty`. Default: 1.5
    - |exposed| |differentiable|
 
  * - refr_im
    - |spectrum| or |texture|
-   - :math:`0 \le refr{_im} \le \infty`. Default: 0.0
+   - :math:`0 \le \mathrm{refr}_\mathrm{im} \le \infty`. Default: 0.0
    - |exposed| |differentiable|
 
  * - ext_ior

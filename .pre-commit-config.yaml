@@ -13,8 +13,10 @@ repos:
     hooks:
       - id: trailing-whitespace
         files: ^(docs_eradiate|src/eradiate_plugins)/
+        exclude: ^(docs_eradiate/_docs_api/list_api.rst|docs_eradiate/generated/)
       - id: end-of-file-fixer
         files: ^(docs_eradiate|src/eradiate_plugins)/
+        exclude: ^(docs_eradiate/_docs_api/list_api.rst|docs_eradiate/generated/)
       - id: check-yaml
         files: ^(docs_eradiate|src/eradiate_plugins)/
       - id: check-added-large-files

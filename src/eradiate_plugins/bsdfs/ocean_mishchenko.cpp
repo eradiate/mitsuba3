@@ -17,7 +17,7 @@ NAMESPACE_BEGIN(mitsuba)
 
 .. _plugin-bsdf-ocean_mishchenko:
 
-Oceanic reflection model (:monosp:`ocean-mishchenko`)
+Oceanic reflection model (:monosp:`ocean_mishchenko`)
 -----------------------------------------------------
 
 .. pluginparameters::

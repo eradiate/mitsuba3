@@ -24,29 +24,29 @@ Piecewise medium (:monosp:`piecewise`)
 
  * - albedo
    - |float|, |spectrum| or |volume|
-   - Single-scattering albedo of the medium (Default: 0.75).
+   - Single-scattering albedo of the medium. Default: 0.75
    - |exposed|, |differentiable|
 
  * - sigma_t
    - |float|, |spectrum| or |volume|
-   - Extinction coefficient in inverse scene units. Default: 1
-     The supplied grid must be of shape [1,1,n].
+   - Extinction coefficient in inverse scene units. The supplied grid must be
+     of shape [1,1,n]. Default: 1.0
    - |exposed|, |differentiable|
 
  * - scale
    - |float|
    - Optional scale factor that will be applied to the extinction parameter.
      It is provided for convenience when accommodating data based on different
-     units, or to simply tweak the density of the medium. Default: 1
+     units, or to simply tweak the density of the medium. Default: 1.0
    - |exposed|
 
  * - sample_emitters
    - |bool|
    - Flag to specify whether shadow rays should be cast from inside the volume.
-     If the medium is enclosed in a :ref:`dielectric
-     <bsdf-dielectric>` boundary, shadow rays are ineffective and turning them
-     off will significantly reduce render time. This can reduce render time up to 50%
-     when rendering objects with subsurface scattering.
+     If the medium is enclosed in a
+     :ref:`dielectric <bsdf-dielectric>` boundary, shadow rays are ineffective
+     and turning them off will significantly reduce render time. This can reduce
+     render time up to 50% when rendering objects with subsurface scattering.
      Default: |true|
 
  * - (Nested plugin)
@@ -57,19 +57,19 @@ Piecewise medium (:monosp:`piecewise`)
    - |exposed|, |differentiable|
 
 
-This plugin provides a 1D heterogeneous medium implementation (plane parallel
+This plugin provides a 1D heterogeneous medium implementation (plane-parallel
 geometry), which acquires its data from nested volume instances. These can be
-constant, use a procedural function, or fetch data from disk, e.g. using a 3D
+constant, use a procedural function, or fetch data from disk, *e.g.* using a 3D
 grid, as long as the underlying grid has the shape [1,1,N], with N the number of
 layers on the vertical (z) axis.
 
-The medium is parametrized by the single scattering albedo and the extinction
+The medium is parametrized by the single-scattering albedo and the extinction
 coefficient :math:`\sigma_t`. The extinction coefficient should be provided in
 inverse scene units. For instance, when a world-space distance of 1 unit
-corresponds to a meter, the extinction coefficient should have units of inverse
+corresponds to 1 metre, the extinction coefficient should have units of inverse
 meters. For convenience, the scale parameter can be used to correct the units.
 For instance, when the scene is in meters and the coefficients are in inverse
-millimeters, set scale to 1000.
+millimetres, set scale to 1000.
 
 Both the albedo and the extinction coefficient can either be constant or
 textured, and both parameters are allowed to be spectrally varying.

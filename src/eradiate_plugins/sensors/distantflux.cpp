@@ -17,7 +17,7 @@ enum class RayTargetType { Shape, Point, None };
 .. _plugin-sensor-distantflux:
 
 Distant fluxmeter sensor (:monosp:`distantflux`)
------------------------------------------------
+------------------------------------------------
 
 .. pluginparameters::
 

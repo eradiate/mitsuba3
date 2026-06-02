@@ -58,8 +58,8 @@ Multi-pixel distant radiancemeter sensor (:monosp:`mpdistant`)
  * - srf
    - |spectrum|
    - Sensor Response Function that defines the
-     :ref:`spectral sensitivity <explanation_srf_sensor>` of the sensor
-     (Default: :monosp:`none`)
+     :ref:`spectral sensitivity <explanation_srf_sensor>` of the sensor.
+     Default: :monosp:`none`
    - —
 
 This sensor plugin implements a distant directional sensor which records

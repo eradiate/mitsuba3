@@ -15,11 +15,10 @@ NAMESPACE_BEGIN(mitsuba)
 
 .. _plugin-bsdf-ocean_grasp:
 
-(GRASP) Oceanic reflection model (:monosp:`ocean-grasp`)
--------------------------------------------------------------
+(GRASP) Oceanic reflection model (:monosp:`ocean_grasp`)
+--------------------------------------------------------
 
 .. pluginparameters::
- :extra-rows: 8
 
  * - wavelength
    - |float|

@@ -27,7 +27,7 @@ InstanceList (:monosp:`instancelist`)
 
 This is utility plugins allows to create multiple instances of a shape group
 from a buffer of object-to-world transforms. For details on how to create
-instances, refer to the :ref:`shape-shapegroup` and :ref:`shape-instances` plugins.
+instances, refer to the ``shapegroup`` and ``instance`` plugins from Mitsuba's core plugin library.
  */
 
 template <typename Float, typename Spectrum>

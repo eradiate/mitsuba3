@@ -18,22 +18,22 @@ Extremum grid structure (:monosp:`extremum_grid`)
 
  * - volume
    - |volume|
-   - Extinction coefficient volume to build extremum grid from
+   - Extinction coefficient volume to build extremum grid from.
    - |exposed|
 
  * - to_world
    - |transform|
-   - Specifies the 4x4 transformation matrix of the underlying volume.
+   - Specifies the 4×4 transformation matrix of the underlying volume.
 
  * - scale
    - |float|
-   - Scale factor for the extremum values (Default: 1.0).
+   - Scale factor for the extremum values. Default: 1.0
 
  * - resolution
    - |vector|
    - Grid resolution along the XYZ axis. Does not have to be a multiple of
      the underlying volume. Set to [0,0,0] to trigger an adaptive resolution
-     routine (Default: [1,1,1]).
+     routine. Default: [1,1,1]
 
 This plugin creates a regular grid structure storing local extremum values for
 efficient delta tracking in heterogeneous media. The grid is constructed
@@ -41,7 +41,7 @@ by querying the extinction volume's extrema over each grid cell.
 
 At runtime, DDA (Digital Differential Analyzer) traversal through the grid provides
 tight-fitting local extrema, dramatically reducing null collisions in media with
-high spatial variance (e.g., clouds, fog).
+high spatial variance (*e.g.* clouds, fog).
 */
 
 template <typename Float, typename Spectrum>
