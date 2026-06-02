@@ -190,6 +190,8 @@ public:
                 PluginManager::instance()->create_object<ExtremumStructure>(props_extr);
         }
 
+        m_ddis_threshold = props.get<ScalarFloat>("ddis_threshold", 0.1f);
+
         if (m_ddis_threshold > 0.f) {
             // Create the DDIS phase function as a tabulated function of the
             // max function of the underlying phase function.
