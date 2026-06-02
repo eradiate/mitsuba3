@@ -226,8 +226,8 @@ protected:
 // #ERADIATE_CHANGE_END
 
 // #ERADIATE_CHANGE_BEGIN: DDIS
-    ref<PhaseFunction> m_ddis_phase_function;
-    ScalarFloat m_ddis_threshold;
+    ref<PhaseFunction> m_ddis_phase_function = nullptr;
+    ScalarFloat m_ddis_threshold = 0.f;
     
     MI_DECLARE_TRAVERSE_CB(m_phase_function, m_extremum_structure, 
                            m_ddis_phase_function, m_ddis_threshold)
