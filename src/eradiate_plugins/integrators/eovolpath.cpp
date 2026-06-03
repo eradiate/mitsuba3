@@ -74,9 +74,10 @@ EO Volumetric path tracer (:monosp:`eovolpath`)
  * - enable_pbs
    - |bool|
    - Enable prediction-based path splitting (PBS). At each volumetric event,
-     the predicted contribution of the scattered direction is used to determine whether
+     the predicted contribution of the ddis scattered direction is used to determine whether
      to split the path into multiple independent copies or to perform russian rouletter.
-     Each split path has a proportionally reduced weight. (Default: |false|)
+     Each split path has a proportionally reduced weight. Requires ``enable_ddis=true``.
+     (Default: |false|)
 
  * - min_split_threshold
    - |float|
@@ -107,7 +108,8 @@ EO Volumetric path tracer (:monosp:`eovolpath`)
    - |bool|
    - Enable the N-tuple Local Estimate (NLE) variance reduction method. Each primary ray is traced as
      a *mother* path. At regular intervals along the mother's trajectory, a *clone* path is forked
-     and traced independently to perform additional next-event estimation. (Default: |false|)
+     and traced independently to perform additional next-event estimation. Requires ``enable_ddis=true``.
+     (Default: |false|)
 
  * - first_clone_depth
    - |int|
@@ -215,6 +217,9 @@ public:
         m_crit_rr_threshold     = props.get<ScalarFloat>("crit_rr_threshold", 0.03f);
         m_min_rr_threshold      = props.get<ScalarFloat>("min_rr_threshold", 0.02f);
 
+        if (m_enable_pbs && !m_enable_ddis)
+            Throw("`enable_pbs=True` requires `enable_ddis=True`");
+
         if (m_enable_pbs && (m_crit_rr_threshold <  0.f || m_crit_rr_threshold >= 1.f))
             Throw("`crit_rr_threshold` must be between 0 and 1.");
 
@@ -225,10 +230,13 @@ public:
             Throw("`min_split_threshold` must be greater than 1.");
 
         // NLE Properties
-        m_enable_nle          = props.get<bool>("enable_nle", false);
+        m_enable_nle         = props.get<bool>("enable_nle", false);
         m_first_clone_depth  = props.get<ScalarUInt32>("first_clone_depth", 1);
         m_max_clone_depth    = props.get<ScalarUInt32>("max_clone_depth", 10);
         m_nee_per_clone      = props.get<ScalarUInt32>("nee_per_clone", 9);
+
+        if (m_enable_nle && !m_enable_ddis)
+            Throw("`enable_nle=True` requires `enable_ddis=True`");
 
         if (m_enable_nle && (m_max_clone_depth <= 1 || m_nee_per_clone <= 1))
             Throw("`max_clone_depth` and `nee_per_clone` must be larger than one");
