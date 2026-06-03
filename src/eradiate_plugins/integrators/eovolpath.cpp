@@ -667,7 +667,7 @@ public:
                 if (dr::any_or<true>(enable_nle)) {
                     // DDIS: restrict to create_clone or existing clone when NLE is on
                     dr::masked(perform_ddis, enable_nle) &=
-                        create_clone || is_clone;
+                        (depth <= (uint32_t)m_first_clone_depth) || (create_clone || is_clone);
 
                     // NEE gating:
                     //  Mother: before first_clone_depth only
@@ -846,7 +846,7 @@ public:
 
                 if (dr::any_or<true>(enable_nle)) {
                     dr::masked(perform_ddis, enable_nle) &=
-                        create_clone || is_clone;
+                        ((depth+1) <= (uint32_t)m_first_clone_depth) || (create_clone || is_clone);
 
                     dr::masked(active_nee, enable_nle) &=
                         ((depth + 1) <= (uint32_t)m_first_clone_depth)
