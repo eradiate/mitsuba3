@@ -116,6 +116,8 @@ html_show_sourcelink = False
 html_theme_options = {
     "github_url": "https://github.com/eradiate/eradiate-mitsuba",
     "accent_color": "teal",
+    "light_logo": "_static/eradiate-mitsuba-logo-typo_simple-black.svg",
+    "dark_logo": "_static/eradiate-mitsuba-logo-typo_simple-white.svg",
 }
 
 # -- nbsphinx -------------------------------------------------------------
