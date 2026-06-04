@@ -67,6 +67,10 @@ EO Volumetric path tracer (:monosp:`eovolpath`)
      probability of sampling usin the emitter direction is set in the media plugins.
      (Default: false)
 
+ * - enable_ddis_surface
+   - |bool|
+   - Activate ddis for surfaces when ``enable_ddis`` is true. (Default: |true|).
+
  * - hide_emitters
    - |bool|
    - Hide directly visible emitters. (Default: no, i.e. |false|)
@@ -209,6 +213,7 @@ public:
             Throw("`rr_factor` is outside range [0.,1.].");
 
         m_enable_ddis = props.get<bool>("enable_ddis", false);
+        m_enable_ddis_surface = props.get<bool>("enable_ddis_surface", true);
 
         // Split Properties
         m_enable_pbs           = props.get<bool>("enable_pbs", false);
@@ -841,7 +846,10 @@ public:
                 BSDFPtr bsdf  = si.bsdf(ray);
 
                 Mask active_e = active_surface && has_flag(bsdf->flags(), BSDFFlags::Smooth) && (depth + 1 < (uint32_t) m_max_depth);
-                Mask perform_ddis = (medium != nullptr) && (ddis_threshold > 0.f) && active_e;
+                Mask perform_ddis = m_enable_ddis_surface
+                                    && (medium != nullptr)
+                                    && (ddis_threshold > 0.f)
+                                    && active_e;
                 Mask active_nee = active_e;
 
                 if (dr::any_or<true>(enable_nle)) {
@@ -1283,6 +1291,7 @@ private:
     ScalarFloat m_rr_factor;
 
     bool m_enable_ddis;
+    bool m_enable_ddis_surface;
 
     bool m_enable_pbs;
     ScalarUInt32 m_max_split_count;
