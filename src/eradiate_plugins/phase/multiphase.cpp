@@ -83,6 +83,9 @@ class MultiPhaseFunction final : public PhaseFunction<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(PhaseFunction, m_flags, m_components)
     MI_IMPORT_TYPES(PhaseFunctionContext, Volume)
+// #ERADIATE_CHANGE_BEGIN: DDIS
+    using typename Base::FloatStorage;
+// #ERADIATE_CHANGE_END
 
     MultiPhaseFunction(const Properties &props) : Base(props) {
         m_mis = props.get<bool>("use_mis", true);
@@ -266,20 +269,17 @@ public:
         return { val, pdf };
     }
 
-    void get_nodes(std::vector<ScalarFloat> &nodes) const override {
-        std::vector<std::vector<ScalarFloat>> nested_nodes(m_nested_phases.size());
+    FloatStorage get_nodes() const override {
+        std::vector<FloatStorage> nested_nodes(m_nested_phases.size());
         for (size_t i = 0; i < m_nested_phases.size(); ++i)
-            m_nested_phases[i]->get_nodes(nested_nodes[i]);
-        auto result = merge_nodes<ScalarFloat>(nested_nodes);
-        nodes  = std::move(result);
+            nested_nodes[i] = m_nested_phases[i]->get_nodes();
+        return merge_nodes<FloatStorage>(nested_nodes);
     }
 
-    void eval_max(const std::vector<ScalarFloat> &nodes,
-                   std::vector<ScalarFloat> &values) const override {
+    void eval_max(const FloatStorage &nodes, FloatStorage &values) const override {
         for (size_t i = 0; i < m_nested_phases.size(); ++i)
             m_nested_phases[i]->eval_max(nodes, values);
     }
-
 
     std::string to_string() const override {
         std::ostringstream oss;

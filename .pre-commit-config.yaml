@@ -7,7 +7,7 @@ repos:
         entry: tools/check_eradiate_fences.py
         language: script
         pass_filenames: false  # script calls git diff --cached itself
-        exclude: ^(src/eradiate_plugins|include/eradiate)/
+        exclude: ^(src/eradiate_plugins|include/eradiate|include/mitsuba/render/eradiate|include/eradiate/core/eradiate)/
   - repo: 'https://github.com/pre-commit/pre-commit-hooks'
     rev: v6.0.0
     hooks:
