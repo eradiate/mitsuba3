@@ -1,7 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-#
-# Eradiate Mitsuba fork — Sphinx documentation configuration
+"""Sphinx configuration for the Eradiate Mitsuba documentation."""
 
 import datetime
 import os
@@ -51,6 +48,7 @@ extensions = [
     "sphinx_copybutton",
     "sphinx_tabs.tabs",
     "sphinxcontrib.bibtex",
+    "sphinx_iconify",
     "nbsphinx",
     "myst_parser",
     "pluginparameters",
@@ -109,15 +107,30 @@ rst_prolog = r"""
 
 html_theme = "shibuya"
 html_title = "Eradiate Mitsuba"
+html_short_title = "Eradiate Mitsuba"
+html_favicon = "_images/icon_eradiate.png"
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
 html_show_sourcelink = False
 
 html_theme_options = {
-    "github_url": "https://github.com/eradiate/eradiate-mitsuba",
-    "accent_color": "teal",
     "light_logo": "_static/eradiate-mitsuba-logo-typo_simple-black.svg",
     "dark_logo": "_static/eradiate-mitsuba-logo-typo_simple-white.svg",
+    "accent_color": "teal",
+    "github_url": "https://github.com/eradiate/eradiate-mitsuba",
+    "navigation_with_keys": True,
+    "nav_links_align": "center",
+    "nav_links": [
+        {"title": "User guide", "url": "user_guide/index"},
+        {"title": "Plugins", "url": "plugin_reference/index"},
+        {"title": "API", "url": "api_reference/index"},
+        {"title": "Contributing", "url": "dev_guide/index"},
+        {
+            "title": "Main docs",
+            "url": "https://eradiate.readthedocs.org/",
+            "external": True,
+        },
+    ],
 }
 
 # -- nbsphinx -------------------------------------------------------------

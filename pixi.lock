@@ -72,6 +72,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/49/83/ddbf4533c62dd32667ef1238952abef155f3d3391f5be69a352ad1638a42/snowballstemmer-3.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/52/a7/d2782e4e3f77c8450f727ba74a8f12756d5ba823d81b941f1b04da9d033a/sphinxcontrib_serializinghtml-2.0.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/52/c0/d28e62407f4733bbe0169287bc012f0ac3b4a2021066b285570654119c8b/sphinxcontrib_bibtex-2.7.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/57/6f/7dd3097d8ce08109cff3e63a771ca1ad795d8d63d8015eaa6fbd13f784fa/sphinx_iconify-0.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/59/8c/57e832b7af6d7c5abe66eb3fbe3a3a32f4d11ea23a1aa7131371035be991/certifi-2026.5.20-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/5d/85/9ebeae2f76e9e77b952f4b274c27238156eae7979c5421fba91a28f4970d/sphinxcontrib_applehelp-2.0.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/5e/f5/0c41cb68dcae6b7de4fac4188a3a9589e21fb31df21ea3a2e888db95e6c9/soupsieve-2.8.4-py3-none-any.whl
@@ -177,6 +178,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/49/83/ddbf4533c62dd32667ef1238952abef155f3d3391f5be69a352ad1638a42/snowballstemmer-3.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/52/a7/d2782e4e3f77c8450f727ba74a8f12756d5ba823d81b941f1b04da9d033a/sphinxcontrib_serializinghtml-2.0.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/52/c0/d28e62407f4733bbe0169287bc012f0ac3b4a2021066b285570654119c8b/sphinxcontrib_bibtex-2.7.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/57/6f/7dd3097d8ce08109cff3e63a771ca1ad795d8d63d8015eaa6fbd13f784fa/sphinx_iconify-0.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/59/8c/57e832b7af6d7c5abe66eb3fbe3a3a32f4d11ea23a1aa7131371035be991/certifi-2026.5.20-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/5d/85/9ebeae2f76e9e77b952f4b274c27238156eae7979c5421fba91a28f4970d/sphinxcontrib_applehelp-2.0.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/5e/f5/0c41cb68dcae6b7de4fac4188a3a9589e21fb31df21ea3a2e888db95e6c9/soupsieve-2.8.4-py3-none-any.whl
@@ -282,6 +284,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/52/a7/d2782e4e3f77c8450f727ba74a8f12756d5ba823d81b941f1b04da9d033a/sphinxcontrib_serializinghtml-2.0.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/52/c0/d28e62407f4733bbe0169287bc012f0ac3b4a2021066b285570654119c8b/sphinxcontrib_bibtex-2.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/55/70/dea1f6a0e76607841a60fb51af150e70124864673f61704abb62b90cdcc7/watchfiles-1.2.0-cp310-cp310-macosx_11_0_arm64.whl
+      - pypi: https://files.pythonhosted.org/packages/57/6f/7dd3097d8ce08109cff3e63a771ca1ad795d8d63d8015eaa6fbd13f784fa/sphinx_iconify-0.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/59/8c/57e832b7af6d7c5abe66eb3fbe3a3a32f4d11ea23a1aa7131371035be991/certifi-2026.5.20-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/5d/85/9ebeae2f76e9e77b952f4b274c27238156eae7979c5421fba91a28f4970d/sphinxcontrib_applehelp-2.0.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/5e/f5/0c41cb68dcae6b7de4fac4188a3a9589e21fb31df21ea3a2e888db95e6c9/soupsieve-2.8.4-py3-none-any.whl
@@ -1733,6 +1736,13 @@ packages:
   requires_dist:
   - anyio>=3.0.0
   requires_python: '>=3.10'
+- pypi: https://files.pythonhosted.org/packages/57/6f/7dd3097d8ce08109cff3e63a771ca1ad795d8d63d8015eaa6fbd13f784fa/sphinx_iconify-0.3.0-py3-none-any.whl
+  name: sphinx-iconify
+  version: 0.3.0
+  sha256: b38ca4a66767c317bea31850a6f540ef79db4394eb4792961918c2d44b4a2c3a
+  requires_dist:
+  - sphinx
+  requires_python: '>=3.9'
 - pypi: https://files.pythonhosted.org/packages/59/8c/57e832b7af6d7c5abe66eb3fbe3a3a32f4d11ea23a1aa7131371035be991/certifi-2026.5.20-py3-none-any.whl
   name: certifi
   version: 2026.5.20
