@@ -107,6 +107,9 @@ class MI_EXPORT_LIB PhaseFunction : public JitObject<PhaseFunction<Float, Spectr
 public:
     MI_IMPORT_TYPES(PhaseFunctionContext);
 
+// #ERADIATE_CHANGE_BEGIN: DDIS
+    using FloatStorage = mitsuba::DynamicBuffer<Float>;
+// #ERADIATE_CHANGE_END
     /**
      * \brief Importance sample the phase function model
      *
@@ -228,14 +231,13 @@ public:
      *     to aligned (forward-scattering) incoming and outgoing directions, and
      *     -1 corresponds to exact backscatter.
      *
-     * \param nodes
-     *     Output vector. On return it contains the cos_theta values at which
-     *     the phase function should be evaluated. The vector is resized by this
-     *     call.
+     * \return A sorted buffer of cos_theta values at which the phase function
+     *     should be evaluated.
      */
-    virtual void get_nodes(std::vector<ScalarFloat>& nodes) const;
+    virtual FloatStorage get_nodes() const;
 
-    /**
+
+     /**
      * \brief Evaluate the phase function at the given cos_theta nodes and
      * accumulate the result into \c values by taking the elementwise maximum.
      *
@@ -245,10 +247,10 @@ public:
      *
      * Delegating the comparison to the callee rather than the caller enables
      * natural recursion through composite phase functions (e.g.
-     * \ref BlendPhaseFunction, \ref MultiPhaseFunction): a composite 
-     * implementation simply calls \c eval_max on each child with the same 
-     * buffer, and each child accumulates its contribution independently. The 
-     * resulting buffer holds the pointwise supremum over the entire 
+     * \ref BlendPhaseFunction, \ref MultiPhaseFunction): a composite
+     * implementation simply calls \c eval_max on each child with the same
+     * buffer, and each child accumulates its contribution independently. The
+     * resulting buffer holds the pointwise supremum over the entire
      * phase-function tree without the caller needing to know its structure.
      *
      * \note cos_theta follows the physics convention (see \ref get_nodes).
@@ -257,13 +259,12 @@ public:
      *     cos_theta values at which to evaluate the phase function, as
      *     returned by \ref get_nodes.
      * \param values
-     *     In/out buffer. Must be either empty or have the same length as
-     *     \c nodes; if empty it is resized and zero-initialised before the
-     *     first comparison. On return, each entry holds the maximum of its
-     *     previous value and the phase function evaluated at the corresponding
-     *     node.
+     *     In/out buffer. Must have the same length as \c nodes and be
+     *     zero-initialised before the first comparison. On return, each entry
+     *     holds the maximum of its previous value and the phase function
+     *     evaluated at the corresponding node.
      */
-    virtual void eval_max(const std::vector<ScalarFloat>& nodes, std::vector<ScalarFloat>& values) const;
+    virtual void eval_max(const FloatStorage &nodes, FloatStorage &values) const;
 // #ERADIATE_CHANGE_END
     //! @}
     // -----------------------------------------------------------------------
@@ -319,8 +320,8 @@ DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::PhaseFunction)
     DRJIT_CALL_GETTER(flags)
     DRJIT_CALL_GETTER(component_count)
 // #ERADIATE_CHANGE_BEGIN: DDIS
-    DRJIT_CALL_METHOD(eval_max)
     DRJIT_CALL_METHOD(get_nodes)
+    DRJIT_CALL_METHOD(eval_max)
 // #ERADIATE_CHANGE_END
 DRJIT_CALL_END()
 

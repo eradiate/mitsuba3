@@ -10,8 +10,6 @@
 #include <mitsuba/render/volume.h>
 #include <mitsuba/core/plugin.h>
 #include <mitsuba/render/eradiate/extremum.h>
-#include <sstream>
-#include <iomanip>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -166,6 +164,7 @@ public:
                     m_ddis_phase_function, m_ddis_threshold)
     MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, ExtremumStructure,
                     ExtremumStructurePtr, PhaseFunction)
+    using FloatStorage = DynamicBuffer<Float>;
 
     EOHeterogeneousMedium(const Properties &props) : Base(props) {
         m_is_homogeneous = false;
@@ -200,28 +199,16 @@ public:
         if (m_ddis_threshold > 0.f) {
             // Create the DDIS phase function as a tabulated function of the
             // max function of the underlying phase function.
-            std::vector<ScalarFloat> nodes, values;
-            m_phase_function->get_nodes(nodes);
+            FloatStorage nodes  = m_phase_function->get_nodes();
+            FloatStorage values = dr::zeros<FloatStorage>(dr::width(nodes));
             m_phase_function->eval_max(nodes, values);
-
-            std::stringstream ss_nodes, ss_values;
-            ss_nodes << std::setprecision(std::numeric_limits<ScalarFloat>::digits10);
-            ss_values << std::setprecision(std::numeric_limits<ScalarFloat>::digits10);
-            for(size_t i = 0; i < nodes.size(); ++i) {
-                if(i != 0) {
-                    ss_nodes << ",";
-                    ss_values << ",";
-                }
-
-                ss_nodes << nodes[i];
-                ss_values << values[i];
-            }
 
             auto pmgr = PluginManager::instance();
             Properties props_ddis("tabphase_irregular");
-            props_ddis.set("nodes", ss_nodes.str());
-            props_ddis.set("values", ss_values.str());
-            m_ddis_phase_function = static_cast<PhaseFunction*>(pmgr->create_object<PhaseFunction>(props_ddis));
+            props_ddis.set_any("nodes", nodes);
+            props_ddis.set_any("values", values);
+            m_ddis_phase_function =
+                static_cast<PhaseFunction*>(pmgr->create_object<PhaseFunction>(props_ddis));
         }
 
         // Optional user-provided bbox override
@@ -248,25 +235,32 @@ public:
         if (m_ddis_threshold <= 0.f || m_ddis_phase_function == nullptr)
             return;
 
-        std::vector<ScalarFloat> nodes, values;
-        m_phase_function->get_nodes(nodes);
+        FloatStorage nodes  = m_phase_function->get_nodes();
+        FloatStorage values = dr::zeros<FloatStorage>(dr::width(nodes));
         m_phase_function->eval_max(nodes, values);
 
         struct ValuesCallback : TraversalCallback {
-            DynamicBuffer<Float> *target = nullptr;
+            FloatStorage *target_nodes = nullptr;
+            FloatStorage *target_values = nullptr;
             void put_value(std::string_view name, void *ptr, uint32_t,
                            const std::type_info &) override {
+                if (name == "nodes")
+                    target_nodes = static_cast<FloatStorage *>(ptr);
                 if (name == "values")
-                    target = static_cast<DynamicBuffer<Float> *>(ptr);
+                    target_values = static_cast<FloatStorage *>(ptr);
             }
             void put_object(std::string_view, Object *, uint32_t) override {}
         } cb;
 
         m_ddis_phase_function->traverse(&cb);
-        if (cb.target) {
-            *cb.target = dr::load<DynamicBuffer<Float>>(values.data(), values.size());
+        if (cb.target_values)
+            *cb.target_values = values;
+
+        if (cb.target_nodes)
+            *cb.target_nodes = nodes;
+
+        if (cb.target_values || cb.target_nodes)
             m_ddis_phase_function->parameters_changed({});
-        }
     }
 
     void parameters_changed(const std::vector<std::string> &/*keys*/) override {

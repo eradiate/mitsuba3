@@ -4790,6 +4790,12 @@ static const char *__doc_mitsuba_Medium_Medium_2 = R"doc()doc";
 
 static const char *__doc_mitsuba_Medium_class_name = R"doc()doc";
 
+static const char *__doc_mitsuba_Medium_ddis_phase_function =
+R"doc(Return the ddis phase function of this medium. Can be null for medium
+that don't specify such phase function.)doc";
+
+static const char *__doc_mitsuba_Medium_ddis_threshold = R"doc()doc";
+
 static const char *__doc_mitsuba_Medium_extremum_structure = R"doc(Returns the extremum structure for local extremum acceleration.)doc";
 
 static const char *__doc_mitsuba_Medium_get_majorant = R"doc(Returns the medium's majorant used for delta tracking)doc";
@@ -4808,6 +4814,10 @@ static const char *__doc_mitsuba_Medium_intersect_aabb = R"doc(Intersects a ray 
 
 static const char *__doc_mitsuba_Medium_is_homogeneous = R"doc(Returns whether this medium is homogeneous)doc";
 
+static const char *__doc_mitsuba_Medium_m_ddis_phase_function = R"doc()doc";
+
+static const char *__doc_mitsuba_Medium_m_ddis_threshold = R"doc()doc";
+
 static const char *__doc_mitsuba_Medium_m_extremum_structure = R"doc()doc";
 
 static const char *__doc_mitsuba_Medium_m_has_spectral_extinction = R"doc()doc";
@@ -4821,6 +4831,8 @@ static const char *__doc_mitsuba_Medium_m_sample_emitters = R"doc()doc";
 static const char *__doc_mitsuba_Medium_m_use_rrt = R"doc()doc";
 
 static const char *__doc_mitsuba_Medium_phase_function = R"doc(Return the phase function of this medium)doc";
+
+static const char *__doc_mitsuba_Medium_phase_function_2 = R"doc(Return the phase function of this medium, non const)doc";
 
 static const char *__doc_mitsuba_Medium_prepare_medium_traversal =
 R"doc(Intersects ray with the medium bbox and creates a medium interaction.
@@ -4880,9 +4892,11 @@ Parameter ``channel``:
     distance. This argument is only used when rendering in RGB modes.
 
 Returns:
-    This method returns a MediumInteraction. The MediumInteraction
-    will always be valid, except if the ray missed the Medium's
-    bounding box.)doc";
+    This method returns a tuple (MediumInteraction, Transmittance,
+    PDF). The MediumInteraction if an interaction was sampled within
+    the medium boudning box and before the bouding iteraction it. The
+    transmittance and PDF are both computed for all channels even if
+    the sampling operation is performed on one channel.)doc";
 
 static const char *__doc_mitsuba_Medium_to_string = R"doc(Return a human-readable representation of the Medium)doc";
 
@@ -4925,6 +4939,20 @@ static const char *__doc_mitsuba_Medium_traverse_1_cb_ro = R"doc()doc";
 static const char *__doc_mitsuba_Medium_traverse_1_cb_rw = R"doc()doc";
 
 static const char *__doc_mitsuba_Medium_type = R"doc()doc";
+
+static const char *__doc_mitsuba_Medium_update_ddis_phase_function =
+R"doc(Rebuild any DDIS-related derived data when the phase function has
+changed.
+
+This method is called by the scene's parameters_changed() for every
+medium whose phase function is marked dirty. The default
+implementation is a no-op; subclasses that maintain a DDIS phase
+function override it.
+
+This is intentionally separate from parameters_changed() so that the
+scene can drive all media to completion before clearing dirty flags,
+which is required when multiple media share the same phase function
+via a scene-level reference.)doc";
 
 static const char *__doc_mitsuba_Medium_use_emitter_sampling = R"doc(Returns whether this specific medium instance uses emitter sampling)doc";
 
@@ -5951,6 +5979,42 @@ static const char *__doc_mitsuba_PhaseFunction_class_name = R"doc()doc";
 
 static const char *__doc_mitsuba_PhaseFunction_component_count = R"doc(Number of components this phase function is comprised of.)doc";
 
+static const char *__doc_mitsuba_PhaseFunction_dirty =
+R"doc(Return whether this phase function's parameters have changed since the
+last call to set_dirty(false). Set by parameters_changed(), cleared by
+the scene after all dependent media have been updated.)doc";
+
+static const char *__doc_mitsuba_PhaseFunction_eval_max =
+R"doc(Evaluate the phase function at the given cos_theta nodes and
+accumulate the result into ``values`` by taking the elementwise
+maximum.
+
+For each node :math:`\mu_i` in ``nodes`` this method evaluates the
+phase function value :math:`p(\mu_i)` and updates
+:math:`\texttt{values}[i] \leftarrow \max(\texttt{values}[i],\,
+p(\mu_i))`.
+
+Delegating the comparison to the callee rather than the caller enables
+natural recursion through composite phase functions (e.g.
+BlendPhaseFunction, MultiPhaseFunction): a composite implementation
+simply calls ``eval_max`` on each child with the same buffer, and each
+child accumulates its contribution independently. The resulting buffer
+holds the pointwise supremum over the entire phase-function tree
+without the caller needing to know its structure.
+
+\note cos_theta follows the physics convention (see get_nodes).
+
+Parameter ``nodes``:
+    cos_theta values at which to evaluate the phase function, as
+    returned by get_nodes.
+
+Parameter ``values``:
+    In/out buffer. Must be either empty or have the same length as
+    ``nodes``; if empty it is resized and zero-initialised before the
+    first comparison. On return, each entry holds the maximum of its
+    previous value and the phase function evaluated at the
+    corresponding node.)doc";
+
 static const char *__doc_mitsuba_PhaseFunction_eval_pdf =
 R"doc(Evaluates the phase function model value and PDF
 
@@ -5979,11 +6043,40 @@ static const char *__doc_mitsuba_PhaseFunction_flags_2 = R"doc(Flags for a speci
 
 static const char *__doc_mitsuba_PhaseFunction_get_flags = R"doc(Return type of phase function)doc";
 
+static const char *__doc_mitsuba_PhaseFunction_get_nodes =
+R"doc(Populate a set of cos_theta nodes suitable for representing this phase
+function.
+
+The nodes are used to build the piecewise-linear envelope required by
+the DDIS importance sampling scheme. Subclasses may override this
+method to supply irregularly spaced nodes that better resolve sharp
+features (e.g. a strong forward-scattering peak). The default
+implementation places ``m_node_count`` nodes uniformly in [-1, 1].
+
+\note cos_theta follows the physics convention: a value of +1
+corresponds to aligned (forward-scattering) incoming and outgoing
+directions, and -1 corresponds to exact backscatter.
+
+Parameter ``nodes``:
+    Output vector. Must be empty on input. On return it contains the
+    sorted cos_theta values at which the phase function should be
+    evaluated. The vector is resized by this call.)doc";
+
 static const char *__doc_mitsuba_PhaseFunction_m_components = R"doc(Flags for each component of this phase function.)doc";
+
+static const char *__doc_mitsuba_PhaseFunction_m_dirty =
+R"doc(True if the phase function's parameters have changed since the last
+scene update)doc";
 
 static const char *__doc_mitsuba_PhaseFunction_m_flags = R"doc(Type of phase function (e.g. anisotropic))doc";
 
+static const char *__doc_mitsuba_PhaseFunction_m_node_count =
+R"doc(Number of nodes to regularly discretize the cos theta dimension in
+eval_max)doc";
+
 static const char *__doc_mitsuba_PhaseFunction_max_projected_area = R"doc(Return the maximum projected area of the microflake distribution)doc";
+
+static const char *__doc_mitsuba_PhaseFunction_parameters_changed = R"doc()doc";
 
 static const char *__doc_mitsuba_PhaseFunction_projected_area =
 R"doc(Returns the microflake projected area
@@ -6024,6 +6117,8 @@ Parameter ``sample2``:
 
 Returns:
     A sampled direction wo and its corresponding weight and PDF)doc";
+
+static const char *__doc_mitsuba_PhaseFunction_set_dirty = R"doc(Modify the phase function's dirty flag)doc";
 
 static const char *__doc_mitsuba_PhaseFunction_set_flags = R"doc(Set type of phase function)doc";
 
@@ -7723,6 +7818,8 @@ static const char *__doc_mitsuba_Scene_m_emitters_dr = R"doc()doc";
 static const char *__doc_mitsuba_Scene_m_environment = R"doc()doc";
 
 static const char *__doc_mitsuba_Scene_m_integrator = R"doc()doc";
+
+static const char *__doc_mitsuba_Scene_m_media = R"doc()doc";
 
 static const char *__doc_mitsuba_Scene_m_sensors = R"doc()doc";
 
@@ -12224,6 +12321,8 @@ Returns:
 static const char *__doc_mitsuba_math_ulpdiff =
 R"doc(Compare the difference in ULPs between a reference value and another
 given floating point number)doc";
+
+static const char *__doc_mitsuba_merge_nodes = R"doc(Merge multiple lists of nodes into one. Remove duplicates.)doc";
 
 static const char *__doc_mitsuba_mueller_absorber =
 R"doc(Constructs the Mueller matrix of an ideal absorber

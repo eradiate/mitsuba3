@@ -220,6 +220,7 @@ class TabulatedPolarizedPhaseFunction final
 public:
     MI_IMPORT_BASE(PhaseFunction, m_flags, m_components)
     MI_IMPORT_TYPES(PhaseFunctionContext)
+    using typename Base::FloatStorage;
 
     using VectorArray5 = std::array<std::vector<ScalarFloat>, 5>;
     using Vector5f = dr::Array<Float, 5>;
@@ -420,12 +421,8 @@ public:
         return oss.str();
     }
 
-    void get_nodes(std::vector<ScalarFloat> &nodes) const override {
-        const size_t n = m_m11.size();
-        nodes.resize(n);
-        for (size_t i = 0; i < n; ++i) {
-            nodes[i]  = dr::slice(m_m11.nodes(), i);
-        }
+    FloatStorage get_nodes() const override {
+        return m_m11.nodes();
     }
 
     MI_DECLARE_CLASS(TabulatedPolarizedPhaseFunction)

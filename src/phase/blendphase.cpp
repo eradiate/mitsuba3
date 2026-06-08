@@ -69,6 +69,9 @@ class BlendPhaseFunction final : public PhaseFunction<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(PhaseFunction, m_flags, m_components)
     MI_IMPORT_TYPES(PhaseFunctionContext, Volume)
+// #ERADIATE_CHANGE_BEGIN: DDIS
+    using typename Base::FloatStorage;
+// #ERADIATE_CHANGE_END
 
     BlendPhaseFunction(const Properties &props) : Base(props) {
         int phase_index = 0;
@@ -197,16 +200,12 @@ public:
     }
 
 // #ERADIATE_CHANGE_BEGIN: DDIS
-    void get_nodes(std::vector<ScalarFloat> &nodes) const override {
-        std::vector<ScalarFloat> nodes0, nodes1;
-        m_nested_phase[0]->get_nodes(nodes0);
-        m_nested_phase[1]->get_nodes(nodes1);
-        auto result = merge_nodes<ScalarFloat>({nodes0, nodes1});
-        nodes  = std::move(result);
+    FloatStorage get_nodes() const override {
+        return merge_nodes<FloatStorage>({ m_nested_phase[0]->get_nodes(),
+                                           m_nested_phase[1]->get_nodes() });
     }
 
-    void eval_max(const std::vector<ScalarFloat> &nodes,
-                  std::vector<ScalarFloat> &values) const override {
+    void eval_max(const FloatStorage &nodes, FloatStorage &values) const override {
         m_nested_phase[0]->eval_max(nodes, values);
         m_nested_phase[1]->eval_max(nodes, values);
     }
