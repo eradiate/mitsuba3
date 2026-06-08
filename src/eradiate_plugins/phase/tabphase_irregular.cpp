@@ -16,16 +16,18 @@ Tabulated phase function (irregular angular grid) (:monosp:`tabphase_irregular`)
 .. pluginparameters::
 
  * - values
-   - |string|
-   - A comma-separated list of phase function values parameterized by the
-     cosine of the scattering angle. Must have the same length as ``nodes``.
+   - |string| or |tensor|
+   - Array of phase function values parameterized by the cosine of the
+     scattering angle. Must have the same length as ``nodes``. Accepts a
+     comma-separated list or 1D tensor.
    - |exposed|
 
  * - nodes
-   - |string|
-   - A comma-separated list of :math:`\cos \theta` specifying the grid on which
-     ``values`` are defined. Bounds must be [-1, 1] and values must be strictly
-     increasing. Must have the same length as ``values``.
+   - |string| or |tensor|
+   - Array of :math:`\cos \theta` specifying the grid on which ``values`` are
+     defined. Bounds must be [-1, 1] and values must be strictly increasing.
+     Must have the same length as ``values``. Accepts a comma-separated
+     list or 1D tensor.
    - |exposed|
 
 This plugin implements a generic phase function model for isotropic media
@@ -43,12 +45,33 @@ class IrregularTabulatedPhaseFunction final
 public:
     MI_IMPORT_BASE(PhaseFunction, m_flags, m_components)
     MI_IMPORT_TYPES(PhaseFunctionContext)
+    using typename Base::FloatStorage;
 
     IrregularTabulatedPhaseFunction(const Properties &props) : Base(props) {
-        std::vector<ScalarFloat> values;
-        std::vector<ScalarFloat> nodes;
+        if (props.type("nodes") == Properties::Type::Any &&
+            props.type("values") == Properties::Type::Any) {
+            const FloatStorage &nodes_buf  = props.get_any<FloatStorage>("nodes");
+            const FloatStorage &values_buf = props.get_any<FloatStorage>("values");
 
-        if (props.type("values") == Properties::Type::String) {
+            if (dr::width(nodes_buf) != dr::width(values_buf))
+                Throw("'nodes' and 'values' must have the same length");
+
+            m_distr = IrregularContinuousDistribution<Float>(nodes_buf, values_buf);
+
+        } else if (props.type("values") == Properties::Type::Vector &&
+                   props.type("nodes") == Properties::Type::Vector) {
+
+            m_distr = IrregularContinuousDistribution<Float>(
+                props.get<ScalarVector3f>("nodes").data(),
+                props.get<ScalarVector3f>("values").data(),
+                3);
+
+        } else if (props.type("values") == Properties::Type::String &&
+                   props.type("nodes") == Properties::Type::String) {
+
+            std::vector<ScalarFloat> values;
+            std::vector<ScalarFloat> nodes;
+
             std::vector<std::string> values_str =
                 string::tokenize(props.get<std::string>("values"), " ,");
             values.reserve(values_str.size());
@@ -60,11 +83,7 @@ public:
                     Throw("Could not parse floating point value '%s'", s);
                 }
             }
-        } else {
-            Throw("'values' must be a string");
-        }
 
-        if (props.type("nodes") == Properties::Type::String) {
             std::vector<std::string> nodes_str =
                 string::tokenize(props.get<std::string>("nodes"), " ,");
             nodes.reserve(nodes_str.size());
@@ -76,23 +95,22 @@ public:
                     Throw("Could not parse floating point value '%s'", s);
                 }
             }
-        } else {
-            Throw("'nodes' must be a string");
-        }
 
-        // Check that values and nodes have the same size
-        if (values.size() != nodes.size()) {
-            Throw("'nodes' and 'values' must have the same length");
-        }
+            // Check that values and nodes have the same size
+            if (values.size() != nodes.size()) {
+                Throw("'nodes' and 'values' must have the same length");
+            }
 
-        // Check that nodes cover the [-1, 1] segment
-        if (nodes[0] != -1.f || nodes[nodes.size() - 1] != 1.f) {
-            Throw("'nodes' bounds must be [-1, 1], got [%s, %s]", nodes[0],
-                  nodes[nodes.size() - 1]);
-        }
-
-        m_distr = IrregularContinuousDistribution<Float>(
+            m_distr = IrregularContinuousDistribution<Float>(
             nodes.data(), values.data(), values.size());
+        } else {
+            Throw("'values' and 'nodes' must either be of type ArrayXf or string");
+        }
+
+        // Check for node bounds.
+        if (dr::any(dr::min(m_distr.nodes()) != -1.f || dr::max(m_distr.nodes()) != 1.f))
+            Throw("'nodes' bounds must be [-1, 1], got [%s, %s]",
+                    dr::min(m_distr.nodes()), dr::max(m_distr.nodes()));
 
         m_flags = +PhaseFunctionFlags::Anisotropic;
         m_components.push_back(m_flags);
@@ -159,12 +177,8 @@ public:
         return oss.str();
     }
 
-    void get_nodes(std::vector<ScalarFloat> &nodes) const override {
-        const size_t n = m_distr.size();
-        nodes.resize(n);
-        for (size_t i = 0; i < n; ++i) {
-            nodes[i]  = dr::slice(m_distr.nodes(), i);
-        }
+    FloatStorage get_nodes() const override {
+        return m_distr.nodes();
     }
 
     MI_DECLARE_CLASS(IrregularTabulatedPhaseFunction)

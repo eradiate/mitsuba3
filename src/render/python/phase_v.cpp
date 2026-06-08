@@ -15,7 +15,11 @@
 MI_VARIANT class PyPhaseFunction : public PhaseFunction<Float, Spectrum> {
 public:
     MI_IMPORT_TYPES(PhaseFunction, PhaseFunctionContext)
-    NB_TRAMPOLINE(PhaseFunction, 7);
+// #ERADIATE_CHANGE_BEGIN: DDIS
+    NB_TRAMPOLINE(PhaseFunction, 9);
+
+    using FloatStorage = DynamicBuffer<Float>;
+// #ERADIATE_CHANGE_END
 
     PyPhaseFunction(const Properties &props) : PhaseFunction(props) {}
 
@@ -34,6 +38,15 @@ public:
         using Return = std::pair<Spectrum, Float>;
         NB_OVERRIDE_PURE(eval_pdf, ctx, mi, wo, active);
     }
+// #ERADIATE_CHANGE_BEGIN: DDIS
+    FloatStorage get_nodes() const override{
+        NB_OVERRIDE(get_nodes);
+    };
+
+    void eval_max(const FloatStorage &nodes, FloatStorage &values) const override{
+        NB_OVERRIDE(eval_max, nodes, values);
+    };
+// #ERADIATE_CHANGE_END
 
     Float projected_area(const MediumInteraction3f &mi, Mask active) const override {
         NB_OVERRIDE(projected_area, mi, active);
@@ -63,7 +76,10 @@ public:
 
 template <typename Ptr, typename Cls> void bind_phase_generic(Cls &cls) {
     MI_PY_IMPORT_TYPES(PhaseFunctionContext)
+// #ERADIATE_CHANGE_BEGIN: DDIS
+    using FloatStorage = DynamicBuffer<Float>;
 
+// #ERADIATE_CHANGE_END
     cls.def("sample",
             [](Ptr ptr, const PhaseFunctionContext &ctx,
                const MediumInteraction3f &mi, const Float &s1, const Point2f &s2,
@@ -88,6 +104,23 @@ template <typename Ptr, typename Cls> void bind_phase_generic(Cls &cls) {
             "active"_a = true, D(PhaseFunction, flags))
        .def("component_count", [](Ptr ptr, Mask active) { return ptr->component_count(active); },
             "active"_a = true, D(PhaseFunction, component_count));
+// #ERADIATE_CHANGE_BEGIN: DDIS
+
+    // get_nodes/eval_max operate on a single phase function and exchange node
+    // buffers; The out-parameter cannot be bound on a vectorized array of phase
+    // function pointers.
+    if constexpr (std::is_pointer_v<Ptr>) {
+        cls.def("get_nodes",
+                [](Ptr ptr) { return ptr->get_nodes(); },
+                D(PhaseFunction, get_nodes))
+           .def("eval_max",
+                [](Ptr ptr, const FloatStorage &nodes, FloatStorage &values) {
+                    if (dr::width(nodes) != dr::width(values))
+                        Throw("eval_max, nodes and values must have the same length");
+                    ptr->eval_max(nodes, values);
+                }, "nodes"_a, "values"_a, D(PhaseFunction, eval_max));
+    }
+// #ERADIATE_CHANGE_END
 }
 
 MI_PY_EXPORT(PhaseFunction) {

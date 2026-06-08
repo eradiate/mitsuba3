@@ -36,8 +36,14 @@ RE_END = re.compile(r"ERADIATE_CHANGE_END")
 # Directories containing upstream Mitsuba code (relative to repo root)
 UPSTREAM_PREFIXES = ("src/", "include/")
 
-# Eradiate-specific subtrees that live inside the upstream directories above
-ERADIATE_PREFIXES = ("src/eradiate_plugins/", "include/eradiate/")
+# Eradiate-specific subtrees that live inside the upstream directories above.
+# Any path with an "eradiate" or "eradiate_plugins" directory component is
+# treated as Eradiate-specific code and therefore exempt from fences.
+ERADIATE_DIRS = ("eradiate", "eradiate_plugins")
+
+
+def _is_eradiate_path(path: str) -> bool:
+    return any(part in ERADIATE_DIRS for part in path.split("/"))
 
 # Generated files that should not be checked for fences
 GENERATED_FILES = ("include/mitsuba/python/docstr.h",)
@@ -51,7 +57,7 @@ GENERATED_FILES = ("include/mitsuba/python/docstr.h",)
 def is_upstream(path: str) -> bool:
     return (
         any(path.startswith(p) for p in UPSTREAM_PREFIXES)
-        and not any(path.startswith(p) for p in ERADIATE_PREFIXES)
+        and not _is_eradiate_path(path)
         and path not in GENERATED_FILES
     )
 
