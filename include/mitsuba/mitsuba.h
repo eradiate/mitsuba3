@@ -27,8 +27,8 @@
 // #ERADIATE_CHANGE_BEGIN: Eradiate-specific constants
 
 #define ERD_MI_VERSION_MAJOR 0
-#define ERD_MI_VERSION_MINOR 4
-#define ERD_MI_VERSION_PATCH 3
+#define ERD_MI_VERSION_MINOR 5
+#define ERD_MI_VERSION_PATCH 0
 
 /// Current release of the Eradiate patch for Mitsuba
 #define ERD_MI_VERSION                                                             \
