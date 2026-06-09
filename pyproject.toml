@@ -20,14 +20,14 @@ dependencies = [
 ]
 requires-python = ">=3.9"
 authors = [
-    { name = "Wenzel Jakob", email = "wenzel.jakob@epfl.ch" }
+    { name = "The Eradiate Team", email = "info@eradiate.eu" }
 ]
 classifiers = [
     "License :: OSI Approved :: BSD License"
 ]
 
 [project.urls]
-Homepage = "https://github.com/mitsuba-renderer/mitsuba3"
+Homepage = "https://github.com/eradiate/mitsuba3"
 
 [project.scripts]
 mitsuba = "mitsuba.cli:_main"

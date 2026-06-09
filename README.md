@@ -5,7 +5,6 @@
 [![pypi][pypi-badge]][pypi-url]
 [![docs][docs-badge]][docs-url]
 
-
 [pypi-badge]: https://img.shields.io/pypi/v/eradiate-mitsuba?style=flat-square&color=blue
 [pypi-url]: https://pypi.org/project/eradiate-mitsuba/
 [docs-badge]: https://img.shields.io/readthedocs/eradiate-mitsuba?style=flat-square
