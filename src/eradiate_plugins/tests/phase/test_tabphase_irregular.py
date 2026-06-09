@@ -15,6 +15,67 @@ def test_create(variant_scalar_rgb):
     assert p is not None
 
 
+def test_create_tensor(variants_vec_backends_once_rgb):
+    # 'values' and 'nodes' supplied as 1D Dr.Jit arrays (tensor input)
+    p = mi.load_dict(
+        {
+            "type": "tabphase_irregular",
+            "values": mi.TensorXf([0.5, 0.8, 1.2, 1.5]),
+            "nodes": mi.TensorXf([-1.0, -0.3, 0.4, 1.0]),
+        }
+    )
+    assert p is not None
+
+
+def test_create_tensor_3(variants_vec_backends_once_rgb):
+    # 'values' and 'nodes' supplied as 1D Dr.Jit arrays of size 3,
+    # interpreted as vectors.
+    p = mi.load_dict(
+        {
+            "type": "tabphase_irregular",
+            "values": mi.TensorXf([0.5, 0.8, 1.5]),
+            "nodes": mi.TensorXf([-1.0, -0.3, 1.0]),
+        }
+    )
+    assert p is not None
+
+
+def test_tensor_matches_string(variants_vec_backends_once_rgb):
+    # The tensor and string construction paths must produce identical plugins.
+    values = [0.5, 0.8, 1.2, 1.5]
+    nodes = [-1.0, -0.3, 0.4, 1.0]
+
+    p_tensor = mi.load_dict(
+        {
+            "type": "tabphase_irregular",
+            "values": mi.TensorXf(values),
+            "nodes": mi.TensorXf(nodes),
+        }
+    )
+    p_string = mi.load_dict(
+        {
+            "type": "tabphase_irregular",
+            "values": ",".join(map(str, values)),
+            "nodes": ",".join(map(str, nodes)),
+        }
+    )
+
+    # Compare stored values and nodes
+    params_t = mi.traverse(p_tensor)
+    params_s = mi.traverse(p_string)
+    assert dr.allclose(params_t["values"], params_s["values"])
+    assert dr.allclose(params_t["nodes"], params_s["nodes"])
+
+    # Compare the evaluated phase function
+    ctx = mi.PhaseFunctionContext(None)
+    mei = mi.MediumInteraction3f()
+    mei.wi = mi.Vector3f(0, 0, -1)
+    for wo in [mi.Vector3f(0, 0, 1), mi.Vector3f(1, 0, 0), mi.Vector3f(0, 0, -1)]:
+        assert dr.allclose(
+            p_tensor.eval_pdf(ctx, mei, wo)[1], p_string.eval_pdf(ctx, mei, wo)[1]
+        )
+
+
 def test_eval_pdf(variant_scalar_rgb):
     """
     Compare eval() output with a reference implementation written in Python.
@@ -41,7 +102,7 @@ def test_eval_pdf(variant_scalar_rgb):
         cos_theta = np.array([np.dot(a, b) for a, b in zip(wi, wo)])
         return 0.5 / np.pi * np.interp(-cos_theta, ref_x, ref_y) / ref_integral
 
-    wi = np.array([[0, 0, -1.]])
+    wi = np.array([[0, 0, -1.0]])
     thetas = np.linspace(0, np.pi / 2, 16)
     phis = np.linspace(0, np.pi, 16)
     wos = np.array(
