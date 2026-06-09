@@ -1,6 +1,6 @@
 ![Eradiate logo](https://raw.githubusercontent.com/eradiate/eradiate/main/docs/_static/eradiate-logo.svg "Eradiate — A new-generation radiative transfer simulation package")
 
-# Eradiate Radiometric Kernel ­— Mitsuba 3
+# Eradiate Radiometric Kernel — Mitsuba 3
 
 [![pypi][pypi-badge]][pypi-url]
 [![docs][docs-badge]][docs-url]
