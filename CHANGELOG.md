@@ -1,4 +1,4 @@
-# Eradiate Mitsuba Backend — Changelog
+# Eradiate Mitsuba — Changelog
 
 Similar to the upstream Mitsuba 3 codebase, this fork does not strictly follow
 the [Semantic Versioning](https://semver.org/) convention. However, we also

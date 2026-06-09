@@ -7,9 +7,11 @@ Eradiate Mitsuba
 **Date**: |today| |
 **Version**: |release|
 
-This is the documentation for the Eradiate kernel, the radiometric core of the `Eradiate radiative transfer model <https://www.eradiate.eu/>`__. a fork of the `Mitsuba 3 \
-<https://github.com/mitsuba-renderer/mitsuba3>`__ renderer. It provides additional plugins
-tailored for Earth observation radiative transfer simulations.
+This is the documentation for the Eradiate kernel, the radiometric core of the
+`Eradiate radiative transfer model <https://www.eradiate.eu/>`__, based on the
+`Mitsuba 3 <https://github.com/mitsuba-renderer/mitsuba3>`__ renderer. It
+provides extensions tailored for Earth observation radiative transfer
+simulations.
 
 .. grid:: 1 1 2 3
    :gutter: 2
