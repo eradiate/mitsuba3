@@ -24,6 +24,8 @@
 /// Year of the current release
 #define MI_YEAR "2024"
 
+// #ERADIATE_CHANGE_BEGIN: Eradiate-specific constants
+
 #define ERD_MI_VERSION_MAJOR 0
 #define ERD_MI_VERSION_MINOR 4
 #define ERD_MI_VERSION_PATCH 3
@@ -33,6 +35,8 @@
     MI_TOSTRING(ERD_MI_VERSION_MAJOR) "."                                          \
     MI_TOSTRING(ERD_MI_VERSION_MINOR) "."                                          \
     MI_TOSTRING(ERD_MI_VERSION_PATCH)
+
+// #ERADIATE_CHANGE_END: Eradiate-specific constants
 
 /// Authors list
 #define MI_AUTHORS "Realistic Graphics Lab, EPFL; Rayference"
