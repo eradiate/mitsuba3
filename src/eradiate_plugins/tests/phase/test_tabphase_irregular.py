@@ -15,7 +15,7 @@ def test_create(variant_scalar_rgb):
     assert p is not None
 
 
-def test_create_tensor(variants_vec_backends_once_rgb):
+def test_create_tensor(variant_scalar_mono, variants_vec_backends_once_rgb):
     # 'values' and 'nodes' supplied as 1D Dr.Jit arrays (tensor input)
     p = mi.load_dict(
         {
@@ -27,7 +27,7 @@ def test_create_tensor(variants_vec_backends_once_rgb):
     assert p is not None
 
 
-def test_create_tensor_3(variants_vec_backends_once_rgb):
+def test_create_tensor_3(variant_scalar_mono, variants_vec_backends_once_rgb):
     # 'values' and 'nodes' supplied as 1D Dr.Jit arrays of size 3,
     # interpreted as vectors.
     p = mi.load_dict(
