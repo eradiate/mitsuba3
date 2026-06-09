@@ -3,6 +3,7 @@
 #include <mitsuba/core/warp.h>
 #include <mitsuba/render/phase.h>
 #include <mitsuba/render/eradiate/phase_utils.h>
+#include <drjit/tensor.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -48,22 +49,25 @@ public:
     using typename Base::FloatStorage;
 
     IrregularTabulatedPhaseFunction(const Properties &props) : Base(props) {
+        Log(Warn, "%f", int(props.type("nodes")));
+
         if (props.type("nodes") == Properties::Type::Any &&
             props.type("values") == Properties::Type::Any) {
-            const FloatStorage &nodes_buf  = props.get_any<FloatStorage>("nodes");
-            const FloatStorage &values_buf = props.get_any<FloatStorage>("values");
+            const TensorXf &nodes_buf  = props.get_any<TensorXf>("nodes");
+            const TensorXf &values_buf = props.get_any<TensorXf>("values");
 
             if (dr::width(nodes_buf) != dr::width(values_buf))
                 Throw("'nodes' and 'values' must have the same length");
 
             m_distr = IrregularContinuousDistribution<Float>(nodes_buf, values_buf);
 
-        } else if (props.type("values") == Properties::Type::Vector &&
-                   props.type("nodes") == Properties::Type::Vector) {
+        } else if (props.type("values") == Properties::Type::Color &&
+                   props.type("nodes") == Properties::Type::Color) {
 
+            // Handle Color type in llvm rg
             m_distr = IrregularContinuousDistribution<Float>(
-                props.get<ScalarVector3f>("nodes").data(),
-                props.get<ScalarVector3f>("values").data(),
+                props.get<ScalarColor3f>("nodes").data(),
+                props.get<ScalarColor3f>("values").data(),
                 3);
 
         } else if (props.type("values") == Properties::Type::String &&
