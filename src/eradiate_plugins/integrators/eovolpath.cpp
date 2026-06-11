@@ -442,8 +442,8 @@ public:
             // ----------------- Handle termination of paths ------------------
             active &= dr::any(unpolarized_spectrum(throughput) != 0.f);
 
-            Float q;
-            Mask perform_rr;
+            Float q = 1.f;
+            Mask perform_rr = false;
 
             // Standard Russian roulette:
             // Try to keep path weights equal to one, while accounting for the
@@ -457,8 +457,11 @@ public:
             // PBS Russian Roulette:
             // Eliminate path that are predicted to have a small contribution.
             Mask do_pbs_rr = m_enable_pbs && (is_clone || has_flag(path_flag, PathTypeFlag::Split));
+            // Comparison to the current throughut to avoid values larger than one.
             dr::masked(q, do_pbs_rr) =
-                dr::maximum(split_weight_rr, m_min_rr_threshold);
+                dr::minimum(dr::maximum(dr::maximum(split_weight_rr, m_min_rr_threshold),
+                                        dr::max(unpolarized_spectrum(throughput))),
+                            1.f);
             dr::masked(perform_rr, do_pbs_rr) =
                 (split_weight_rr < m_crit_rr_threshold);
 
@@ -768,6 +771,8 @@ public:
                     // split_weight computed for all perform_ddis lanes; enable_pbs gates PBS below
                     dr::masked(split_weight_rr, perform_ddis) =
                         dr::max(unpolarized_spectrum(ddis_val * throughput));
+                    dr::masked(split_weight_rr, perform_ddis) *=
+                        dr::select(depth <= 7, 1.5f, 1.f+0.1/Float(depth));
                 }
 
                 act_medium_scatter &= phase_pdf > 0.f;
@@ -985,6 +990,8 @@ public:
 
                     dr::masked(split_weight_rr, perform_ddis) =
                         dr::max(unpolarized_spectrum(ddis_val * throughput));
+                    dr::masked(split_weight_rr, perform_ddis) *=
+                        dr::select(depth <= 7, 1.5f, 1.f+0.1/Float(depth));
                 }
 
                 bsdf_val = si.to_world_mueller(bsdf_val, -bs.wo, si.wi);
