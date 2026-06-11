@@ -2,6 +2,9 @@
 #include <mitsuba/core/properties.h>
 #include <mitsuba/core/warp.h>
 #include <mitsuba/render/phase.h>
+// #ERADIATE_CHANGE_BEGIN: DDIS
+#include <mitsuba/render/eradiate/phase_utils.h>
+// #ERADIATE_CHANGE_END
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -38,7 +41,9 @@ function of the cosine of the scattering angle.
 template <typename Float, typename Spectrum>
 class TabulatedPhaseFunction final : public PhaseFunction<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(PhaseFunction, m_flags, m_components)
+// #ERADIATE_CHANGE_BEGIN: DDIS
+    MI_IMPORT_BASE(PhaseFunction, m_flags, m_components, m_node_count)
+// #ERADIATE_CHANGE_END
     MI_IMPORT_TYPES(PhaseFunctionContext)
 
     TabulatedPhaseFunction(const Properties &props) : Base(props) {
@@ -64,15 +69,21 @@ public:
 
         m_flags = +PhaseFunctionFlags::Anisotropic;
         m_components.push_back(m_flags);
+// #ERADIATE_CHANGE_BEGIN: DDIS
+        m_node_count = m_distr.size();
+// #ERADIATE_CHANGE_END
     }
 
     void traverse(TraversalCallback *cb) override {
         cb->put("values", m_distr.pdf(), ParamFlags::Differentiable | ParamFlags::Discontinuous);
     }
 
-    void parameters_changed(const std::vector<std::string> & /*keys*/) override {
+// #ERADIATE_CHANGE_BEGIN: DDIS
+    void parameters_changed(const std::vector<std::string> & keys) override {
         m_distr.update();
+        Base::parameters_changed(keys);
     }
+// #ERADIATE_CHANGE_END
 
     std::tuple<Vector3f, Spectrum, Float> sample(const PhaseFunctionContext & /* ctx */,
                                                  const MediumInteraction3f &mi,

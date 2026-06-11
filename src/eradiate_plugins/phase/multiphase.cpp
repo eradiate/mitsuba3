@@ -3,6 +3,7 @@
 #include <mitsuba/core/properties.h>
 #include <mitsuba/render/phase.h>
 #include <mitsuba/render/volume.h>
+#include <mitsuba/render/eradiate/phase_utils.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -24,10 +25,10 @@ Multi phase function (:monosp:`multiphase`)
  * - use_mis
    - |bool|
    - Enable Multiple Importance Sampling (MIS) for variance reduction. When enabled,
-     all phase functions are evaluated at each sampled direction to compute the 
-     mixture PDF and importance weight. This reduces variance when mixing very 
+     all phase functions are evaluated at each sampled direction to compute the
+     mixture PDF and importance weight. This reduces variance when mixing very
      different phase functions at the cost of additional computation. (Default: true)
-   - 
+   -
 
  * - (Nested plugin)
    - |phase|
@@ -51,7 +52,7 @@ multiple populations of scattering elements.
 
         <phase type="multiphase">
             <boolean name="use_mis" value="true"/>
-            
+
             <phase name="phase0" type="isotropic"/>
             <float name="weight0" value="1.0"/>
             <phase name="phase1" type="hg">
@@ -82,6 +83,9 @@ class MultiPhaseFunction final : public PhaseFunction<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(PhaseFunction, m_flags, m_components)
     MI_IMPORT_TYPES(PhaseFunctionContext, Volume)
+// #ERADIATE_CHANGE_BEGIN: DDIS
+    using typename Base::FloatStorage;
+// #ERADIATE_CHANGE_END
 
     MultiPhaseFunction(const Properties &props) : Base(props) {
         m_mis = props.get<bool>("use_mis", true);
@@ -128,30 +132,30 @@ public:
 
         std::vector<Float> weight_values(m_nested_phases.size());
         Float weight_sum = 0.f;
-        
+
         for (size_t i = 0; i < m_nested_phases.size(); ++i) {
             weight_values[i] = eval_weight(mi, i, active);
             weight_sum += weight_values[i];
         }
-        
+
         Float inv_weight_sum = dr::rcp(weight_sum);
 
         if (unlikely(ctx.component != (uint32_t) -1)) {
             PhaseFunctionContext ctx2(ctx);
-            
+
             auto position = std::upper_bound(
                 m_nested_phases_index.begin(),
-                m_nested_phases_index.end(), 
+                m_nested_phases_index.end(),
                 ctx.component
             );
             size_t phase_index = std::distance(m_nested_phases_index.begin(), position) - 1;
-            
+
             ctx2.component = ctx.component - m_nested_phases_index[phase_index];
-            
+
             auto [wo, w, pdf] = m_nested_phases[phase_index]->sample(
                 ctx2, mi, sample1, sample2, active
             );
-            
+
             Float phase_weight = weight_values[phase_index] * inv_weight_sum;
             return { wo, w * phase_weight, pdf * phase_weight };
         }
@@ -159,16 +163,16 @@ public:
         Vector3f wo = dr::zeros<Vector3f>();
         Spectrum w = dr::zeros<Spectrum>();
         Float pdf = dr::zeros<Float>();
-        
+
         Float cdf_last = 0.f;
-        
+
         for (size_t i = 0; i < m_nested_phases.size(); ++i) {
             Float cdf_next = cdf_last + weight_values[i] * inv_weight_sum;
             Mask mask_i = active && sample1 >= cdf_last && sample1 < cdf_next;
-            
+
             if (dr::any_or<true>(mask_i)) {
                 Float sample1_adjusted = (sample1 - cdf_last) / (cdf_next - cdf_last);
-                
+
                 auto [wo_i, w_i, pdf_i] = m_nested_phases[i]->sample(
                     ctx, mi, sample1_adjusted, sample2, mask_i
                 );
@@ -179,30 +183,30 @@ public:
                 } else {
                     Spectrum phase_value_sum = w_i * pdf_i * weight_values[i];
                     Float pdf_mixture = pdf_i * weight_values[i];
-                    
+
                     for (size_t j = 0; j < m_nested_phases.size(); ++j) {
                         if (j == i) continue;
-                        
+
                         auto [val_j, pdf_j] = m_nested_phases[j]->eval_pdf(
                             ctx, mi, wo_i, mask_i
                         );
-                        
+
                         phase_value_sum += weight_values[j] * val_j;
                         pdf_mixture += weight_values[j] * pdf_j;
                     }
-                    
+
                     Spectrum w_mis = dr::select(
                         pdf_mixture > 1e-8f,
                         phase_value_sum / pdf_mixture,
                         Spectrum(0.f)
                     );
-                    
+
                     dr::masked(wo, mask_i) = wo_i;
                     dr::masked(w, mask_i) = w_mis;
                     dr::masked(pdf, mask_i) = pdf_mixture * inv_weight_sum;
                 }
             }
-            
+
             cdf_last = cdf_next;
         }
 
@@ -219,18 +223,18 @@ public:
                                         const MediumInteraction3f &mi,
                                         const Vector3f &wo,
                                         Mask active) const override {
-        
+
         MI_MASKED_FUNCTION(ProfilerPhase::PhaseFunctionEvaluate, active);
 
         std::vector<Float> weight_values;
         weight_values.reserve(m_nested_phases.size());
         Float weight_sum = 0.f;
-        
+
         for (size_t i = 0; i < m_nested_phases.size(); ++i) {
             weight_values.push_back(eval_weight(mi, i, active));
             weight_sum += weight_values.back();
         }
-        
+
         Float inv_weight_sum = dr::rcp(weight_sum);
 
         if (unlikely(ctx.component != (uint32_t) -1)) {
@@ -238,15 +242,15 @@ public:
 
             auto position = std::upper_bound(
                 m_nested_phases_index.begin(),
-                m_nested_phases_index.end(), 
+                m_nested_phases_index.end(),
                 ctx.component
             );
             size_t phase_index = std::distance(m_nested_phases_index.begin(), position) - 1;
-            
+
             ctx2.component = ctx.component - m_nested_phases_index[phase_index];
-            
+
             auto [val, pdf] = m_nested_phases[phase_index]->eval_pdf(ctx2, mi, wo, active);
-            
+
             Float phase_weight = weight_values[phase_index] * inv_weight_sum;
             return { val * phase_weight, pdf * phase_weight };
         }
@@ -256,13 +260,25 @@ public:
 
         for (size_t i = 0; i < m_nested_phases.size(); ++i) {
             auto [val_i, pdf_i] = m_nested_phases[i]->eval_pdf(ctx, mi, wo, active);
-            
+
             Float phase_weight = weight_values[i] * inv_weight_sum;
             val += val_i * phase_weight;
             pdf += pdf_i * phase_weight;
         }
-        
+
         return { val, pdf };
+    }
+
+    FloatStorage get_nodes() const override {
+        std::vector<FloatStorage> nested_nodes(m_nested_phases.size());
+        for (size_t i = 0; i < m_nested_phases.size(); ++i)
+            nested_nodes[i] = m_nested_phases[i]->get_nodes();
+        return merge_nodes<FloatStorage>(nested_nodes);
+    }
+
+    void eval_max(const FloatStorage &nodes, FloatStorage &values) const override {
+        for (size_t i = 0; i < m_nested_phases.size(); ++i)
+            m_nested_phases[i]->eval_max(nodes, values);
     }
 
     std::string to_string() const override {
