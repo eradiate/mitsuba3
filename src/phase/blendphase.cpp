@@ -1,6 +1,9 @@
 #include <mitsuba/core/properties.h>
 #include <mitsuba/render/phase.h>
 #include <mitsuba/render/volume.h>
+// #ERADIATE_CHANGE_BEGIN: DDIS
+#include <mitsuba/render/eradiate/phase_utils.h>
+// #ERADIATE_CHANGE_END
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -66,6 +69,9 @@ class BlendPhaseFunction final : public PhaseFunction<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(PhaseFunction, m_flags, m_components)
     MI_IMPORT_TYPES(PhaseFunctionContext, Volume)
+// #ERADIATE_CHANGE_BEGIN: DDIS
+    using typename Base::FloatStorage;
+// #ERADIATE_CHANGE_END
 
     BlendPhaseFunction(const Properties &props) : Base(props) {
         int phase_index = 0;
@@ -193,6 +199,17 @@ public:
         return oss.str();
     }
 
+// #ERADIATE_CHANGE_BEGIN: DDIS
+    FloatStorage get_nodes() const override {
+        return merge_nodes<FloatStorage>({ m_nested_phase[0]->get_nodes(),
+                                           m_nested_phase[1]->get_nodes() });
+    }
+
+    void eval_max(const FloatStorage &nodes, FloatStorage &values) const override {
+        m_nested_phase[0]->eval_max(nodes, values);
+        m_nested_phase[1]->eval_max(nodes, values);
+    }
+// #ERADIATE_CHANGE_END
     MI_DECLARE_CLASS(BlendPhaseFunction)
 protected:
     ref<Volume> m_weight;
