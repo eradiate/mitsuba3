@@ -49,7 +49,6 @@ public:
     using typename Base::FloatStorage;
 
     IrregularTabulatedPhaseFunction(const Properties &props) : Base(props) {
-        Log(Warn, "%f", int(props.type("nodes")));
 
         if (props.type("nodes") == Properties::Type::Any &&
             props.type("values") == Properties::Type::Any) {
