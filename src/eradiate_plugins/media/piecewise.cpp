@@ -203,8 +203,9 @@ public:
 
             auto pmgr = PluginManager::instance();
             Properties props_ddis("tabphase_irregular");
-            props_ddis.set_any("nodes", nodes);
-            props_ddis.set_any("values", values);
+            size_t shape = nodes.size();
+            props_ddis.set_any("nodes", TensorXf(std::move(nodes), 1, &shape));
+            props_ddis.set_any("values", TensorXf(std::move(values), 1, &shape));
             m_ddis_phase_function =
                 static_cast<PhaseFunction*>(pmgr->create_object<PhaseFunction>(props_ddis));
         }
