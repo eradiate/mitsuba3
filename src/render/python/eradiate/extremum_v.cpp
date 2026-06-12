@@ -3,6 +3,7 @@
 #include <mitsuba/render/eradiate/extremum_segment.h>
 #include <mitsuba/python/python.h>
 #include <nanobind/trampoline.h>
+#include <nanobind/stl/pair.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
@@ -87,7 +88,12 @@ MI_PY_EXPORT(ExtremumStructure) {
     auto extremum = MI_PY_TRAMPOLINE_CLASS(PyExtremumStructure, ExtremumStructure, Object)
         .def(nb::init<const Properties &>(), "props"_a)
         .def("__repr__", &ExtremumStructure::to_string)
-        .def("bbox", &ExtremumStructure::bbox, D(ExtremumStructure, bbox));
+        .def("bbox", &ExtremumStructure::bbox, D(ExtremumStructure, bbox))
+        .def("sample_segment", &ExtremumStructure::sample_segment,
+             "ray"_a, "mint"_a, "maxt"_a, "target_ot"_a, "active"_a = true,
+             "Sample the segment in which a target optical thickness is "
+             "reached, and return it along with the optical thickness "
+             "accumulated over the preceding segments.");
 
     drjit::bind_traverse(extremum);
 

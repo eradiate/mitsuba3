@@ -221,7 +221,10 @@ def test_sample_horizontal_homogeneous(variants_any_scalar, variants_any_llvm):
     )
     ref_segment = mi.ExtremumSegment(mint=1.25, maxt=1.5, majorant=0.5, minorant=0.5)
     ref_tau = 0.125
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    # The caller is responsible for clipping the traversal interval to the
+    # volume bounds (the medium does this in the integrator), so the entry
+    # distance is passed as mint.
+    res, ot_acc = extremum_struct.sample_segment(ray, 1.0, maxt, desired_tau, active)
     # Test ray starting outside of the grid
     assert dr.allclose(ref_tau, ot_acc)
     assert_compare_segment(ref_segment, res)
@@ -238,7 +241,8 @@ def test_sample_horizontal_homogeneous(variants_any_scalar, variants_any_llvm):
     assert_compare_segment(ref_segment, res)
 
     desired_tau = 0.8
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
+    # Clip the traversal interval to the volume exit at x = 1
+    res, ot_acc = extremum_struct.sample_segment(ray, mint, 0.875, desired_tau, active)
     # Test ray exiting grid
     assert not res.valid()
 

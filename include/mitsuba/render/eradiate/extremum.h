@@ -68,6 +68,38 @@ public:
         Mask active = true
     ) const;
 
+    /**
+     * \brief Sample the segment in which a target optical thickness is
+     * reached.
+     *
+     * Traverses the structure while accumulating the optical thickness
+     * ``(maxt - mint) * majorant`` of each segment, and stops at the segment
+     * in which the accumulated value exceeds ``target_ot``.
+     *
+     * This is a convenience wrapper around \ref traverse_extremum() with a
+     * fixed tracking callback, mainly intended for testing traversal from
+     * Python (the callback parameter of ``traverse_extremum()`` itself
+     * cannot be bound).
+     *
+     * \param ray           Ray along which to sample
+     * \param mint          Minimum distance to consider
+     * \param maxt          Maximum distance to consider
+     * \param target_ot     Target optical thickness
+     * \param active        Mask for active lanes
+     *
+     * \return
+     *      A pair holding the segment in which the target optical thickness
+     *      was reached (invalid if the traversal ended first), and the
+     *      optical thickness accumulated over the preceding segments.
+     */
+    std::pair<ExtremumSegment, Float> sample_segment(
+        const Ray3f &ray,
+        Float mint,
+        Float maxt,
+        Float target_ot,
+        Mask active = true
+    ) const;
+
     // Note: this is currently dead code. It is kept in case it is needed in the future.
     /**
      * \brief Evaluate the minorant and majorant at a medium interaction point.
