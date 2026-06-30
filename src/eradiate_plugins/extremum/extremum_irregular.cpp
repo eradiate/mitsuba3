@@ -328,20 +328,22 @@ private:
         // maj_max) plus the spans needed by the merge criterion
         struct Aggregate {
             ScalarFloat min_min, min_max, maj_min, maj_max;
+            ScalarVector3f lo, hi;
 
-            void merge_cell(const ScalarFloat *data, size_t cell) {
+            void merge_cell(const ScalarFloat *data, size_t cell, ScalarVector3f new_hi) {
                 ScalarFloat mn = data[cell * 2 + 0],
                             mj = data[cell * 2 + 1];
                 min_min = std::min(min_min, mn);
                 min_max = std::max(min_max, mn);
                 maj_min = std::min(maj_min, mj);
                 maj_max = std::max(maj_max, mj);
+                hi = new_hi;
             }
         };
-        auto aggregate_cell = [&](size_t cell) {
+        auto aggregate_cell = [&](size_t cell, ScalarVector3f lo, ScalarVector3f hi) {
             ScalarFloat mn = fine_data[cell * 2 + 0],
                         mj = fine_data[cell * 2 + 1];
-            return Aggregate{ mn, mn, mj, mj };
+            return Aggregate{ mn, mn, mj, mj, lo, hi };
         };
 
         // Both spans are normalized by the majorant: the majorant span
@@ -350,9 +352,17 @@ private:
         // minorant span by the minorant itself would diverge in empty
         // regions.
         const ScalarFloat thr = m_merge_threshold;
+        // auto criterion = [thr](const Aggregate &a) {
+        //     return (a.maj_max - a.maj_min) <= thr * a.maj_max &&
+        //            (a.min_max - a.min_min) <= thr * a.maj_max;
+        // };
+
+        // auto criterion = [thr](const Aggregate &a) {
+        //     return (a.maj_max - a.min_min) <= thr * a.maj_max;
+        // };
+
         auto criterion = [thr](const Aggregate &a) {
-            return (a.maj_max - a.maj_min) <= thr * a.maj_max &&
-                   (a.min_max - a.min_min) <= thr * a.maj_max;
+            return (a.maj_max - a.min_min) * dr::norm(a.hi - a.lo) < thr;
         };
 
         const uint32_t unassigned = 0xFFFFFFFFu;
@@ -360,20 +370,26 @@ private:
         std::vector<int32_t> lo, hi;
         std::vector<ScalarFloat> extrema;
 
+        ScalarVector3f cell_size =  m_bbox.extents() * dr::rcp(ScalarVector3f(m_resolution));
+
         for (int32_t z0 = 0; z0 < rz; ++z0)
         for (int32_t y0 = 0; y0 < ry; ++y0)
         for (int32_t x0 = 0; x0 < rx; ++x0) {
             if (index[cell_of(x0, y0, z0)] != unassigned)
                 continue;
 
-            Aggregate agg = aggregate_cell(cell_of(x0, y0, z0));
+            ScalarVector3f b_lo = ScalarVector3f(x0, y0, z0) * cell_size;
+            ScalarVector3f b_hi = b_lo + cell_size;
+
+            Aggregate agg = aggregate_cell(cell_of(x0, y0, z0), b_lo, b_hi);
 
             // Grow a strip along +x
             int32_t x1 = x0 + 1;
             for (; x1 < rx; ++x1) {
                 size_t cell = cell_of(x1, y0, z0);
                 Aggregate cand = agg;
-                cand.merge_cell(fine_data, cell);
+                ScalarVector3f new_hi = (ScalarVector3f(x1, y0, z0)+1.f) * cell_size;
+                cand.merge_cell(fine_data, cell, new_hi);
                 if (index[cell] != unassigned || !criterion(cand))
                     break;
                 agg = cand;
@@ -386,8 +402,9 @@ private:
                 bool accept = true;
                 for (int32_t x = x0; x < x1 && accept; ++x) {
                     size_t cell = cell_of(x, y1, z0);
+                    ScalarVector3f new_hi = (ScalarVector3f(x, y1, z0)+1.f) * cell_size;
                     accept &= index[cell] == unassigned;
-                    cand.merge_cell(fine_data, cell);
+                    cand.merge_cell(fine_data, cell, new_hi);
                 }
                 if (!accept || !criterion(cand))
                     break;
@@ -403,7 +420,8 @@ private:
                     for (int32_t x = x0; x < x1 && accept; ++x) {
                         size_t cell = cell_of(x, y, z1);
                         accept &= index[cell] == unassigned;
-                        cand.merge_cell(fine_data, cell);
+                        ScalarVector3f new_hi = (ScalarVector3f(x, y, z1)+1.f) * cell_size;
+                        cand.merge_cell(fine_data, cell, new_hi);
                     }
                 if (!accept || !criterion(cand))
                     break;

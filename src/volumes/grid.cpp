@@ -244,7 +244,7 @@ public:
                 ScalarFloat *scaled_data_ptr = scaled_data.get();
                 ScalarFloat max = 0.0;
 // #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
-                ScalarFloat min = 0.0;
+                ScalarFloat min = dr::Infinity<ScalarFloat>;
                 for (ScalarUInt32 i = 0; i < size; ++i) {
                     ScalarColor3f rgb = dr::load<ScalarColor3f>(ptr);
                     // TODO: Make this scaling optional if the RGB values are
@@ -279,11 +279,11 @@ public:
                     channel_count
                 };
                 m_texture = Texture3f(TensorXf(volume_grid->data(), 4, shape),
-                                      m_accel, m_accel, filter_mode, wrap_mode);             
+                                      m_accel, m_accel, filter_mode, wrap_mode);
                 m_max = volume_grid->max();
                 m_max_per_channel.resize(volume_grid->channel_count());
                 volume_grid->max_per_channel(m_max_per_channel.data());
-                
+
                 m_min = volume_grid->min();
                 m_min_per_channel.resize(volume_grid->channel_count());
                 volume_grid->min_per_channel(m_min_per_channel.data());
