@@ -139,6 +139,9 @@ public:
             Throw("\"merge_threshold\" must be non-negative");
         m_rebuild_threshold = props.get<ScalarFloat>("rebuild_threshold", -1.f);
 
+        m_cn = props.get<ScalarFloat>("cn", 1.f);
+        m_ct = props.get<ScalarFloat>("ct", 1.f);
+
         build(m_volume.get());
     }
 
@@ -329,6 +332,7 @@ private:
         struct Aggregate {
             ScalarFloat min_min, min_max, maj_min, maj_max;
             ScalarVector3f lo, hi;
+            ScalarBoundingBox3f bbox;
 
             void merge_cell(const ScalarFloat *data, size_t cell, ScalarVector3f new_hi) {
                 ScalarFloat mn = data[cell * 2 + 0],
@@ -338,12 +342,25 @@ private:
                 maj_min = std::min(maj_min, mj);
                 maj_max = std::max(maj_max, mj);
                 hi = new_hi;
+                bbox.expand(ScalarPoint3f(new_hi));
+            }
+
+            void merge_agg(const Aggregate& agg) {
+                min_min = std::min(min_min, agg.min_min);
+                min_max = std::max(min_max, agg.min_max);
+                maj_min = std::min(maj_min, agg.maj_min);
+                maj_max = std::max(maj_max, agg.maj_max);
+
+                lo = dr::minimum(lo, agg.lo);
+                hi = dr::maximum(hi, agg.hi);
+                bbox.expand(agg.bbox);
             }
         };
         auto aggregate_cell = [&](size_t cell, ScalarVector3f lo, ScalarVector3f hi) {
             ScalarFloat mn = fine_data[cell * 2 + 0],
                         mj = fine_data[cell * 2 + 1];
-            return Aggregate{ mn, mn, mj, mj, lo, hi };
+
+            return Aggregate{ mn, mn, mj, mj, lo, hi, ScalarBoundingBox3f(lo,hi) };
         };
 
         // Both spans are normalized by the majorant: the majorant span
@@ -361,16 +378,37 @@ private:
         //     return (a.maj_max - a.min_min) <= thr * a.maj_max;
         // };
 
-        auto criterion = [thr](const Aggregate &a) {
+        auto criterion = [thr](const Aggregate &/*a*/, const Aggregate &/*a*/, const Aggregate &a) {
             return (a.maj_max - a.min_min) * dr::norm(a.hi - a.lo) < thr;
         };
+
+        ScalarVector3f cell_size =  m_bbox.extents() * dr::rcp(ScalarVector3f(m_resolution));
+        ScalarFloat L = dr::mean(cell_size);
+        ScalarFloat sigma_ref = m_volume->max();
+
+        // auto cost = [this](const Aggregate &a) {
+        //     return m_cn * a.bbox.volume() *  (a.maj_max; - a.min_min) /
+        //            + m_ct * a.bbox.surface_area();
+        // };
+        // auto cost = [this, L, sigma_ref](const Aggregate &a) {
+        //     ScalarFloat null = a.bbox.volume() * (a.maj_max - a.min_min) / sigma_ref;
+        //     ScalarFloat trav = a.bbox.surface_area() * L * m_ct;
+        //     return null + trav;
+        // };
+
+        // auto criterion = [this, cost](const Aggregate &a0, const Aggregate &a1, const Aggregate &am){
+        //     bool veto = (am.maj_max - am.min_min) > m_cn                     // absolute, or
+        //                 || am.maj_max > (1.f + dr::Epsilon<ScalarFloat>) * std::max(a0.maj_max, a1.maj_max); // relative
+
+        //     return !veto && (cost(am) < cost(a0) + cost (a1));
+        // };
+
 
         const uint32_t unassigned = 0xFFFFFFFFu;
         std::vector<uint32_t> index(n, unassigned);
         std::vector<int32_t> lo, hi;
         std::vector<ScalarFloat> extrema;
 
-        ScalarVector3f cell_size =  m_bbox.extents() * dr::rcp(ScalarVector3f(m_resolution));
 
         for (int32_t z0 = 0; z0 < rz; ++z0)
         for (int32_t y0 = 0; y0 < ry; ++y0)
@@ -387,10 +425,14 @@ private:
             int32_t x1 = x0 + 1;
             for (; x1 < rx; ++x1) {
                 size_t cell = cell_of(x1, y0, z0);
+                ScalarVector3f b_lo = ScalarVector3f(x1, y0, z0) * cell_size;
+                ScalarVector3f b_hi = b_lo + cell_size;
+                Aggregate new_agg = aggregate_cell(cell_of(x1, y0, z0), b_lo, b_hi);
+
                 Aggregate cand = agg;
                 ScalarVector3f new_hi = (ScalarVector3f(x1, y0, z0)+1.f) * cell_size;
                 cand.merge_cell(fine_data, cell, new_hi);
-                if (index[cell] != unassigned || !criterion(cand))
+                if (index[cell] != unassigned || !criterion(agg, new_agg, cand))
                     break;
                 agg = cand;
             }
@@ -399,14 +441,19 @@ private:
             int32_t y1 = y0 + 1;
             for (; y1 < ry; ++y1) {
                 Aggregate cand = agg;
+                ScalarVector3f s_lo = ScalarVector3f(x0, y1, z0) * cell_size;
+                ScalarVector3f s_hi = s_lo + cell_size;
+                Aggregate new_agg = aggregate_cell(cell_of(x0, y1, z0), s_lo, s_hi);
+
                 bool accept = true;
                 for (int32_t x = x0; x < x1 && accept; ++x) {
                     size_t cell = cell_of(x, y1, z0);
                     ScalarVector3f new_hi = (ScalarVector3f(x, y1, z0)+1.f) * cell_size;
                     accept &= index[cell] == unassigned;
-                    cand.merge_cell(fine_data, cell, new_hi);
+                    new_agg.merge_cell(fine_data, cell, new_hi);
                 }
-                if (!accept || !criterion(cand))
+                cand.merge_agg(new_agg);
+                if (!accept || !criterion(agg, new_agg, cand))
                     break;
                 agg = cand;
             }
@@ -415,15 +462,20 @@ private:
             int32_t z1 = z0 + 1;
             for (; z1 < rz; ++z1) {
                 Aggregate cand = agg;
+                ScalarVector3f s_lo = ScalarVector3f(x0, y0, z1) * cell_size;
+                ScalarVector3f s_hi = s_lo + cell_size;
+                Aggregate new_agg = aggregate_cell(cell_of(x0, y0, z1), s_lo, s_hi);
+
                 bool accept = true;
                 for (int32_t y = y0; y < y1 && accept; ++y)
                     for (int32_t x = x0; x < x1 && accept; ++x) {
                         size_t cell = cell_of(x, y, z1);
                         accept &= index[cell] == unassigned;
                         ScalarVector3f new_hi = (ScalarVector3f(x, y, z1)+1.f) * cell_size;
-                        cand.merge_cell(fine_data, cell, new_hi);
+                        new_agg.merge_cell(fine_data, cell, new_hi);
                     }
-                if (!accept || !criterion(cand))
+                cand.merge_agg(new_agg);
+                if (!accept || !criterion(agg, new_agg, cand))
                     break;
                 agg = cand;
             }
@@ -696,6 +748,9 @@ private:
     ScalarFloat m_quality_at_build = 1.f;
 
     ScalarAffineTransform4f m_to_local;
+
+    ScalarFloat m_cn;
+    ScalarFloat m_ct;
 };
 
 MI_EXPORT_PLUGIN(ExtremumIrregularGrid)
