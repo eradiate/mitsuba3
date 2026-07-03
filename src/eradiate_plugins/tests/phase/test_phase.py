@@ -26,14 +26,14 @@ def tabphase_irregular(tabphase_nodes):
     )
 
 
-def reference_eval_max(phase, nodes):
+def reference_accumulate_envelope(phase, nodes):
     """Replicate the C++ ``PhaseFunction::eval_max`` evaluation for a single
     (non-composite) phase function.
 
     For each node ``mu`` (cos_theta in physics convention, +1 = forward
     scattering), the envelope evaluates the phase value at the reconstructed
     outgoing direction and accumulates the elementwise maximum into a
-    zero-initialised buffer. We mirror exactly the direction reconstruction
+    zero-initialized buffer. We mirror exactly the direction reconstruction
     used in ``src/render/phase.cpp`` so the comparison is meaningful.
     """
     ctx = mi.PhaseFunctionContext(None)
@@ -45,7 +45,7 @@ def reference_eval_max(phase, nodes):
     for i, mu in enumerate(nodes_np):
         sin_theta = np.sqrt(max(0.0, 1.0 - mu * mu))
         wo = mi.Vector3f(sin_theta, 0.0, -mu)
-        # value == pdf for the isotropic/hg/tabphase plugins exercised here
+        # value == pdf for the isotropic/hg/tabphase plugins exercized here
         out[i] = phase.eval_pdf(ctx, mei, wo)[1]
     return out
 
@@ -54,7 +54,7 @@ def test_get_nodes_default(variant_scalar_rgb):
     # A leaf phase function without irregular nodes falls back to the base
     # implementation: 256 nodes spread uniformly over [-1, 1].
     phase = mi.load_dict({"type": "isotropic"})
-    nodes = np.array(phase.get_nodes())
+    nodes = np.array(phase.get_envelope_nodes())
 
     assert nodes.shape[0] == 256
     # The grid is built in single precision; compare with an absolute tolerance.
@@ -66,8 +66,10 @@ def test_get_nodes_default(variant_scalar_rgb):
 def test_get_nodes_tabphase_irregular(
     variant_scalar_rgb, tabphase_nodes, tabphase_irregular
 ):
-    # tabphase_irregular overrides get_nodes() to expose its own grid.
-    assert np.allclose(np.array(tabphase_irregular.get_nodes()), tabphase_nodes)
+    # tabphase_irregular overrides get_envelope_nodes() to expose its own grid.
+    assert np.allclose(
+        np.array(tabphase_irregular.get_envelope_nodes()), tabphase_nodes
+    )
 
 
 def test_get_nodes_blendphase_merged(
@@ -86,7 +88,7 @@ def test_get_nodes_blendphase_merged(
         }
     )
 
-    nodes = np.array(blend.get_nodes())
+    nodes = np.array(blend.get_envelope_nodes())
     expected = np.unique(np.concatenate([np.linspace(-1, 1, 256), tabphase_nodes]))
 
     # Single-precision grid: compare with an absolute tolerance.
@@ -99,11 +101,11 @@ def test_get_nodes_blendphase_merged(
 def test_eval_max_single(variant_scalar_rgb, hg):
     # The envelope of a single phase function is just the phase function
     # evaluated at every node.
-    nodes = hg.get_nodes()
+    nodes = hg.get_envelope_nodes()
     values = dr.zeros(type(nodes), dr.width(nodes))
 
-    hg.eval_max(nodes, values)
-    assert np.allclose(np.array(values), reference_eval_max(hg, nodes))
+    hg.accumulate_envelope(nodes, values)
+    assert np.allclose(np.array(values), reference_accumulate_envelope(hg, nodes))
 
 
 def test_eval_max_blendphase(variant_scalar_rgb, hg):
@@ -114,13 +116,13 @@ def test_eval_max_blendphase(variant_scalar_rgb, hg):
         {"type": "blendphase", "weight": 0.3, "phase_0": iso, "phase_1": hg}
     )
 
-    nodes = blend.get_nodes()
+    nodes = blend.get_envelope_nodes()
     values = dr.zeros(type(nodes), dr.width(nodes))
-    blend.eval_max(nodes, values)
+    blend.accumulate_envelope(nodes, values)
 
     ref = np.maximum(
-        reference_eval_max(iso, nodes),
-        reference_eval_max(hg, nodes),
+        reference_accumulate_envelope(iso, nodes),
+        reference_accumulate_envelope(hg, nodes),
     )
     assert np.allclose(np.array(values), ref)
 
@@ -140,15 +142,15 @@ def test_eval_max_multiphase(variant_scalar_rgb, hg, tabphase_irregular):
         }
     )
 
-    nodes = multi.get_nodes()
+    nodes = multi.get_envelope_nodes()
     values = dr.zeros(type(nodes), dr.width(nodes))
-    multi.eval_max(nodes, values)
+    multi.accumulate_envelope(nodes, values)
 
     ref = np.maximum.reduce(
         [
-            reference_eval_max(iso, nodes),
-            reference_eval_max(hg, nodes),
-            reference_eval_max(tabphase_irregular, nodes),
+            reference_accumulate_envelope(iso, nodes),
+            reference_accumulate_envelope(hg, nodes),
+            reference_accumulate_envelope(tabphase_irregular, nodes),
         ]
     )
     assert np.allclose(np.array(values), ref)

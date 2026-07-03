@@ -207,9 +207,11 @@ public:
     /// Set type of phase function
     void set_flags(uint32_t flags) { m_flags = flags; }
 // #ERADIATE_CHANGE_BEGIN: DDIS
-    /// Return whether this phase function's parameters have changed since the
-    /// last call to set_dirty(false). Set by parameters_changed(), cleared by
-    /// the scene after all dependent media have been updated.
+    /**
+     * Return whether this phase function's parameters have changed since the
+     * last call to set_dirty(false). Set by parameters_changed(), cleared by
+     * the scene after all dependent media have been updated.
+    */
     bool dirty() const { return m_dirty; }
 
     /// Modify the phase function's dirty flag
@@ -234,10 +236,10 @@ public:
      * \return A sorted buffer of cos_theta values at which the phase function
      *     should be evaluated.
      */
-    virtual FloatStorage get_nodes() const;
+    virtual FloatStorage get_envelope_nodes() const;
 
 
-     /**
+    /**
      * \brief Evaluate the phase function at the given cos_theta nodes and
      * accumulate the result into \c values by taking the elementwise maximum.
      *
@@ -264,7 +266,7 @@ public:
      *     holds the maximum of its previous value and the phase function
      *     evaluated at the corresponding node.
      */
-    virtual void eval_max(const FloatStorage &nodes, FloatStorage &values) const;
+    virtual void accumulate_envelope(const FloatStorage &nodes, FloatStorage &values) const;
 // #ERADIATE_CHANGE_END
     //! @}
     // -----------------------------------------------------------------------

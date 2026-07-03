@@ -78,7 +78,7 @@ public:
                            const SurfaceInteraction3f &si,
                            Mask active) const;
 
-// #ERADIATE_CHANGE_BEGIN, NM 05/06/2024 : add function that calculates the transmittance and pdf  
+// #ERADIATE_CHANGE_BEGIN, NM 05/06/2024 : add function that calculates the transmittance and pdf
     /**
      * \brief Sample a free-flight distance in the medium analytically.
      *
@@ -95,31 +95,31 @@ public:
      * free-flight distance. This argument is only used when rendering in RGB
      * modes.
      *
-     * \return         This method returns a tuple 
+     * \return         This method returns a tuple
      *                 (MediumInteraction, Transmittance, PDF).
      *                 The MediumInteraction if an interaction was sampled within
-     *                 the medium boudning box and before the bouding iteraction 
+     *                 the medium boudning box and before the bouding iteraction
      *                 \ref it.
      *                 The transmittance and PDF are both computed for all channels
      *                 even if the sampling operation is performed on one channel.
-     *                 
+     *
      */
-    virtual 
-    std::tuple<MediumInteraction3f, UnpolarizedSpectrum, UnpolarizedSpectrum> 
+    virtual
+    std::tuple<MediumInteraction3f, UnpolarizedSpectrum, UnpolarizedSpectrum>
     sample_interaction_analytical(const Ray3f &ray, const Interaction3f &it,
                             Float sample, UInt32 channel, Mask active) const;
 
     /** \brief Compute the analytical transmittance along a ray to an interaction.
-     * 
+     *
      * \param ray      Ray, along which to compute the transmittance, use mint
      * \param si       Interaction that marks the end of the segment along which
      *                 to compute the transmittance.
-     * 
+     *
      * \return
      *      The transmittance along a ray
     */
     virtual UnpolarizedSpectrum
-    transmittance_eval_analytical(const Ray3f &ray, const Interaction3f &it, 
+    transmittance_eval_analytical(const Ray3f &ray, const Interaction3f &it,
                                   Mask active) const;
 // #ERADIATE_CHANGE_END
 
@@ -148,17 +148,17 @@ public:
 // #ERADIATE_CHANGE_BEGIN: Extremum Structure accessor and traversal helpers
     /**
      * \brief Intersects ray with the medium bbox and creates a medium interaction.
-     * 
+     *
      * \param ray   The ray that is used to test the medium bbox.
-     *       
+     *
      * \return
      *      A tuple (mei, mint, maxt): ``mei`` is a  ``MediumInteraction3f``
-     *      object initialized with the current ray and medium data. ``mint`` 
-     *      and ``maxt`` represent the minimum and maximum intersection 
+     *      object initialized with the current ray and medium data. ``mint``
+     *      and ``maxt`` represent the minimum and maximum intersection
      *      distances of the ray with the medium's bbox. In case there are no
      *      valid intersection, the range defaults to [0, +Inf].
      */
-    std::tuple<MediumInteraction3f, Float, Float> 
+    std::tuple<MediumInteraction3f, Float, Float>
     prepare_medium_traversal(const Ray3f& ray, Mask active) const;
 
     /// Returns the extremum structure for local extremum acceleration.
@@ -189,20 +189,32 @@ public:
         return m_ddis_threshold;
     }
 
+
     /**
      * \brief Rebuild any DDIS-related derived data when the phase function has
      * changed.
      *
-     * This method is called by the scene's parameters_changed() for every
+     * This method is called by the scene's `parameters_changed()` for every
      * medium whose phase function is marked dirty. The default implementation
      * is a no-op; subclasses that maintain a DDIS phase function override it.
      *
-     * This is intentionally separate from parameters_changed() so that the
+     * This is intentionally separate from `parameters_changed()` so that the
      * scene can drive all media to completion before clearing dirty flags,
      * which is required when multiple media share the same phase function via
      * a scene-level reference.
      */
-    virtual void update_ddis_phase_function() {}
+    virtual void update_ddis_phase_function();
+
+protected:
+    /**
+     * \brief Create the tabphase irregular plugin used as DDIS phase function.
+     *
+     * This method is an helper function for child classes.
+     */
+    ref<PhaseFunction> create_ddis_phase_function();
+
+public:
+
 // #ERADIATE_CHANGE_END
     void traverse(TraversalCallback *callback) override;
 
@@ -228,8 +240,8 @@ protected:
 // #ERADIATE_CHANGE_BEGIN: DDIS
     ref<PhaseFunction> m_ddis_phase_function = nullptr;
     ScalarFloat m_ddis_threshold = 0.f;
-    
-    MI_DECLARE_TRAVERSE_CB(m_phase_function, m_extremum_structure, 
+
+    MI_DECLARE_TRAVERSE_CB(m_phase_function, m_extremum_structure,
                            m_ddis_phase_function, m_ddis_threshold)
 // #ERADIATE_CHANGE_END
 };
@@ -250,12 +262,11 @@ DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::Medium)
     DRJIT_CALL_METHOD(intersect_aabb)
     DRJIT_CALL_METHOD(sample_interaction)
     DRJIT_CALL_METHOD(transmittance_eval_pdf)
-// #ERADIATE_CHANGE_BEGIN: Add function that calculates the transmittance and pdf 
+// #ERADIATE_CHANGE_BEGIN: Add function that calculates the transmittance and pdf
     DRJIT_CALL_METHOD(sample_interaction_analytical)
     DRJIT_CALL_METHOD(transmittance_eval_analytical)
 // #ERADIATE_CHANGE_END
     DRJIT_CALL_METHOD(get_scattering_coefficients)
-    
 // #ERADIATE_CHANGE_BEGIN: Extremum Support && Residual Ratio Tracking && DDIS
     DRJIT_CALL_GETTER(ddis_phase_function)
     DRJIT_CALL_GETTER(ddis_threshold)

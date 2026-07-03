@@ -12,13 +12,13 @@ MI_VARIANT PhaseFunction<Float, Spectrum>::PhaseFunction(const Properties &props
 }   
 
 MI_VARIANT typename PhaseFunction<Float, Spectrum>::FloatStorage
-PhaseFunction<Float, Spectrum>::get_nodes() const {
+PhaseFunction<Float, Spectrum>::get_envelope_nodes() const {
     FloatStorage i = dr::arange<FloatStorage>(m_node_count);
     return -1.f + 2.f * i / ScalarFloat(m_node_count - 1);
 }
 
 MI_VARIANT void
-PhaseFunction<Float, Spectrum>::eval_max(const FloatStorage &nodes,
+PhaseFunction<Float, Spectrum>::accumulate_envelope(const FloatStorage &nodes,
                                          FloatStorage &values) const {
     PhaseFunctionContext ctx(nullptr);
     size_t n               = dr::width(nodes);

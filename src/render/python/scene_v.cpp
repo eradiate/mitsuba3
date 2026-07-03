@@ -130,6 +130,9 @@ MI_PY_EXPORT(Scene) {
              },
              D(Scene, shapes))
         .def("shapes_dr", &Scene::shapes_dr, D(Scene, shapes_dr))
+// #ERADIATE_CHANGE_BEGIN: DDIS
+        .def("media", nb::overload_cast<>(&Scene::media), D(Scene, emitters))
+// #ERADIATE_CHANGE_END
         .def("silhouette_shapes",
              [](const Scene &scene) {
                  nb::list result;

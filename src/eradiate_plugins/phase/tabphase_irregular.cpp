@@ -180,7 +180,7 @@ public:
         return oss.str();
     }
 
-    FloatStorage get_nodes() const override {
+    FloatStorage get_envelope_nodes() const override {
         return m_distr.nodes();
     }
 
