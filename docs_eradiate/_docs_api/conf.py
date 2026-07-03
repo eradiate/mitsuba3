@@ -93,6 +93,9 @@ api_doc_structure = {
         r"mitsuba\.ExtremumSegment([\w]*)",
         r"mitsuba\.ExtremumStructure([\w]*)",
     ],
+    "Phase": [
+        r"mitsuba\.PhaseFunction",
+    ],
 }
 
 # -- Docstring processing helpers -----------------------------------------

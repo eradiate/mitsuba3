@@ -15,7 +15,7 @@ NAMESPACE_BEGIN(mitsuba)
 * loaded back into a single \c FloatStorage.
 */
 template <typename FloatStorage>
-FloatStorage merge_nodes(const std::vector<FloatStorage> &lists) {
+FloatStorage merge_envelope_nodes(const std::vector<FloatStorage> &lists) {
     using ScalarFloat = dr::scalar_t<FloatStorage>;
 
     if (lists.empty())

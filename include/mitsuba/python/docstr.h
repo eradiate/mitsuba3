@@ -4944,12 +4944,12 @@ static const char *__doc_mitsuba_Medium_update_ddis_phase_function =
 R"doc(Rebuild any DDIS-related derived data when the phase function has
 changed.
 
-This method is called by the scene's parameters_changed() for every
+This method is called by the scene's `parameters_changed()` for every
 medium whose phase function is marked dirty. The default
 implementation is a no-op; subclasses that maintain a DDIS phase
 function override it.
 
-This is intentionally separate from parameters_changed() so that the
+This is intentionally separate from `parameters_changed()` so that the
 scene can drive all media to completion before clearing dirty flags,
 which is required when multiple media share the same phase function
 via a scene-level reference.)doc";
@@ -5975,16 +5975,7 @@ static const char *__doc_mitsuba_PhaseFunctionFlags_Microflake = R"doc()doc";
 
 static const char *__doc_mitsuba_PhaseFunction_PhaseFunction = R"doc(//! @})doc";
 
-static const char *__doc_mitsuba_PhaseFunction_class_name = R"doc()doc";
-
-static const char *__doc_mitsuba_PhaseFunction_component_count = R"doc(Number of components this phase function is comprised of.)doc";
-
-static const char *__doc_mitsuba_PhaseFunction_dirty =
-R"doc(Return whether this phase function's parameters have changed since the
-last call to set_dirty(false). Set by parameters_changed(), cleared by
-the scene after all dependent media have been updated.)doc";
-
-static const char *__doc_mitsuba_PhaseFunction_eval_max =
+static const char *__doc_mitsuba_PhaseFunction_accumulate_envelope =
 R"doc(Evaluate the phase function at the given cos_theta nodes and
 accumulate the result into ``values`` by taking the elementwise
 maximum.
@@ -6009,11 +6000,19 @@ Parameter ``nodes``:
     returned by get_nodes.
 
 Parameter ``values``:
-    In/out buffer. Must be either empty or have the same length as
-    ``nodes``; if empty it is resized and zero-initialised before the
-    first comparison. On return, each entry holds the maximum of its
-    previous value and the phase function evaluated at the
-    corresponding node.)doc";
+    In/out buffer. Must have the same length as ``nodes`` and be zero-
+    initialised before the first comparison. On return, each entry
+    holds the maximum of its previous value and the phase function
+    evaluated at the corresponding node.)doc";
+
+static const char *__doc_mitsuba_PhaseFunction_class_name = R"doc()doc";
+
+static const char *__doc_mitsuba_PhaseFunction_component_count = R"doc(Number of components this phase function is comprised of.)doc";
+
+static const char *__doc_mitsuba_PhaseFunction_dirty =
+R"doc(Return whether this phase function's parameters have changed since the
+last call to set_dirty(false). Set by parameters_changed(), cleared by
+the scene after all dependent media have been updated.)doc";
 
 static const char *__doc_mitsuba_PhaseFunction_eval_pdf =
 R"doc(Evaluates the phase function model value and PDF
@@ -6041,9 +6040,7 @@ static const char *__doc_mitsuba_PhaseFunction_flags = R"doc(Flags for this phas
 
 static const char *__doc_mitsuba_PhaseFunction_flags_2 = R"doc(Flags for a specific component of this phase function.)doc";
 
-static const char *__doc_mitsuba_PhaseFunction_get_flags = R"doc(Return type of phase function)doc";
-
-static const char *__doc_mitsuba_PhaseFunction_get_nodes =
+static const char *__doc_mitsuba_PhaseFunction_get_envelope_nodes =
 R"doc(Populate a set of cos_theta nodes suitable for representing this phase
 function.
 
@@ -6057,10 +6054,11 @@ implementation places ``m_node_count`` nodes uniformly in [-1, 1].
 corresponds to aligned (forward-scattering) incoming and outgoing
 directions, and -1 corresponds to exact backscatter.
 
-Parameter ``nodes``:
-    Output vector. Must be empty on input. On return it contains the
-    sorted cos_theta values at which the phase function should be
-    evaluated. The vector is resized by this call.)doc";
+Returns:
+    A sorted buffer of cos_theta values at which the phase function
+    should be evaluated.)doc";
+
+static const char *__doc_mitsuba_PhaseFunction_get_flags = R"doc(Return type of phase function)doc";
 
 static const char *__doc_mitsuba_PhaseFunction_m_components = R"doc(Flags for each component of this phase function.)doc";
 
@@ -7841,6 +7839,8 @@ static const char *__doc_mitsuba_Scene_m_silhouette_shapes_dr = R"doc()doc";
 
 static const char *__doc_mitsuba_Scene_m_thread_reordering = R"doc()doc";
 
+static const char *__doc_mitsuba_Scene_media = R"doc(Return the list of media)doc";
+
 static const char *__doc_mitsuba_Scene_parameters_changed = R"doc(Update internal state following a parameter update)doc";
 
 static const char *__doc_mitsuba_Scene_pdf_emitter =
@@ -8958,6 +8958,8 @@ mapping is bijective. The default implementation throws.)doc";
 
 static const char *__doc_mitsuba_Shape_exterior_medium = R"doc(Return the medium that lies on the exterior of this shape)doc";
 
+static const char *__doc_mitsuba_Shape_exterior_medium_2 = R"doc()doc";
+
 static const char *__doc_mitsuba_Shape_get_children_string = R"doc()doc";
 
 static const char *__doc_mitsuba_Shape_has_attribute =
@@ -8971,6 +8973,8 @@ static const char *__doc_mitsuba_Shape_has_flipped_normals = R"doc(Does this sha
 static const char *__doc_mitsuba_Shape_initialize = R"doc()doc";
 
 static const char *__doc_mitsuba_Shape_interior_medium = R"doc(Return the medium that lies on the interior of this shape)doc";
+
+static const char *__doc_mitsuba_Shape_interior_medium_2 = R"doc()doc";
 
 static const char *__doc_mitsuba_Shape_invert_silhouette_sample =
 R"doc(Map a silhouette segment to a point in boundary sample space
@@ -12322,7 +12326,12 @@ static const char *__doc_mitsuba_math_ulpdiff =
 R"doc(Compare the difference in ULPs between a reference value and another
 given floating point number)doc";
 
-static const char *__doc_mitsuba_merge_nodes = R"doc(Merge multiple lists of nodes into one. Remove duplicates.)doc";
+static const char *__doc_mitsuba_merge_envelope_nodes =
+R"doc(Merge multiple node buffers into one. Remove duplicates.
+
+The concatenation/sort/unique is performed on the host: JIT buffers
+are evaluated and copied to a temporary scalar array before being
+merged and loaded back into a single ``FloatStorage``.)doc";
 
 static const char *__doc_mitsuba_mueller_absorber =
 R"doc(Constructs the Mueller matrix of an ideal absorber

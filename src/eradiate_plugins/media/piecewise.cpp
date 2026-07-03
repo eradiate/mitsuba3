@@ -162,7 +162,8 @@ class PiecewiseMedium final : public Medium<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
                    m_phase_function, m_extremum_structure,
-                   m_ddis_phase_function, m_ddis_threshold)
+                   m_ddis_phase_function, m_ddis_threshold,
+                   create_ddis_phase_function)
     MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, PhaseFunction, ExtremumStructure)
 
     // Use 32 bit indices to keep track of indices to conserve memory
@@ -195,19 +196,7 @@ public:
         m_ddis_threshold = props.get<ScalarFloat>("ddis_threshold", 0.1f);
 
         if (m_ddis_threshold > 0.f) {
-            // Create the DDIS phase function as a tabulated function of the
-            // max function of the underlying phase function.
-            FloatStorage nodes  = m_phase_function->get_nodes();
-            FloatStorage values = dr::zeros<FloatStorage>(dr::width(nodes));
-            m_phase_function->eval_max(nodes, values);
-
-            auto pmgr = PluginManager::instance();
-            Properties props_ddis("tabphase_irregular");
-            size_t shape = nodes.size();
-            props_ddis.set_any("nodes", TensorXf(std::move(nodes), 1, &shape));
-            props_ddis.set_any("values", TensorXf(std::move(values), 1, &shape));
-            m_ddis_phase_function =
-                static_cast<PhaseFunction*>(pmgr->create_object<PhaseFunction>(props_ddis));
+            m_ddis_phase_function = static_cast<PhaseFunction*>(create_ddis_phase_function());
         }
     }
 
@@ -465,42 +454,6 @@ public:
         Log(Info, "Medium Parameters changed!");
         precompute_optical_thickness();
     }
-
-    void update_ddis_phase_function() override {
-        // DDIS rebuild is driven exclusively by Scene::parameters_changed()
-        // via update_ddis_phase_function(), which ensures all media sharing a
-        // phase function via ref are updated before dirty flags are cleared.
-        if (m_ddis_threshold <= 0.f || m_ddis_phase_function == nullptr)
-            return;
-
-        FloatStorage nodes  = m_phase_function->get_nodes();
-        FloatStorage values = dr::zeros<FloatStorage>(dr::width(nodes));
-        m_phase_function->eval_max(nodes, values);
-
-        struct ValuesCallback : TraversalCallback {
-            FloatStorage *target_nodes = nullptr;
-            FloatStorage *target_values = nullptr;
-            void put_value(std::string_view name, void *ptr, uint32_t,
-                           const std::type_info &) override {
-                if (name == "nodes")
-                    target_nodes = static_cast<FloatStorage *>(ptr);
-                if (name == "values")
-                    target_values = static_cast<FloatStorage *>(ptr);
-            }
-            void put_object(std::string_view, Object *, uint32_t) override {}
-        } cb;
-
-        m_ddis_phase_function->traverse(&cb);
-        if (cb.target_values)
-            *cb.target_values = values;
-
-        if (cb.target_nodes)
-            *cb.target_nodes = nodes;
-
-        if (cb.target_values || cb.target_nodes)
-            m_ddis_phase_function->parameters_changed({});
-    }
-
 
     void precompute_optical_thickness() {
 

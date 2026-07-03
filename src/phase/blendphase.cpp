@@ -200,14 +200,14 @@ public:
     }
 
 // #ERADIATE_CHANGE_BEGIN: DDIS
-    FloatStorage get_nodes() const override {
-        return merge_nodes<FloatStorage>({ m_nested_phase[0]->get_nodes(),
-                                           m_nested_phase[1]->get_nodes() });
+    FloatStorage get_envelope_nodes() const override {
+        return merge_envelope_nodes<FloatStorage>({ m_nested_phase[0]->get_envelope_nodes(),
+                                           m_nested_phase[1]->get_envelope_nodes() });
     }
 
-    void eval_max(const FloatStorage &nodes, FloatStorage &values) const override {
-        m_nested_phase[0]->eval_max(nodes, values);
-        m_nested_phase[1]->eval_max(nodes, values);
+    void accumulate_envelope(const FloatStorage &nodes, FloatStorage &values) const override {
+        m_nested_phase[0]->accumulate_envelope(nodes, values);
+        m_nested_phase[1]->accumulate_envelope(nodes, values);
     }
 // #ERADIATE_CHANGE_END
     MI_DECLARE_CLASS(BlendPhaseFunction)

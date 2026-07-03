@@ -874,6 +874,12 @@ public:
 
     /// Return the medium that lies on the exterior of this shape
     const Medium *exterior_medium(Mask /*unused*/ = true) const { return m_exterior_medium.get(); }
+// #ERADIATE_CHANGE_BEGIN: DDIS
+    // Add non const getters to add media in scene.cpp
+    Medium *interior_medium(Mask /*unused*/ = true) { return m_interior_medium.get(); }
+    
+    Medium *exterior_medium(Mask /*unused*/ = true) { return m_exterior_medium.get(); }
+// #ERADIATE_CHANGE_END
 
     /// Return the shape's BSDF
     const BSDF *bsdf(Mask /*unused*/ = true) const { return m_bsdf.get(); }

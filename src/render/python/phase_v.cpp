@@ -39,12 +39,12 @@ public:
         NB_OVERRIDE_PURE(eval_pdf, ctx, mi, wo, active);
     }
 // #ERADIATE_CHANGE_BEGIN: DDIS
-    FloatStorage get_nodes() const override{
-        NB_OVERRIDE(get_nodes);
+    FloatStorage get_envelope_nodes() const override{
+        NB_OVERRIDE(get_envelope_nodes);
     };
 
-    void eval_max(const FloatStorage &nodes, FloatStorage &values) const override{
-        NB_OVERRIDE(eval_max, nodes, values);
+    void accumulate_envelope(const FloatStorage &nodes, FloatStorage &values) const override{
+        NB_OVERRIDE(accumulate_envelope, nodes, values);
     };
 // #ERADIATE_CHANGE_END
 
@@ -106,19 +106,19 @@ template <typename Ptr, typename Cls> void bind_phase_generic(Cls &cls) {
             "active"_a = true, D(PhaseFunction, component_count));
 // #ERADIATE_CHANGE_BEGIN: DDIS
 
-    // get_nodes/eval_max operate on a single phase function and exchange node
+    // get_envelope_nodes/accumulate_envelope operate on a single phase function and exchange node
     // buffers; The out-parameter cannot be bound on a vectorized array of phase
     // function pointers.
     if constexpr (std::is_pointer_v<Ptr>) {
-        cls.def("get_nodes",
-                [](Ptr ptr) { return ptr->get_nodes(); },
-                D(PhaseFunction, get_nodes))
-           .def("eval_max",
+        cls.def("get_envelope_nodes",
+                [](Ptr ptr) { return ptr->get_envelope_nodes(); },
+                D(PhaseFunction, get_envelope_nodes))
+           .def("accumulate_envelope",
                 [](Ptr ptr, const FloatStorage &nodes, FloatStorage &values) {
                     if (dr::width(nodes) != dr::width(values))
-                        Throw("eval_max, nodes and values must have the same length");
-                    ptr->eval_max(nodes, values);
-                }, "nodes"_a, "values"_a, D(PhaseFunction, eval_max));
+                        Throw("accumulate_envelope, nodes and values must have the same length");
+                    ptr->accumulate_envelope(nodes, values);
+                }, "nodes"_a, "values"_a, D(PhaseFunction, accumulate_envelope));
     }
 // #ERADIATE_CHANGE_END
 }

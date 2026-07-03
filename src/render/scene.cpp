@@ -53,6 +53,12 @@ MI_VARIANT Scene<Float, Spectrum>::Scene(const Properties &props)
             }
             if (mesh)
                 mesh->set_scene(this);
+// #ERADIATE_CHANGE_BEGIN: DDIS phase dirty tracking
+            if (shape->interior_medium())
+                m_media.push_back(shape->interior_medium());
+            if (shape->exterior_medium())
+                m_media.push_back(shape->exterior_medium());
+// #ERADIATE_CHANGE_END
         } else if (emitter) {
             // Surface emitters will be added to the list when attached to a shape
             if (!has_flag(emitter->flags(), EmitterFlags::Surface))
@@ -72,10 +78,15 @@ MI_VARIANT Scene<Float, Spectrum>::Scene(const Properties &props)
 // #ERADIATE_CHANGE_BEGIN: DDIS phase dirty tracking
         } else if (medium) {
             m_media.push_back(medium);
-// #ERADIATE_CHANGE_END
         }
     }
 
+    // remove duplicate media introduced by gathering both top level and shapes.
+    std::sort(m_media.begin(), m_media.end());
+    auto last = std::unique(m_media.begin(), m_media.end());
+    m_media.erase(last, m_media.end());
+
+// #ERADIATE_CHANGE_END
     // Create sensors' shapes (environment sensors)
     for (Sensor *sensor: m_sensors)
         sensor->set_scene(this);

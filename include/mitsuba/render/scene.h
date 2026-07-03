@@ -730,6 +730,10 @@ public:
 
     /// Return the list of sensors as a Dr.Jit array
     const DynamicBuffer<SensorPtr> &sensors_dr() const { return m_sensors_dr; }
+// #ERADIATE_CHANGE_BEGIN: DDIS
+    /// Return the list of media
+    std::vector<ref<Medium>> &media() { return m_media; }
+// #ERADIATE_CHANGE_END
 
     //! @}
     // =============================================================

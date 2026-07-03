@@ -104,21 +104,21 @@ Medium<Float, Spectrum>::transmittance_eval_pdf(const MediumInteraction3f &mi,
     return { tr, pdf };
 }
 
-// #ERADIATE_CHANGE_BEGIN, NM 05/06/2024 : add function that calculates the transmittance and pdf  
+// #ERADIATE_CHANGE_BEGIN, NM 05/06/2024 : add function that calculates the transmittance and pdf
 MI_VARIANT
-std::tuple<typename Medium<Float, Spectrum>::MediumInteraction3f, 
+std::tuple<typename Medium<Float, Spectrum>::MediumInteraction3f,
            typename Medium<Float, Spectrum>::UnpolarizedSpectrum,
            typename Medium<Float, Spectrum>::UnpolarizedSpectrum>
-Medium<Float, Spectrum>::sample_interaction_analytical(const Ray3f &/*ray*/, 
+Medium<Float, Spectrum>::sample_interaction_analytical(const Ray3f &/*ray*/,
                                             const Interaction3f &/*it*/, Float /*sample*/,
                                             UInt32 /*channel*/, Mask /*active*/) const {
-    // PiecewiseVolPathIntegrator should only be used with piecewise medium                                                
+    // PiecewiseVolPathIntegrator should only be used with piecewise medium
     NotImplementedError("sample_interaction_analytical");
 }
 
 MI_VARIANT
 typename Medium<Float, Spectrum>::UnpolarizedSpectrum
-Medium<Float, Spectrum>::transmittance_eval_analytical(const Ray3f &/*ray*/, 
+Medium<Float, Spectrum>::transmittance_eval_analytical(const Ray3f &/*ray*/,
                                     const Interaction3f &/*it*/,
                                     Mask /*active*/) const {
     // PiecewiseVolPathIntegrator should only be used with piecewise medium
@@ -153,6 +153,69 @@ Medium<Float, Spectrum>::prepare_medium_traversal(const Ray3f& ray, Mask active)
 }
 // #ERADIATE_CHANGE_END
 
+// #ERADIATE_CHANGE_BEGIN: DDIS
+MI_VARIANT
+ref<typename Medium<Float, Spectrum>::PhaseFunction>
+Medium<Float, Spectrum>::create_ddis_phase_function() {
+    using FloatStorage = DynamicBuffer<Float>;
+
+    // Create the DDIS phase function as a tabulated function of the
+    // max function of the underlying phase function.
+    auto phase = phase_function();
+    FloatStorage nodes  = phase->get_envelope_nodes();
+    FloatStorage values = dr::zeros<FloatStorage>(dr::width(nodes));
+    m_phase_function->accumulate_envelope(nodes, values);
+
+    auto pmgr = PluginManager::instance();
+    Properties props_ddis("tabphase_irregular");
+    size_t shape = nodes.size();
+    props_ddis.set_any("nodes", TensorXf(std::move(nodes), 1, &shape));
+    props_ddis.set_any("values", TensorXf(std::move(values), 1, &shape));
+    return pmgr->create_object<PhaseFunction>(props_ddis);
+}
+
+MI_VARIANT
+void Medium<Float, Spectrum>::update_ddis_phase_function() {
+    using FloatStorage = DynamicBuffer<Float>;
+
+    // DDIS rebuild is driven exclusively by Scene::parameters_changed()
+    // via update_ddis_phase_function(), which ensures all media sharing a
+    // phase function via ref are updated before dirty flags are cleared.
+    if (m_ddis_threshold <= 0.f || m_ddis_phase_function == nullptr)
+        return;
+
+    FloatStorage nodes  = m_phase_function->get_envelope_nodes();
+    FloatStorage values = dr::zeros<FloatStorage>(dr::width(nodes));
+    m_phase_function->accumulate_envelope(nodes, values);
+
+    struct ValuesCallback : TraversalCallback {
+        FloatStorage *target_nodes = nullptr;
+        FloatStorage *target_values = nullptr;
+        void put_value(std::string_view name, void *ptr, uint32_t,
+                        const std::type_info &) override {
+            if (name == "nodes")
+                target_nodes = static_cast<FloatStorage *>(ptr);
+            if (name == "values")
+                target_values = static_cast<FloatStorage *>(ptr);
+        }
+        void put_object(std::string_view, Object *, uint32_t) override {}
+    } cb;
+
+    m_ddis_phase_function->traverse(&cb);
+
+    Assert(cb.taget_values && cb.target_nodes);
+
+    if (cb.target_values)
+        *cb.target_values = values;
+
+    if (cb.target_nodes)
+        *cb.target_nodes = nodes;
+
+    if (cb.target_values || cb.target_nodes)
+        m_ddis_phase_function->parameters_changed({});
+}
+
+// #ERADIATE_CHANGE_END
 MI_IMPLEMENT_TRAVERSE_CB(Medium, Object)
 MI_INSTANTIATE_CLASS(Medium)
 NAMESPACE_END(mitsuba)

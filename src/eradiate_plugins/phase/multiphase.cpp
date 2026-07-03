@@ -269,16 +269,16 @@ public:
         return { val, pdf };
     }
 
-    FloatStorage get_nodes() const override {
+    FloatStorage get_envelope_nodes() const override {
         std::vector<FloatStorage> nested_nodes(m_nested_phases.size());
         for (size_t i = 0; i < m_nested_phases.size(); ++i)
-            nested_nodes[i] = m_nested_phases[i]->get_nodes();
-        return merge_nodes<FloatStorage>(nested_nodes);
+            nested_nodes[i] = m_nested_phases[i]->get_envelope_nodes();
+        return merge_envelope_nodes<FloatStorage>(nested_nodes);
     }
 
-    void eval_max(const FloatStorage &nodes, FloatStorage &values) const override {
+    void accumulate_envelope(const FloatStorage &nodes, FloatStorage &values) const override {
         for (size_t i = 0; i < m_nested_phases.size(); ++i)
-            m_nested_phases[i]->eval_max(nodes, values);
+            m_nested_phases[i]->accumulate_envelope(nodes, values);
     }
 
     std::string to_string() const override {
