@@ -61,16 +61,16 @@ Heterogeneous medium (Earth Observation) (:monosp:`eoheterogeneous`)
      incident direction. Set to a negative value to disable. (Default: 0.1)
 
  * - aabb_min, aabb_max
-   - |point3f|
+   - |point|
    - Optional override to the medium bounding box. Uses the bounding box of the
-     `sigma_t` volume by default.
+     ``sigma_t`` volume by default.
 
 This plugin provides a flexible heterogeneous medium implementation, which acquires its data
 from nested volume instances. These can be constant, use a procedural function, or fetch data from
 disk, e.g. using a 3D grid.
 
-This plugin is identical to the `heterogeneous` plugin but accepts additional parameters to set the
-medium's bounding box. It is possbile to set volumes that span a portion of the medium's bbox,
+This plugin is identical to the ``heterogeneous ` plugin but accepts additional parameters to set the
+medium's bounding box. It is possible to set volumes that span a portion of the medium's bbox,
 and thus exploit wrapping mechanism, e.g. periodic boundaries, outside this portion.
 
 The medium is parametrized by the single scattering albedo and the extinction coefficient

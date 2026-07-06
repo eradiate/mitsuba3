@@ -41,8 +41,8 @@ EO Volumetric path tracer (:monosp:`eovolpath`)
 
  * - enable_ddis
    - |bool|
-   - Activate the DDIS variance reduction method. The `ddis_threshold` used to determine the
-     probability of sampling usin the emitter direction is set in the media plugins.
+   - Activate the DDIS variance reduction method. The ``ddis_threshold`` used to determine the
+     probability of sampling using the emitter direction is set in the media plugins.
      (Default: false)
 
  * - hide_emitters
