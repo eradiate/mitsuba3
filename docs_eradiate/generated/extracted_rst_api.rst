@@ -22,54 +22,44 @@
     segment's entry/exit distances and the local extinction coefficient
     bounds within that interval.
 
-
     .. py:method:: __init__()
 
-        Default constructor — creates an invalid segment via reset()
-
-    .. py:method:: __init__(self, mint, maxt, minorant, majorant)
-
+        Overloaded function.
+        
+        1. ``__init__(self) -> None``
+        
+        
+        2. ``__init__(self, other: :py:obj:`mitsuba.ExtremumSegment`) -> None``
+        
+        Copy constructor
+        
+        3. ``__init__(self, mint: float, maxt: float, minorant: float, majorant: float) -> None``
+        
         Construct from entry/exit distances and a combined extremum vector.
-
-        Parameter ``mint`` (float):
+        
+        Parameter ``mint``:
             Segment entry distance
-
-        Parameter ``maxt`` (float):
+        
+        Parameter ``maxt``:
             Segment exit distance
-
-        Parameter ``value`` (:py:obj:`mitsuba.Vector2f`):
+        
+        Parameter ``value``:
+            Extremum vector [minorant, majorant]
+        
+        4. ``__init__(self, mint: float, maxt: float, value: :py:obj:`mitsuba.Vector2f`) -> None``
+        
+        Construct from entry/exit distances and a combined extremum vector.
+        
+        Parameter ``mint``:
+            Segment entry distance
+        
+        Parameter ``maxt``:
+            Segment exit distance
+        
+        Parameter ``value``:
             Extremum vector [minorant, majorant]
 
-        Parameter ``minorant`` (float):
-            *no description available*
-
-        Parameter ``majorant`` (float):
-            *no description available*
-
-    .. py:method:: __init__(self, mint, maxt, value)
-
-        Construct from entry/exit distances and separate minorant/majorant
-        values.
-
-        Parameter ``mint`` (float):
-            Segment entry distance
-
-        Parameter ``maxt`` (float):
-            Segment exit distance
-
-        Parameter ``minorant``:
-            Lower extinction bound over the segment
-
-        Parameter ``majorant``:
-            Upper extinction bound over the segment
-
-    .. py:method:: __init__(self, arg)
-
-        Copy constructor
-
-        Parameter ``arg`` (:py:obj:`mitsuba.ExtremumSegment`):
-            *no description available*
-
+        
     .. py:method:: mitsuba.ExtremumSegment.assign(self, arg)
 
         Parameter ``arg`` (:py:obj:`mitsuba.ExtremumSegment`, /):

@@ -29,8 +29,8 @@ Medium
 ------
 
 .. include:: /generated/extracted_rst_api.rst
-  :start-line: 197
-  :end-line: 381
+  :start-line: 187
+  :end-line: 371
 
 ------------
 
@@ -39,13 +39,13 @@ Extremum
 
 .. include:: /generated/extracted_rst_api.rst
   :start-line: 16
-  :end-line: 151
+  :end-line: 141
 
 ------------
 
 .. include:: /generated/extracted_rst_api.rst
-  :start-line: 152
-  :end-line: 196
+  :start-line: 142
+  :end-line: 186
 
 ------------
 
@@ -53,5 +53,5 @@ Phase
 -----
 
 .. include:: /generated/extracted_rst_api.rst
-  :start-line: 382
-  :end-line: 567
+  :start-line: 372
+  :end-line: 557
