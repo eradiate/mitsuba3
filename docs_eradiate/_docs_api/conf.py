@@ -304,10 +304,7 @@ def process_docstring_callback(app, what, name, obj, options, lines):
                 process_overload_block(lines, "method")
 
         else:
-            is_overloaded = cached_signature == "(overloaded)" or (
-                lines and lines[0] == "Overloaded function."
-            )
-            if not is_overloaded:
+            if not cached_signature == "(overloaded)":
                 for i, l in enumerate(lines):
                     lines[i] = "    " + l
                 lines.insert(0, f".. py:method:: __init__{cached_signature}")
