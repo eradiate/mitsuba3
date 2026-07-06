@@ -23,6 +23,7 @@ sphinx-iconify = "*"
 sphinxcontrib-bibtex = ">=2.6.3"
 sphinx-tabs = "*"
 sphinx-autobuild = ">=2024"
+pandoc = "*"
 pybind11-mkdoc = ">=2.6.2, <3"
 clang = ">=18, <19"
 
