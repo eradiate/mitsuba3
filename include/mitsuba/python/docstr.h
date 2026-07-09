@@ -4790,6 +4790,11 @@ static const char *__doc_mitsuba_Medium_Medium_2 = R"doc()doc";
 
 static const char *__doc_mitsuba_Medium_class_name = R"doc()doc";
 
+static const char *__doc_mitsuba_Medium_create_ddis_phase_function =
+R"doc(Create the tabphase irregular plugin used as DDIS phase function.
+
+This method is an helper function for child classes.)doc";
+
 static const char *__doc_mitsuba_Medium_ddis_phase_function =
 R"doc(Return the ddis phase function of this medium. Can be null for medium
 that don't specify such phase function.)doc";
@@ -4809,6 +4814,8 @@ at a given MediumInteraction mi)doc";
 static const char *__doc_mitsuba_Medium_has_extremum_structure = R"doc(Check if medium uses extremum structure)doc";
 
 static const char *__doc_mitsuba_Medium_has_spectral_extinction = R"doc(Returns whether this medium has a spectrally varying extinction)doc";
+
+static const char *__doc_mitsuba_Medium_in_aabb = R"doc(Checks if a point is contained by the medium's bounding box)doc";
 
 static const char *__doc_mitsuba_Medium_intersect_aabb = R"doc(Intersects a ray with the medium's bounding box)doc";
 

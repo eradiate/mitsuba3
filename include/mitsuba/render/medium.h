@@ -19,6 +19,12 @@ public:
     /// Intersects a ray with the medium's bounding box
     virtual std::tuple<Mask, Float, Float>
     intersect_aabb(const Ray3f &ray) const = 0;
+// #ERADIATE_CHANGE_BEGIN: Overlapping media
+
+    /// Checks if a point is contained by the medium's bounding box
+    virtual Mask
+    in_aabb(const Point3f &pos) const = 0;
+// #ERADIATE_CHANGE_END
 
     /// Returns the medium's majorant used for delta tracking
     virtual UnpolarizedSpectrum
@@ -211,7 +217,7 @@ protected:
      *
      * This method is an helper function for child classes.
      */
-    ref<PhaseFunction> create_ddis_phase_function();
+    virtual ref<PhaseFunction> create_ddis_phase_function();
 
 public:
 
@@ -260,6 +266,9 @@ DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::Medium)
     DRJIT_CALL_GETTER(has_spectral_extinction)
     DRJIT_CALL_METHOD(get_majorant)
     DRJIT_CALL_METHOD(intersect_aabb)
+// #ERADIATE_CHANGE_BEGIN: Overlapping media
+    DRJIT_CALL_METHOD(in_aabb)
+// #ERADIATE_CHANGE_END
     DRJIT_CALL_METHOD(sample_interaction)
     DRJIT_CALL_METHOD(transmittance_eval_pdf)
 // #ERADIATE_CHANGE_BEGIN: Add function that calculates the transmittance and pdf
