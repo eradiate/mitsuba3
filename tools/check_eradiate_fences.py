@@ -147,8 +147,10 @@ def check_additions_fenced(
     for hstart, hend in hunks:
         for lineno in range(hstart, hend + 1):
             line = lines[lineno - 1] if lineno <= len(lines) else ""
-            # The fence markers themselves are always allowed
-            if RE_BEGIN.search(line) or RE_END.search(line):
+            # The fence markers themselves are always allowed, as is
+            # whitespace-only padding around them (blank lines carry no code
+            # change and shouldn't require fencing).
+            if RE_BEGIN.search(line) or RE_END.search(line) or not line.strip():
                 continue
             if not any(s <= lineno <= e for s, e in fences):
                 errors.append(
