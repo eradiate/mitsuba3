@@ -140,6 +140,11 @@ public:
     }
 // #ERADIATE_CHANGE_END
 
+// #ERADIATE_CHANGE_BEGIN: Overlapping media
+    virtual const PhaseFunction *phase_function(MediumInteraction3f mei,
+                                                Float sample, Mask active);
+// #ERADIATE_CHANGE_END
+
     /// Returns whether this specific medium instance uses emitter sampling
     MI_INLINE bool use_emitter_sampling() const { return m_sample_emitters; }
 
