@@ -150,7 +150,7 @@ public:
         Properties props_extr("extremum_global");
         props_extr.set("volume", (Object *) m_sigmat.get());
         props_extr.set("scale", m_scale);
-        m_extremum_structure = 
+        m_extremum_structure =
             PluginManager::instance()->create_object<ExtremumStructure>(props_extr);
 // #ERADIATE_CHANGE_END
     }
@@ -200,6 +200,13 @@ public:
     intersect_aabb(const Ray3f & /* ray */) const override {
         return { true, 0.f, dr::Infinity<Float> };
     }
+// #ERADIATE_CHANGE_BEGIN: Overlapping media
+
+    virtual Mask
+    in_aabb(const Point3f &/*pos*/) const override {
+        return true;
+    }
+// #ERADIATE_CHANGE_END
 
     std::string to_string() const override {
         std::ostringstream oss;

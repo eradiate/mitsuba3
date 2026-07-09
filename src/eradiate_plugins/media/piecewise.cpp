@@ -550,7 +550,13 @@ public:
     intersect_aabb(const Ray3f &ray) const override {
         return m_sigmat->bbox().ray_intersect(ray);
     }
+// #ERADIATE_CHANGE_BEGIN: Overlapping media
 
+    virtual Mask
+    in_aabb(const Point3f &pos) const override {
+        return m_sigmat->bbox().contains(pos);
+    }
+// #ERADIATE_CHANGE_END
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "PiecewiseMedium[" << std::endl

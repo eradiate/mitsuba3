@@ -15,13 +15,21 @@
 MI_VARIANT class PyMedium : public Medium<Float, Spectrum> {
 public:
     MI_IMPORT_TYPES(Medium, Sampler, Scene)
-    NB_TRAMPOLINE(Medium, 6);
+// #ERADIATE_CHANGE_BEGIN: Overlapping media
+    NB_TRAMPOLINE(Medium, 7);
+// #ERADIATE_CHANGE_END
 
     PyMedium(const Properties &props) : Medium(props) {}
 
     std::tuple<Mask, Float, Float> intersect_aabb(const Ray3f &ray) const override {
         NB_OVERRIDE_PURE(intersect_aabb, ray);
     }
+// #ERADIATE_CHANGE_BEGIN: Overlapping media
+
+    Mask in_aabb(const Point3f &pos) const override {
+        NB_OVERRIDE_PURE(in_aabb, pos);
+    }
+// #ERADIATE_CHANGE_END
 
     UnpolarizedSpectrum get_majorant(const MediumInteraction3f &mi, Mask active = true) const override {
         NB_OVERRIDE_PURE(get_majorant, mi, active);
@@ -78,6 +86,13 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
                 return ptr->intersect_aabb(ray); },
             "ray"_a,
             D(Medium, intersect_aabb))
+// #ERADIATE_CHANGE_BEGIN: Overlapping media
+        .def("in_aabb",
+            [](Ptr ptr, const Point3f &pos) {
+                return ptr->in_aabb(pos); },
+            "pos"_a,
+            D(Medium, in_aabb))
+// #ERADIATE_CHANGE_END
        .def("sample_interaction",
             [](Ptr ptr, const Ray3f &ray, Float sample, UInt32 channel, Mask active) {
                 return ptr->sample_interaction(ray, sample, channel, active); },
@@ -89,14 +104,14 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
                 return ptr->transmittance_eval_pdf(mi, si, active); },
             "mi"_a, "si"_a, "active"_a,
             D(Medium, transmittance_eval_pdf))
-// #ERADIATE_CHANGE_BEGIN: Add function that calculates the transmittance and pdf 
+// #ERADIATE_CHANGE_BEGIN: Add function that calculates the transmittance and pdf
         .def("sample_interaction_analytical",
             [](Ptr ptr, const Ray3f &ray, const Interaction3f &it, Float sample, UInt32 channel, Mask active) {
                 return ptr->sample_interaction_analytical(ray, it, sample, channel, active); },
             "ray"_a, "it"_a, "sample"_a, "channel"_a, "active"_a,
             D(Medium, sample_interaction_analytical))
         .def("transmittance_eval_analytical",
-            [](Ptr ptr, const Ray3f &ray,  
+            [](Ptr ptr, const Ray3f &ray,
                 const Interaction3f &it, Mask active) {
                 return ptr->transmittance_eval_analytical(ray, it, active); },
             "ray"_a, "it"_a, "active"_a,

@@ -187,6 +187,14 @@ public:
         return m_sigmat->bbox().ray_intersect(ray);
     }
 
+    virtual Mask
+    in_aabb(const Point3f &pos) const override {
+        if (m_aabb.valid()) {
+            return m_aabb.contains(pos);
+        }
+        return m_sigmat->bbox().contains(pos);
+    }
+
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "EOHeterogeneousMedium[" << std::endl
