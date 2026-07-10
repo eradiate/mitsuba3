@@ -87,6 +87,11 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
             "ray"_a,
             D(Medium, intersect_aabb))
 // #ERADIATE_CHANGE_BEGIN: Overlapping media
+        .def("phase_function",
+            [](Ptr ptr, const MediumInteraction3f &mi, Float sample, Mask active) {
+                return ptr->phase_function(mi, sample, active); },
+            "mi"_a, "sample"_a, "active"_a,
+            D(Medium, phase_function))
         .def("in_aabb",
             [](Ptr ptr, const Point3f &pos) {
                 return ptr->in_aabb(pos); },

@@ -24,6 +24,7 @@ MI_VARIANT Medium<Float, Spectrum>::Medium(const Properties &props)
             m_phase_function = phase;
         }
     }
+
 // #ERADIATE_CHANGE_BEGIN: tracking property.
     m_use_rrt = props.get<bool>("use_rrt", true);
 // #ERADIATE_CHANGE_END
@@ -123,6 +124,16 @@ Medium<Float, Spectrum>::transmittance_eval_analytical(const Ray3f &/*ray*/,
                                     Mask /*active*/) const {
     // PiecewiseVolPathIntegrator should only be used with piecewise medium
     NotImplementedError("transmittance_eval_analytical");
+}
+// #ERADIATE_CHANGE_END
+
+// #ERADIATE_CHANGE_BEGIN: Overlapping Media
+MI_VARIANT
+typename Medium<Float, Spectrum>::PhaseFunctionPtr
+Medium<Float, Spectrum>::phase_function(const MediumInteraction3f&/*mei*/,
+                                        Float /*sample*/,
+                                        Mask /*active*/) const {
+    return m_phase_function.get();
 }
 // #ERADIATE_CHANGE_END
 

@@ -11,7 +11,10 @@ NAMESPACE_BEGIN(mitsuba)
 template <typename Float, typename Spectrum>
 class MI_EXPORT_LIB Medium : public JitObject<Medium<Float, Spectrum>> {
 public:
-    MI_IMPORT_TYPES(PhaseFunction, Sampler, Scene, Texture, ExtremumStructure);
+// #ERADIATE_CHANGE_BEGIN: Overlapping media
+    MI_IMPORT_TYPES(PhaseFunction, Sampler, Scene, Texture, ExtremumStructure,
+                    PhaseFunctionPtr);
+// #ERADIATE_CHANGE_END
 
     /// Destructor
     ~Medium();
@@ -141,8 +144,8 @@ public:
 // #ERADIATE_CHANGE_END
 
 // #ERADIATE_CHANGE_BEGIN: Overlapping media
-    virtual const PhaseFunction *phase_function(MediumInteraction3f mei,
-                                                Float sample, Mask active);
+    virtual PhaseFunctionPtr phase_function(const MediumInteraction3f &mei,
+                                                Float sample, Mask active) const;
 // #ERADIATE_CHANGE_END
 
     /// Returns whether this specific medium instance uses emitter sampling
@@ -266,6 +269,9 @@ NAMESPACE_END(mitsuba)
 
 DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::Medium)
     DRJIT_CALL_GETTER(phase_function)
+// #ERADIATE_CHANGE_BEGIN: Overlapping media
+    DRJIT_CALL_METHOD(phase_function)
+// #ERADIATE_CHANGE_END
     DRJIT_CALL_GETTER(use_emitter_sampling)
     DRJIT_CALL_GETTER(is_homogeneous)
     DRJIT_CALL_GETTER(has_spectral_extinction)
