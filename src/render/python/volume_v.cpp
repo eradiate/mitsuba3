@@ -14,7 +14,9 @@
 MI_VARIANT class PyVolume : public Volume<Float, Spectrum> {
 public:
     MI_IMPORT_TYPES(Volume)
-    NB_TRAMPOLINE(Volume, 8);
+// #ERADIATE_CHANGE_BEGIN: Local extremum support
+    NB_TRAMPOLINE(Volume, 10);
+// #ERADIATE_CHANGE_END
 
     PyVolume(const Properties &props) : Volume(props) { };
 
@@ -47,10 +49,20 @@ public:
     ScalarFloat max() const override {
         NB_OVERRIDE_PURE(max);
     }
-    
+
 // #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
     ScalarFloat min() const override {
         NB_OVERRIDE_PURE(min);
+    }
+// #ERADIATE_CHANGE_END
+
+// #ERADIATE_CHANGE_BEGIN: Local extremum support
+    std::pair<Float, Float> extremum(const BoundingBox3f &bbox) const override {
+        NB_OVERRIDE(extremum, bbox);
+    }
+
+    std::pair<Float, Float> extremum_local(const BoundingBox3f &bbox) const override {
+        NB_OVERRIDE(extremum_local, bbox);
     }
 // #ERADIATE_CHANGE_END
 
@@ -121,7 +133,11 @@ MI_PY_EXPORT(Volume) {
                 return evaluation;
             },
             "it"_a, "active"_a = true,
-            D(Volume, eval_n));
+// #ERADIATE_CHANGE_BEGIN: Local extremum support
+            D(Volume, eval_n))
+        .def("extremum", &Volume::extremum, "bbox"_a)
+        .def("extremum_local", &Volume::extremum_local, "bbox"_a);
+// #ERADIATE_CHANGE_END
 
     drjit::bind_traverse(volume);
 }

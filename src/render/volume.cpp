@@ -69,14 +69,19 @@ Volume<Float, Spectrum>::min_per_channel(ScalarFloat * /*out*/) const {
 
 // #ERADIATE_CHANGE_BEGIN: Local extremum support
 MI_VARIANT std::pair<Float, Float>
-Volume<Float, Spectrum>::extremum(BoundingBox3f /*bbox*/, Mask /*local*/) const {
+Volume<Float, Spectrum>::extremum(const BoundingBox3f & /*bbox*/) const {
     // Default implementation: fall back to global max/min
     // Derived classes should override for better spatial queries
     return { 0.f, max() };
 }
 
-MI_VARIANT void Volume<Float, Spectrum>::add_extremum_structure(ExtremumStructure* extremum) {
-    m_extremum_structures.push_back(extremum);
+MI_VARIANT std::pair<Float, Float>
+Volume<Float, Spectrum>::extremum_local(const BoundingBox3f &bbox) const {
+    ScalarAffineTransform4f to_world = m_to_local.inverse();
+    BoundingBox3f world;
+    for (uint32_t i = 0; i < 8; ++i)
+        world.expand(to_world * bbox.corner(i));
+    return extremum(world);
 }
 // #ERADIATE_CHANGE_END
 

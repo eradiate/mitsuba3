@@ -7,6 +7,10 @@
 #include <mitsuba/render/shape.h>
 #include <mitsuba/render/texture.h>
 
+// #ERADIATE_CHANGE_BEGIN: Local extremum support
+#include <mitsuba/render/eradiate/sphere_utils.h>
+// #ERADIATE_CHANGE_END
+
 #include <drjit/texture.h>
 
 NAMESPACE_BEGIN(mitsuba)
@@ -77,48 +81,41 @@ public:
 
 // #ERADIATE_CHANGE_BEGIN: Local extremum support
     /**
-     * \brief Compute local extrema over a spatial region
+     * \brief Bounds of \ref eval over a world-space box.
      *
-     * Returns the maximum value (majorant) and minimum value (minorant)
-     * over the specified bounding box region.
-     * Only fully implemented for grid-based volumes.
+     * Valid for any consumer and any volume: the returned bounds are always
+     * correct, possibly loose. The default implementation returns
+     * <tt>(0, max())</tt>.
      *
-     * \param bbox  Bounding box defining the query region in local space
+     * \param bbox  Query region in world space
      * \return (minorant, majorant) pair
      */
-    virtual std::pair<Float, Float>
-    extremum(BoundingBox3f bbox, Mask local = true) const;
+    virtual std::pair<Float, Float> extremum(const BoundingBox3f &bbox) const;
 
     /**
-     * \brief Compute local majorant (maximum) over a spatial region
+     * \brief Bounds of \ref eval over a box in the volume's *native*
+     * parameterization, normalized to [0,1]^3.
      *
-     * Convenience method that returns only the majorant.
-     * The default implementation calls `extremum()` and returns
-     * the second element.
-     */
-    virtual Float majorant(const BoundingBox3f& bbox, Mask local = true) const {
-        return extremum(bbox, local).second;
-    }
-
-    /**
-     * \brief Compute local minorant (minimum) over a spatial region
+     * For Cartesian grids the axes are local grid coordinates; for
+     * spherical-coordinates volumes they are (r, theta, phi). Callers must
+     * first verify the parameterization via the matching frame capability
+     * (e.g. \ref spherical_frame()). The default implementation assumes local
+     * Cartesian axes and delegates to the world-space query.
      *
-     * Convenience method that returns only the minorant.
-     * The default implementation calls `extremum()` and returns
-     * the first element.
+     * \param bbox  Query region in the native parameterization, in [0,1]^3
+     * \return (minorant, majorant) pair
      */
-    virtual Float minorant(const BoundingBox3f& bbox, Mask local = true) const {
-        return extremum(bbox, local).first;
-    }
+    virtual std::pair<Float, Float> extremum_local(const BoundingBox3f &bbox) const;
 
     /**
-     * \brief Register an extremum structure to the list of structures to update
-     * on parameter changed.
-     * 
-     * \param extremum  Extremum structure to register for update.
+     * \brief Capability gate for radially parameterized volumes.
+     *
+     * Returns the spherical frame if this volume's native parameterization
+     * is (r, theta, phi). By default, returns an invalid frame.
      */
-    virtual void add_extremum_structure(ExtremumStructure* extremum);
-        
+    virtual SphericalParameters<ScalarFloat> spherical_frame() const {
+        return SphericalParameters<ScalarFloat>();
+    };
 // #ERADIATE_CHANGE_END
 
     /// Returns the bounding box of the volume
@@ -162,9 +159,9 @@ public:
 // #ERADIATE_CHANGE_BEGIN: Local extremum support
     /**
      * \brief A Scoped Guard that pins the reference count of the volume.
-     * 
+     *
      * Use for bulk operations in scalar mode.
-     */ 
+     */
     struct PinGuard {
         const Volume *volume;
         explicit PinGuard(const Volume* v) : volume(v) { volume->pin_ref_count(); }
@@ -197,7 +194,7 @@ protected:
     /// Pin the reference count of the data that constitutes the volume e.g. Texture/
     virtual void pin_ref_count() const {};
     /// Unpin the reference count.
-    virtual void unpin_ref_count() const {}; 
+    virtual void unpin_ref_count() const {};
 // #ERADIATE_CHANGE_END
 
 protected:
@@ -207,10 +204,6 @@ protected:
     ScalarBoundingBox3f m_bbox;
     /// Number of channels stored in the volume
     uint32_t m_channel_count;
-
-// #ERADIATE_CHANGE_BEGIN: Local extremum support
-    std::vector<ExtremumStructure*> m_extremum_structures;  
-// #ERADIATE_CHANGE_END
 
     MI_TRAVERSE_CB(Object)
 };
