@@ -75,7 +75,12 @@ template <typename Ptr, typename Cls> void bind_extremum_structure_generic(Cls &
                 return ptr->eval_1(it, active);
             },
             "it"_a, "active"_a = true,
-            D(ExtremumStructure, eval_1));
+            D(ExtremumStructure, eval_1))
+       .def("next_segment",
+            [](Ptr ptr, const Ray3f &ray, Float t, Mask active) {
+                return ptr->next_segment(ray, t, active);
+            },
+            "ray"_a, "t"_a, "active"_a = true);
 }
 
 
@@ -87,6 +92,8 @@ MI_PY_EXPORT(ExtremumStructure) {
     auto extremum = MI_PY_TRAMPOLINE_CLASS(PyExtremumStructure, ExtremumStructure, Object)
         .def(nb::init<const Properties &>(), "props"_a)
         .def("__repr__", &ExtremumStructure::to_string)
+        .def("build", &ExtremumStructure::build,
+             "domain"_a, "sigma_t"_a, "scale"_a = 1.f)
         .def("bbox", &ExtremumStructure::bbox, D(ExtremumStructure, bbox));
 
     drjit::bind_traverse(extremum);

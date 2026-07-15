@@ -13,7 +13,7 @@ NAMESPACE_BEGIN(mitsuba)
  * \brief Abstract base class for extremum structures
  *
  * ExtremumStructure provides an interface for spatial data structures that
- * store local extrema (majorant/minorant) of volumetric extinction coefficients.
+ * store local extrema (majorant/minorant) of volumetric values.
  * This enables efficient delta tracking with locally-adaptive majorants.
  *
  * To minimize virtual function overhead, the ``traverse_extremum()`` method
@@ -23,13 +23,43 @@ NAMESPACE_BEGIN(mitsuba)
 template <typename Float, typename Spectrum>
 class MI_EXPORT_LIB ExtremumStructure : public JitObject<ExtremumStructure<Float, Spectrum>> {
 public:
-    MI_IMPORT_TYPES(Medium, Sampler)
+    MI_IMPORT_TYPES(Medium, Sampler, Volume)
 
     using TrackingStateType    = TrackingState<Float, Spectrum>;
     using TrackingFunctionType = TrackingFunction<Float, Spectrum>;
 
     /// Destructor
     ~ExtremumStructure();
+
+    /**
+     * \brief Build the extremum structure of \c sigma_t over \c domain.
+     *
+     * Called by the owning medium at construction and parameter update.
+     * The default implementation throws.
+     *
+     * \param domain  Support bound of the medium's extinction in world
+     *                space; may be larger than the volume's bounding box
+     *                (infinite extents allowed)
+     * \param volume  Volume to compute bounds from
+     * \param scale   Scale factor applied to the volume values
+     */
+    virtual void build(const ScalarBoundingBox3f &domain,
+                       const Volume *volume, ScalarFloat scale);
+
+    /**
+     * \brief Return the segment <tt>[t, t_exit)</tt> containing distance
+     * \c t along \c ray, with the structure's local extrema.
+     *
+     * Stateless query in world-t parameterization. Conventions:
+     *
+     * - Segments are half-open <tt>[mint, maxt)</tt> and tile exactly:
+     *   feeding \c maxt back as the next \c t yields the adjacent segment.
+     * - Outside the domain, empty segments are returned — <tt>[t, enter)</tt>
+     *   or <tt>[t, +inf)</tt> with value (0, 0): outside the domain the
+     *   value is zero by construction.
+     */
+    virtual ExtremumSegment next_segment(const Ray3f &ray, Float t,
+                                         Mask active = true) const;
 
     /**
      * \brief Traverse the extremum along a ray and applies a callback at each
@@ -103,9 +133,22 @@ protected:
     ExtremumStructure();
     ExtremumStructure(const Properties &props);
 
+    /**
+     * \brief Record the build inputs; to be called by build() implementations.
+     *
+     * Sets the structure's bounding box to the domain and throws if the
+     * structure was already built for a different (domain, volume) pair —
+     * one extremum structure belongs to exactly one medium.
+     */
+    void set_domain(const ScalarBoundingBox3f &domain, const Volume *volume);
+
 protected:
-    /// Bounding box of the extremum structure in world space
+    /// Bounding box of the extremum structure in world space (== the domain)
     ScalarBoundingBox3f m_bbox;
+
+    /// Identity of the volume this structure was built for. Not dereferenced,
+    /// only used for identity check.
+    const Volume *m_built_volume = nullptr;
 };
 
 MI_EXTERN_CLASS(ExtremumStructure)
@@ -117,6 +160,7 @@ NAMESPACE_END(mitsuba)
 
 DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::ExtremumStructure)
     DRJIT_CALL_METHOD(traverse_extremum)
+    DRJIT_CALL_METHOD(next_segment)
     DRJIT_CALL_METHOD(eval_1)
 DRJIT_CALL_END()
 
