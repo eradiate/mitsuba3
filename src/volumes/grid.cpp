@@ -13,6 +13,7 @@
 NAMESPACE_BEGIN(mitsuba)
 
 
+// #ERADIATE_CHANGE_BEGIN: Overlapping media
 /**!
 .. _volume-gridvolume:
 
@@ -56,6 +57,11 @@ Grid-based volume data source (:monosp:`gridvolume`)
 
      - ``nearest``: disable interpolation. In this mode, the plugin
        performs nearest neighbor lookups of volume values.
+
+ * - wrap
+   - |bool|
+   - Specify whether wrap conditions should be applied outside of [0,1]^3. When
+     not applied, queries outside the domain evaluate to zero (Default: true).
 
  * - wrap_mode
    - |string|
@@ -142,6 +148,7 @@ little endian encoding and is specified as follows:
         }
 
 */
+// #ERADIATE_CHANGE_END
 
 /**
  * Interpolated 3D grid texture of scalar or color values.
@@ -159,7 +166,7 @@ little endian encoding and is specified as follows:
 template <typename Float, typename Spectrum>
 class GridVolume final : public Volume<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(Volume, update_bbox, m_to_local, m_bbox, m_channel_count, m_extremum_structures)
+    MI_IMPORT_BASE(Volume, update_bbox, m_to_local, m_bbox, m_channel_count)
     MI_IMPORT_TYPES(VolumeGrid, ExtremumStructure)
 
     GridVolume(const Properties &props) : Base(props) {
@@ -172,6 +179,10 @@ public:
         else
             Throw("Invalid filter type \"%s\", must be one of: \"nearest\" or "
                   "\"trilinear\"!", filter_type_str);
+
+// #ERADIATE_CHANGE_BEGIN: Overlapping media
+        m_wrap = props.get<bool>("wrap", true);
+// #ERADIATE_CHANGE_END
 
         std::string_view wrap_mode_st = props.get<std::string_view>("wrap_mode", "clamp");
         dr::WrapMode wrap_mode;
@@ -279,11 +290,11 @@ public:
                     channel_count
                 };
                 m_texture = Texture3f(TensorXf(volume_grid->data(), 4, shape),
-                                      m_accel, m_accel, filter_mode, wrap_mode);             
+                                      m_accel, m_accel, filter_mode, wrap_mode);
                 m_max = volume_grid->max();
                 m_max_per_channel.resize(volume_grid->channel_count());
                 volume_grid->max_per_channel(m_max_per_channel.data());
-                
+
                 m_min = volume_grid->min();
                 m_min_per_channel.resize(volume_grid->channel_count());
                 volume_grid->min_per_channel(m_min_per_channel.data());
@@ -344,14 +355,7 @@ public:
 
             if (!m_fixed_min)
                 m_min = (float) dr::min_nested(dr::detach(m_texture.value()));
-
-// #ERADIATE_CHANGE_BEGIN: Spatial extremum queries for grid volumes
-            for (auto extremum : m_extremum_structures) {
-                if(extremum != nullptr)
-                    extremum->parameters_changed(keys);
-            }
         }
-// #ERADIATE_CHANGE_END
     }
 
     UnpolarizedSpectrum eval(const Interaction3f &it,
@@ -463,7 +467,10 @@ public:
     }
 
 // #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
-    ScalarFloat min() const override { return m_min; }
+    ScalarFloat min() const override {
+        // possibility to evaluate to zero outside [0,1]^3
+        return m_wrap ? m_min : 0.f;
+    }
 
     void min_per_channel(ScalarFloat *out) const override {
         for (size_t i=0; i<m_min_per_channel.size(); ++i)
@@ -473,35 +480,56 @@ public:
 
 // #ERADIATE_CHANGE_BEGIN: Spatial extremum queries for grid volumes
     std::pair<Float, Float>
-    extremum(BoundingBox3f bbox, Mask local) const override {
+    extremum(const BoundingBox3f &bbox) const override {
+        // AABB of the query box corners in local space, conservative under rotation.
+        BoundingBox3f local;
+        for (uint32_t i = 0; i < 8; ++i)
+            local.expand(m_to_local * bbox.corner(i));
+        return extremum_local(local);
+    }
+
+    std::pair<Float, Float>
+    extremum_local(const BoundingBox3f &bbox) const override {
 
         if (m_texture.shape()[3] != 1)
             NotImplementedError("extremum() only supported for single-channel volumes");
 
-        if (dr::any(!local))
-            NotImplementedError("Grid only supports local bounds")
+        dr::WrapMode wrap_mode = m_texture.wrap_mode();
+        Mask clip_mask = wrap_mode == dr::WrapMode::Clamp || !m_wrap;
 
-        bbox.clip(BoundingBox3f(Point3f(0.f), Point3f(1.f)));
+        Point3f bbox_min = bbox.min;
+        Point3f bbox_max = bbox.max;
+        dr::masked(bbox_min, clip_mask) = dr::clip(bbox_min, 0.f, 1.f);
+        dr::masked(bbox_max, clip_mask) = dr::clip(bbox_max, 0.f, 1.f);
+        BoundingBox3f clipped_bbox(bbox_min, bbox_max);
 
-        // early exit in scalar mode
-        if (dr::any_or<false>(!bbox.valid()))
-            return { 0.f, 0.f };
+        Mask partial_overlap = dr::any((bbox.min < 0.f) || (bbox.max > 1.f));
+        Mask no_overlap = dr::any((bbox.max < 0.f) || (bbox.min > 1.f));
 
-        Mask active = bbox.valid();
-        const Vector3i res = resolution();
+        const ScalarVector3i res = resolution();
+        dr::divisor<int32_t> inv_res[3];
+        for (size_t i = 0; i < 3; ++i) {
+            inv_res[i] = dr::divisor<int32_t>((uint32_t) res[i]);
+        }
 
-        // Convert to voxel indices with proper padding for interpolation
+        // Convert to voxel indices with proper padding for interpolation.
         int32_t padding =
             (m_texture.filter_mode() == dr::FilterMode::Linear) ? 1 : 0;
 
-        Vector3i voxel_min =
-            dr::maximum(dr::floor(bbox.min * Vector3f(res)) - Vector3i(padding),
-                        Vector3i(0));
-        Vector3i voxel_max = dr::minimum(
-            dr::floor(bbox.max * Vector3f(res)) + Vector3i(padding), res - 1);
+        Vector3i voxel_min = dr::floor2int<Vector3i>(clipped_bbox.min * Vector3f(res)) - padding;
+        Vector3i voxel_max = dr::floor2int<Vector3i>(clipped_bbox.max * Vector3f(res)) + padding;
 
-        UInt32 n       = dr::prod((voxel_max - voxel_min) + 1);
+        // limit lookup to one period.
         Vector3i range = (voxel_max - voxel_min) + 1;
+        dr::masked(range, wrap_mode == dr::WrapMode::Repeat) = dr::minimum(range, res);
+        dr::masked(range, wrap_mode == dr::WrapMode::Mirror) = dr::minimum(range, 2 * res);
+        dr::masked(voxel_max, wrap_mode != dr::WrapMode::Clamp) = voxel_min + range - 1;
+
+        dr::masked(voxel_min, clip_mask) = dr::clip( voxel_min, Vector3i(0), res - 1);
+        dr::masked(voxel_max, clip_mask) = dr::clip( voxel_max, Vector3i(0), res - 1);
+
+        Mask active = true;
+        UInt32 n       = dr::prod((voxel_max - voxel_min) + 1);
 
         // Scan voxels in bounds and find min/max
         Float max_val = -dr::Infinity<Float>;
@@ -509,16 +537,18 @@ public:
 
         if constexpr ( !dr::is_jit_v<Float>){
             // If possible use pinned data to avoid ref count issues.
-            const ScalarFloat *data = m_pinned_data 
-                                    ? m_pinned_data 
+            const ScalarFloat *data = m_pinned_data
+                                    ? m_pinned_data
                                     : m_texture.tensor().data();
 
             for (int32_t z = voxel_min.z(); z <= voxel_max.z(); ++z) {
                 for (int32_t y = voxel_min.y(); y <= voxel_max.y(); ++y) {
                     for (int32_t x = voxel_min.x(); x <= voxel_max.x(); ++x) {
-                        size_t idx = ( x 
-                                    + y * res.x() 
-                                    + z * res.x() * res.y() );
+                        Vector3i pi = wrap<Vector3i>(Vector3i(x,y,z), res, inv_res, wrap_mode);
+                        size_t idx = ( pi.x()
+                                    + pi.y() * res.x()
+                                    + pi.z() * res.x() * res.y() );
+
                         ScalarFloat val = data[idx];
                         max_val = dr::maximum(max_val, val);
                         min_val = dr::minimum(min_val, val);
@@ -547,7 +577,7 @@ public:
             dr::tie(ls) = dr::while_loop(
                 dr::make_tuple(ls),
                 [](const LoopState &ls) { return ls.active; },
-                [array, res, n, voxel_min, range](LoopState &ls) {
+                [array, res, inv_res, n, voxel_min, range, wrap_mode](LoopState &ls) {
                     Float &min_val = ls.min_val;
                     Float &max_val = ls.max_val;
                     Mask &active   = ls.active;
@@ -556,9 +586,10 @@ public:
                     UInt32 x = voxel_min.x() + ls.x;
                     UInt32 y = voxel_min.y() + ls.y;
                     UInt32 z = voxel_min.z() + ls.z;
+                    Vector3i pi = wrap<Vector3i>(Vector3i(x,y,z), res, inv_res, wrap_mode);
 
                     // serial index
-                    UInt32 tex_idx = x + y * res.x() + z * res.x() * res.y();
+                    UInt32 tex_idx = pi.x() + pi.y() * res.x() + pi.z() * res.x() * res.y();
 
                     Float val = dr::gather<Float>(array, tex_idx, active);
                     dr::masked(max_val, active) = dr::maximum(max_val, val);
@@ -579,9 +610,11 @@ public:
                     ls.active &= ls.z < range.z();
                 });
             max_val = ls.max_val;
-            min_val = ls.min_val; 
+            min_val = ls.min_val;
         }
 
+        min_val = dr::select(!m_wrap && partial_overlap, 0.f, min_val);
+        max_val = dr::select(!m_wrap && no_overlap, 0.f, max_val);
         return { min_val, max_val };
     }
 // #ERADIATE_CHANGE_END
@@ -634,6 +667,12 @@ protected:
         MI_MASK_ARGUMENT(active);
 
         Point3f p = m_to_local * it.p;
+// #ERADIATE_CHANGE_BEGIN: add `none` as wrap parameter.
+        active &= !(!m_wrap && dr::any((p < 0.f) || (p > 1.f)));
+        if (dr::any_or<false>(!active)) {
+            return 0.f;
+        }
+// #ERADIATE_CHANGE_END
 
         if (m_texture.filter_mode() == dr::FilterMode::Linear) {
             dr::Array<Float, 4> d000, d100, d010, d110, d001, d101, d011, d111;
@@ -709,6 +748,13 @@ protected:
         MI_MASK_ARGUMENT(active);
 
         Point3f p = m_to_local * it.p;
+// #ERADIATE_CHANGE_BEGIN: add `none` as wrap parameter.
+        active &= !(!m_wrap && dr::any((p < 0.f) || (p > 1.f)));
+        if (dr::any_or<false>(!active)) {
+            return 0.f;
+        }
+// #ERADIATE_CHANGE_END
+
         Float result;
         if (m_accel)
             m_texture.template eval<Float>(p, &result, active);
@@ -728,6 +774,13 @@ protected:
         MI_MASK_ARGUMENT(active);
 
         Point3f p = m_to_local * it.p;
+// #ERADIATE_CHANGE_BEGIN: add `none` as wrap parameter.
+        active &= !(!m_wrap && dr::any((p < 0.f) || (p > 1.f)));
+        if (dr::any_or<false>(!active)) {
+            return 0.f;
+        }
+// #ERADIATE_CHANGE_END
+
         Color3f result;
         if (m_accel)
             m_texture.template eval<Float>(p, result.data(), active);
@@ -747,6 +800,13 @@ protected:
         MI_MASK_ARGUMENT(active);
 
         Point3f p = m_to_local * it.p;
+// #ERADIATE_CHANGE_BEGIN: add `none` as wrap parameter.
+        active &= !(!m_wrap && dr::any((p < 0.f) || (p > 1.f)));
+        if (dr::any_or<false>(!active)) {
+            return 0.f;
+        }
+// #ERADIATE_CHANGE_END
+
         dr::Array<Float, 6> result;
         if (m_accel)
             m_texture.template eval<Float>(p, result.data(), active);
@@ -767,6 +827,13 @@ protected:
         MI_MASK_ARGUMENT(active);
 
         Point3f p = m_to_local * it.p;
+// #ERADIATE_CHANGE_BEGIN: add `none` as wrap parameter.
+        active &= !(!m_wrap && dr::any((p < 0.f) || (p > 1.f)));
+        if (dr::any_or<false>(!active)) {
+            return;
+        }
+// #ERADIATE_CHANGE_END
+
         if (m_accel)
             m_texture.template eval<Float>(p, out, active);
         else
@@ -788,6 +855,9 @@ protected:
     Texture3f m_texture;
     bool m_accel;
     bool m_raw;
+// #ERADIATE_CHANGE_BEGIN: add `none` as wrap parameter.
+    bool m_wrap = true;
+// #ERADIATE_CHANGE_END
     bool m_fixed_max = false;
     ScalarFloat m_max;
     std::vector<ScalarFloat> m_max_per_channel;
@@ -796,7 +866,7 @@ protected:
     ScalarFloat m_min;
     std::vector<ScalarFloat> m_min_per_channel;
 // #ERADIATE_CHANGE_END
-    
+
 // #ERADIATE_CHANGE_BEGIN: Local extremum support
     mutable const ScalarFloat* m_pinned_data = nullptr;
 // #ERADIATE_CHANGE_END

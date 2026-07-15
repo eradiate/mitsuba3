@@ -8,7 +8,7 @@
 #include <mitsuba/render/texture.h>
 
 // #ERADIATE_CHANGE_BEGIN: Local extremum support
-#include <mitsuba/render/eradiate/sphere_utils.h>
+#include <mitsuba/render/eradiate/volume_utils.h>
 // #ERADIATE_CHANGE_END
 
 #include <drjit/texture.h>

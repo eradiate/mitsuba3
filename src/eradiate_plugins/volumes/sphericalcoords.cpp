@@ -100,10 +100,6 @@ public:
         update_bbox_sphere();
     }
 
-    void add_extremum_structure(ExtremumStructure* extremum) override {
-        m_volume->add_extremum_structure(extremum);
-    }
-
     UnpolarizedSpectrum eval(const Interaction3f &it, Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::TextureEvaluate, active);
 
@@ -153,29 +149,22 @@ public:
     }
 
     ScalarFloat max() const override { return dr::maximum(dr::maximum(m_volume->max(), m_fillmin), m_fillmax); }
-    
+
     ScalarFloat min() const override { return dr::minimum(dr::minimum(m_volume->min(), m_fillmin), m_fillmax); }
 
     ScalarVector3i resolution() const override { return m_volume->resolution(); };
 
 // #ERADIATE_CHANGE_BEGIN: Spatial extremum queries for grid volumes
     std::pair<Float, Float>
-    extremum(BoundingBox3f bbox, Mask local) const override {
-        
-        if (dr::any(!local))
-            NotImplementedError("SphericalCoords only supports local bounds");
+    extremum_local(const BoundingBox3f &bbox) const override {
+        // Local bounds parametrization (r_norm, theta_norm, phi_norm) in [0,1]^3.
 
-        // local_bounds is in normalized [0,1]^3 space (r_norm, theta_norm, phi_norm).
-        // The nested volume uses the same coordinate convention, so we forward
-        // directly after clamping to [0,1].
-
-        // Clamp bounds to valid [0,1]^3 range for the nested volume query
         BoundingBox3f clamped_bounds(
             dr::maximum(bbox.min, Point3f(0.f)),
             dr::minimum(bbox.max, Point3f(1.f))
         );
 
-        auto [min, maj]= m_volume->extremum(clamped_bounds);
+        auto [min, maj] = m_volume->extremum_local(clamped_bounds);
 
         // If the r-range extends below 0 (below rmin), include fillmin
         Mask below_rmin = bbox.min.x() < 0.f;
@@ -188,6 +177,14 @@ public:
         dr::masked(min, above_rmax) = dr::minimum(min, Float(m_fillmax));
 
         return { min, maj };
+    }
+
+    SphericalParameters<ScalarFloat> spherical_frame() const override {
+        ScalarAffineTransform4f to_world = m_to_local.inverse();
+        ScalarFloat scale = dr::norm(to_world * ScalarVector3f(1.f, 0.f, 0.f));
+        return SphericalParameters<ScalarFloat>{
+            to_world.translation(), m_rmin * scale, m_rmax * scale
+        };
     }
 
     typename Base::PinGuard pin() const override { return m_volume->pin(); };
