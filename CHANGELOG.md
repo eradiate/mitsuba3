@@ -11,17 +11,20 @@ strive to document breaking API changes in the release notes below.
 ### New features
 
 - **`eoheterogeneous` medium**: A new heterogeneous that replicates and extends
-  the upstream `heterogeneous` medium. Introduces a seperate bounding box 
+  the upstream `heterogeneous` medium. Introduces a separate bounding box
   parametrization that allows the medium to have a different bounding box to
   the underlying `sigma_t` volume bbox. In turns allows to exploit the wrap
   mechanism of the volume and implement periodic boundaries.
 
 ### Improvements
 
-- Improve the *DDIS* (Detector Directional Importance Sampling) variance 
-  reduction technique by generating DDIS phase functions, envelopes of the 
+- Improve the *DDIS* (Detector Directional Importance Sampling) variance
+  reduction technique by generating DDIS phase functions, envelopes of the
   max phase function used in a medium. Implemented by `piecewise` and
   `eoheterogeneous` media.
+- Implement prediction-based splitting (PBS) and N-tuple local estimate (NLE)
+  variance reduction methods, completing work on VROOM method support in the
+  `eovolpath` integrator.
 
 ## v0.5.0 (9th June 2026)
 
