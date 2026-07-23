@@ -185,7 +185,7 @@ MI_VARIANT void ShapeGroup<Float, Spectrum>::optix_build_gas(const OptixDeviceCo
 #endif
 
 #if defined(MI_ENABLE_EMBREE)
-MI_VARIANT RTCGeometry ShapeGroup<Float, Spectrum>::embree_geometry(RTCDevice device) {
+MI_VARIANT RTCScene ShapeGroup<Float, Spectrum>::embree_scene(RTCDevice device) {
     DRJIT_MARK_USED(device);
     if constexpr (!dr::is_cuda_v<Float>) {
         if (m_dirty) {
@@ -216,12 +216,17 @@ MI_VARIANT RTCGeometry ShapeGroup<Float, Spectrum>::embree_geometry(RTCDevice de
             m_dirty = false;
         }
 
-        RTCGeometry instance = rtcNewGeometry(device, RTC_GEOMETRY_TYPE_INSTANCE);
-        rtcSetGeometryInstancedScene(instance, m_embree_scene);
-        return instance;
+        return m_embree_scene;
     } else {
-        Throw("embree_geometry() should only be called in CPU mode.");
+        Throw("embree_scene() should only be called in CPU mode.");
     }
+}
+
+MI_VARIANT RTCGeometry ShapeGroup<Float, Spectrum>::embree_geometry(RTCDevice device) {
+    RTCScene scene = embree_scene(device);
+    RTCGeometry instance = rtcNewGeometry(device, RTC_GEOMETRY_TYPE_INSTANCE);
+    rtcSetGeometryInstancedScene(instance, scene);
+    return instance;
 }
 #endif
 

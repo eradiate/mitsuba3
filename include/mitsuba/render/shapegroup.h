@@ -28,6 +28,10 @@ public:
 
 #if defined(MI_ENABLE_EMBREE)
     RTCGeometry embree_geometry(RTCDevice device) override;
+
+    /// Build (if needed) and return the group's private embree scene directly,
+    /// without wrapping it in an RTC_GEOMETRY_TYPE_INSTANCE geometry.
+    RTCScene embree_scene(RTCDevice device);
 #else
     std::tuple<ScalarFloat, ScalarPoint2f, ScalarUInt32, ScalarUInt32>
     ray_intersect_preliminary_scalar(const ScalarRay3f &ray) const override;
