@@ -166,7 +166,9 @@ little endian encoding and is specified as follows:
 template <typename Float, typename Spectrum>
 class GridVolume final : public Volume<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(Volume, update_bbox, m_to_local, m_bbox, m_channel_count)
+// #ERADIATE_CHANGE_BEGIN: Local extrema support
+    MI_IMPORT_BASE(Volume, update_bbox, m_to_local, m_bbox, m_channel_count, m_dirty)
+// #ERADIATE_CHANGE_END
     MI_IMPORT_TYPES(VolumeGrid, ExtremumStructure)
 
     GridVolume(const Properties &props) : Base(props) {
@@ -356,6 +358,10 @@ public:
             if (!m_fixed_min)
                 m_min = (float) dr::min_nested(dr::detach(m_texture.value()));
         }
+
+// #ERADIATE_CHANGE_BEGIN: Local extrema support
+        m_dirty = true;
+// #ERADIATE_CHANGE_END
     }
 
     UnpolarizedSpectrum eval(const Interaction3f &it,

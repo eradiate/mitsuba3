@@ -21,38 +21,17 @@ Extremum spherical structure (:monosp:`extremum_spherical`)
 
 .. pluginparameters::
 
- * - volume
-   - |volume|
-   - Spherical-coordinates volume to build extremum from
-   - |exposed|
-
- * - to_world
-   - |transform|
-   - Specifies an optional 4×4 transformation matrix that will be applied to
-     volume coordinates.
-
- * - rmin
-   - |float|
-   - Inner shell radius. It should preferably match the underlying volume.
-     Default: 0
-
- * - rmax
-   - |float|
-   - Outer shell radius. It should preferably match the underlying volume.
-     Default: 1
-
  * - resolution
    - |vector|
    - Grid resolution as :math:`(r, \theta, \phi)`. Grids with variations on only
      the radial resolution have optimized traversal. Default: [1,1,1]
 
- * - scale
-   - |float|
-   - Scale factor for extinction coefficients. Default: 1.0
-
 This plugin creates a spherical extremum structure storing local extremum values
-for efficient delta tracking in spherical media. The grid is constructed by
-querying the underlying volume's extrema over each spherical cell.
+for efficient delta tracking in spherical media. All geometric information
+(domain, extinction volume, scale) is provided by the owning medium through
+\ref ExtremumStructure::build(); the shell center and radial extent are derived
+from the volume's spherical frame. The grid is constructed by querying the
+underlying volume's extrema over each spherical cell.
 
 At runtime, concentric shell traversal provides tight-fitting local extremum for
 radially-varying media such as planetary atmospheres.
@@ -81,14 +60,6 @@ public:
         } else {
             m_traversal_type = SphericalTraversalType::Full3D;
         }
-
-        // Mark all properties as queried so they don't warn in expand()
-        props.mark_queried("volume");
-        props.mark_queried("to_world");
-        props.mark_queried("rmin");
-        props.mark_queried("rmax");
-        props.mark_queried("resolution");
-        props.mark_queried("scale");
     }
 
     template <SphericalTraversalType TT>
@@ -136,7 +107,7 @@ protected:
 template <typename Float, typename Spectrum, SphericalTraversalType TraversalType>
 class ExtremumSphericalImpl final : public ExtremumStructure<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(ExtremumStructure, m_bbox)
+    MI_IMPORT_BASE(ExtremumStructure, m_bbox, set_domain)
     MI_IMPORT_TYPES(Volume)
 
     using TrackingStateType    = TrackingState<Float, Spectrum>;
@@ -144,45 +115,35 @@ public:
     using FloatStorage         = DynamicBuffer<Float>;
 
     ExtremumSphericalImpl(const Properties &props) : Base(props) {
-        // Get volume
-        ref<Volume> volume = nullptr;
-        for (auto &prop : props.objects()) {
-            if (auto *vol = prop.try_get<Volume>()) {
-                volume = vol;
-                break;
-            }
-        }
-
-        if (!volume)
-            Throw("ExtremumSpherical requires a volume");
-
-        m_volume = volume;
-        m_bbox = m_volume->bbox();
-        // Register the extremum structure to the volume.
-        volume->add_extremum_structure(this);
-
-        ScalarAffineTransform4f to_world = props.get<ScalarAffineTransform4f>(
-            "to_world", ScalarAffineTransform4f());
-        m_center   = to_world.translation();
-        m_to_local = to_world.inverse();
-
-        m_rmin = props.get<ScalarFloat>("rmin", 0.f);
-        m_rmax = props.get<ScalarFloat>("rmax", 1.f);
         m_resolution =
             props.get<ScalarVector3i>("resolution", ScalarVector3i(1, 1, 1));
-        m_scale = props.get<ScalarFloat>("scale", 1.0f);
+    }
+
+    void build(const ScalarBoundingBox3f &domain, const Volume *volume,
+               ScalarFloat scale) override {
+        set_domain(domain, volume);
+        m_scale = scale;
+
+        // Correctness gate, not a tightness hint: the axis meanings of the
+        // extremum_local queries below depend on the volume's native
+        // parameterization being (r, theta, phi).
+        SphericalParameters<ScalarFloat> frame = volume->spherical_frame();
+        if (!frame.valid())
+            Throw("extremum_spherical: the volume volume does not expose a "
+                  "spherical frame (e.g. sphericalcoordsvolume); its "
+                  "extremum_local axes would be misinterpreted!");
+
+        m_center = frame.center;
+        m_rmin   = frame.rmin;
+        m_rmax   = frame.rmax;
 
         if (m_rmin >= m_rmax)
             Throw("rmin must be less than rmax!");
 
-        m_dr = (m_rmax - m_rmin) / m_resolution.x();
+        m_dr  = (m_rmax - m_rmin) / m_resolution.x();
         m_idr = dr::rcp(m_dr);
 
-        build_grid(m_volume.get());
-    }
-
-    void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override {
-        build_grid(m_volume.get());
+        build_grid(volume);
     }
 
     TrackingStateType traverse_extremum(
@@ -210,17 +171,66 @@ public:
         }
     }
 
+    ExtremumSegment next_segment(const Ray3f &ray, Float t,
+                                 Mask active) const override {
+        auto [hit, d0, d1] = m_bbox.ray_intersect(ray);
+
+        // Forward nudge: select the radial layer at p(t + eps), but measure
+        // exit distances from exact p(t)
+        Float eps = dr::maximum(dr::abs(t), 1.f) * math::RayEpsilon<Float>;
+        Float tq  = t + eps;
+
+        Mask before = hit && (tq < d0);
+        Mask inside = hit && !before && (tq < d1);
+
+        Float r = dr::norm(ray(tq) - m_center);
+        Int32 layer = dr::clip(dr::floor2int<Int32>((r - m_rmin) * m_idr),
+                               -1, m_resolution.x());
+        Mask below = layer < 0, above = layer >= m_resolution.x();
+
+        // Nearest crossing (> tq) of the two shells bounding the current
+        // radial region; the domain exit caps the segment
+        Vector3f oc  = ray.o - m_center;
+        Float a      = dr::squared_norm(ray.d);
+        Float b_half = dr::dot(oc, ray.d);
+        Float c0     = dr::squared_norm(oc);
+        Float inv_a  = dr::rcp(a);
+
+        Float t_exit = d1;
+        auto consider = [&](const Float &r_test, const Mask &valid)
+            DRJIT_INLINE_LAMBDA {
+            Float disc = dr::fmsub(b_half, b_half, a * (c0 - dr::square(r_test)));
+            Mask v = valid && (disc >= 0.f);
+            Float sq = dr::sqrt(dr::maximum(disc, 0.f));
+            Float t0 = (-b_half - sq) * inv_a;
+            Float t1 = (-b_half + sq) * inv_a;
+            dr::masked(t_exit, v && (t0 > tq) && (t0 < t_exit)) = t0;
+            dr::masked(t_exit, v && (t1 > tq) && (t1 < t_exit)) = t1;
+        };
+        consider(m_rmin + Float(layer) * m_dr, !below);      // inner shell
+        consider(m_rmin + Float(layer + 1) * m_dr, !above);  // outer shell
+
+        UInt32 gidx = UInt32(dr::clip(layer, 0, m_resolution.x() - 1));
+        Vector2f value = dr::gather<Vector2f>(
+            m_extremum_grid, gidx, active && inside && !below && !above);
+        dr::masked(value, below) = Vector2f(m_fill_inner);
+        dr::masked(value, above) = Vector2f(m_fill_outer);
+
+        Float maxt = dr::select(
+            inside, dr::maximum(t_exit, tq),
+            dr::select(before, d0, dr::Infinity<Float>));
+
+        return ExtremumSegment(t, maxt,
+                               dr::select(inside, value, Vector2f(0.f)));
+    }
+
     std::tuple<Float, Float> eval_1(
         const Interaction3f &it,
         Mask active
     ) const override {
-        Point3f po = m_to_local * it.p;
-        Float r = dr::norm(po);
+        Float r = dr::norm(it.p - m_center);
+        Mask below = r < m_rmin, above = r > m_rmax;
 
-        Float fillval = -1.f;
-        dr::masked(fillval, r < m_rmin) = m_fillmin;
-        dr::masked(fillval, r > m_rmax) = m_fillmax;
-        Mask fill = fillval > 0.f;
         Vector2f extremum = dr::zeros<Vector2f>();
 
         if constexpr (TraversalType == SphericalTraversalType::RadialOnly) {
@@ -229,15 +239,14 @@ public:
                 dr::floor2int<UInt32>((r - m_rmin) * m_idr),
                 0u, (uint32_t)(m_resolution.x() - 1)
             );
-            extremum = dr::gather<Vector2f>(m_extremum_grid, ir, active && !fill);
-
+            extremum = dr::gather<Vector2f>(m_extremum_grid, ir,
+                                            active && !below && !above);
         } else if constexpr (TraversalType == SphericalTraversalType::Full3D) {
             Throw("Full3D spherical evaluation is not yet implemented!");
         }
 
-        extremum = dr::select(
-                fill, Vector2f(fillval, fillval), extremum
-        );
+        dr::masked(extremum, below) = Vector2f(m_fill_inner);
+        dr::masked(extremum, above) = Vector2f(m_fill_outer);
 
         return { extremum.x(), extremum.y() };
     }
@@ -245,7 +254,6 @@ public:
     void traverse(TraversalCallback *cb) override {
         cb->put("data", m_extremum_grid, ParamFlags::NonDifferentiable);
         cb->put("resolution", m_resolution, ParamFlags::NonDifferentiable);
-        cb->put("scale", m_scale, ParamFlags::NonDifferentiable);
         Base::traverse(cb);
     }
 
@@ -257,11 +265,11 @@ public:
                 ? "RadialOnly" : "Full3D")
             << "," << std::endl
             << "  resolution = " << m_resolution << "," << std::endl
-            << "  to_world = "   << m_to_local.inverse() << "," << std::endl
+            << "  center = "     << m_center << "," << std::endl
             << "  rmin = "       << m_rmin << "," << std::endl
-            << "  rmax = "       << m_rmax << std::endl
-            << "  fillmin = "    << m_fillmin << "," << std::endl
-            << "  fillmax = "    << m_fillmax << std::endl
+            << "  rmax = "       << m_rmax << "," << std::endl
+            << "  fill_inner = " << m_fill_inner << "," << std::endl
+            << "  fill_outer = " << m_fill_outer << std::endl
             << "]";
         return oss.str();
     }
@@ -308,7 +316,7 @@ private:
                             cell_min + math::RayEpsilon<Float>,
                             cell_max - math::RayEpsilon<Float>);
 
-                        auto [min, maj] = volume->extremum(cell_bounds);
+                        auto [min, maj] = volume->extremum_local(cell_bounds);
 
                         dr::scatter(m_extremum_grid,
                                     m_scale * Vector2f(min, maj) * safety_factor,
@@ -330,29 +338,42 @@ private:
                 cell_max - math::RayEpsilon<Float>
             );
 
-            auto [min, maj] = volume->extremum(cell_bounds);
+            auto [min, maj] = volume->extremum_local(cell_bounds);
 
             dr::scatter(m_extremum_grid, m_scale * min * safety_factor.x(), idx * 2);
             dr::scatter(m_extremum_grid, m_scale * maj * safety_factor.y(), idx * 2 + 1);
             dr::sync_thread();
         }
 
-        // Retrieve fillmin and fillmax
-        Interaction3f it = dr::zeros<Interaction3f>();
+        // Fill bounds: the radial analog of border-cell extension. The
+        // regions r < rmin and r > rmax are covered by bounds queries over
+        // the corresponding (out-of-range) radial intervals, which the
+        // volume folds into its fill values.
+        ScalarFloat rext = m_rmax - m_rmin;
 
-        it.p          = m_center;
-        Float fillmin = volume->eval_1(it, true) * m_scale;
+        auto query_fill = [&](ScalarFloat x0, ScalarFloat x1) -> ScalarVector2f {
+            auto [mn, mx] = volume->extremum_local(BoundingBox3f(
+                Point3f(x0, 0.f, 0.f), Point3f(x1, 1.f, 1.f)));
+            ScalarFloat mn_s, mx_s;
+            if constexpr (dr::is_jit_v<Float>) {
+                mn_s = mn[0]; mx_s = mx[0];
+            } else {
+                mn_s = mn; mx_s = mx;
+            }
+            return m_scale * ScalarVector2f(mn_s, mx_s) * safety_factor;
+        };
 
-        it.p          = m_center + m_rmax + ScalarVector3f(0.f, 0.f, 1.f);
-        Float fillmax = volume->eval_1(it, true) * m_scale;
+        m_fill_inner = m_rmin > 0.f
+            ? query_fill(-m_rmin / rext, 0.f)
+            : ScalarVector2f(0.f);
 
-        if constexpr (dr::is_jit_v<Float>) {
-            m_fillmin = fillmin[0];
-            m_fillmax = fillmax[0];
-        } else {
-            m_fillmin = fillmin;
-            m_fillmax = fillmax;
-        }
+        // Furthest domain point from the center bounds the outer region
+        ScalarFloat r_domain = 0.f;
+        for (uint32_t i = 0; i < 8; ++i)
+            r_domain = dr::maximum(
+                r_domain, dr::norm(m_bbox.corner(i) - m_center));
+        m_fill_outer =
+            query_fill(1.f, dr::maximum((r_domain - m_rmin) / rext, 1.f));
 
         Log(Info, "Extremum spherical grid constructed successfully");
     }
@@ -397,19 +418,15 @@ private:
     ) const {
         using StateD = std::decay_t<StateT>;
 
-        Ray3f local_ray(m_to_local * ray.o, // Normalize origin
-                        m_to_local * ray.d, // Normalize direction
-                        ray.time, ray.wavelengths);
-
         ExtremumSegment segment  = dr::zeros<ExtremumSegment>();
         Mask reached    = false;
         Float current_t = mint;
 
         // ray-sphere intersection info
-        Vector3f o      = local_ray.o - m_center;
+        Vector3f o      = ray.o - m_center;
         Float o_squared = dr::squared_norm(o);
-        Float a         = dr::squared_norm(local_ray.d);
-        Float b_half    = dr::dot(o, local_ray.d);
+        Float a         = dr::squared_norm(ray.d);
+        Float b_half    = dr::dot(o, ray.d);
 
         // Intersection value precomputation
         Float disc_base = b_half * b_half - a * o_squared;
@@ -417,7 +434,7 @@ private:
 
         // Find the current/next intersection (use this to calculate the
         // midpoint too)
-        Point3f pos = local_ray(mint + dr::Epsilon<Float> * 10.f);
+        Point3f pos = ray(mint + dr::Epsilon<Float> * 10.f);
         Vector3f oc = pos - m_center;
         Float r     = dr::norm(oc);
 
@@ -425,7 +442,7 @@ private:
         // layers.
         Int32 layer_idx = dr::clip(dr::floor2int<Int32>((r - m_rmin) * m_idr),
                                    -1, m_resolution.x());
-        Mask passed_midpoint = dr::dot((m_center - pos), local_ray.d) < 0;
+        Mask passed_midpoint = dr::dot((m_center - pos), ray.d) < 0;
         Int32 shell_padding  = dr::select(passed_midpoint, 1, 0);
         Int32 step           = dr::select(passed_midpoint, 1, -1);
 
@@ -468,10 +485,9 @@ private:
             const Int32 shell_idx = dr::clip(ls.layer_idx + ls.padding, 0, m_resolution.x());
 
             // Boundary condition of rmin and rmax
-            Float fill_value = -1.f;
-            dr::masked(fill_value, ls.layer_idx < 0) = m_fillmin;
-            dr::masked(fill_value, ls.layer_idx >= m_resolution.x()) = m_fillmax;
-            const Mask fill = fill_value >= 0.f;
+            const Mask below = ls.layer_idx < 0;
+            const Mask above = ls.layer_idx >= m_resolution.x();
+            const Mask fill  = below || above;
 
             // Test intersection with the shell
             const Float r_test = m_rmin + Float(shell_idx) * m_dr;
@@ -512,7 +528,8 @@ private:
                 // Look up extremum values for this shell
                 Vector2f extremum = dr::gather<Vector2f>(
                     m_extremum_grid, ls.layer_idx, ls.active && !fill);
-                extremum = dr::select(!fill, extremum, fill_value);
+                dr::masked(extremum, below) = Vector2f(m_fill_inner);
+                dr::masked(extremum, above) = Vector2f(m_fill_outer);
 
                 dr::masked(ls.segment, update) = ExtremumSegment(
                     ls.current_t, t_next, extremum
@@ -543,14 +560,11 @@ private:
     FloatStorage m_extremum_grid;
     ScalarVector3i m_resolution;
     ScalarFloat m_rmin, m_rmax;
-    ScalarFloat m_fillmin, m_fillmax;
+    ScalarVector2f m_fill_inner, m_fill_outer;
     ScalarPoint3f m_center;
     ScalarFloat m_dr, m_idr;
 
-    ref<Volume> m_volume;
-
-    ScalarFloat m_scale;
-    ScalarAffineTransform4f m_to_local;
+    ScalarFloat m_scale = 1.f;
 };
 
 

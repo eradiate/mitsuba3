@@ -12,18 +12,8 @@ NAMESPACE_BEGIN(mitsuba)
 Extremum global structure (:monosp:`extremum_global`)
 -----------------------------------------------------
 
-.. pluginparameters::
-
- * - volume
-   - |volume|
-   - Extinction coefficient volume to build extremum grid from.
-   - |exposed|
-
- * - scale
-   - |float|
-   - Scale factor for the extremum values. Default: 1.0
-
-This plugin holds the global minorant and majorant values of a volume.
+This plugin holds the global minorant and majorant values of a volume,
+computed by \ref ExtremumStructure::build(). It has no scene parameters.
 At runtime, traversal is performed via a single segment determined by the
 passed ``mint`` and ``maxt`` values.
 */
@@ -31,41 +21,20 @@ passed ``mint`` and ``maxt`` values.
 template <typename Float, typename Spectrum>
 class ExtremumGlobal final : public ExtremumStructure<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(ExtremumStructure, m_bbox)
+    MI_IMPORT_BASE(ExtremumStructure, m_bbox, set_domain)
     MI_IMPORT_TYPES(Volume)
 
     using TrackingStateType    = TrackingState<Float, Spectrum>;
     using TrackingFunctionType = TrackingFunction<Float, Spectrum>;
 
-    ExtremumGlobal(const Properties &props) : Base(props) {
-        // Volume Parameters
-        m_volume = nullptr;
-        for (auto &prop : props.objects()) {
-            if (auto *vol = prop.try_get<Volume>()) {
-                m_volume = vol;
-                break;
-            }
-        }
+    ExtremumGlobal(const Properties &props) : Base(props) { }
 
-        if (!m_volume)
-            Throw("ExtremumGlobal requires at least one volume");
-
-        // Register the extremum structure to the volume to trigger
-        // parameter_changed when the volume is modified.
-        m_volume->add_extremum_structure(this);
-        m_scale = props.get<ScalarFloat>("scale", 1.f);
-        m_bbox = m_volume->bbox();
-
-        m_majorant = m_volume->max();
-        m_minorant = m_volume->min();
+    void build(const ScalarBoundingBox3f &domain, const Volume *volume,
+               ScalarFloat scale) override {
+        set_domain(domain, volume);
+        m_minorant = scale * volume->min();
+        m_majorant = scale * volume->max();
     }
-
-    void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override {
-        m_bbox = m_volume->bbox();
-        m_majorant = m_volume->max();
-        m_minorant = m_volume->min();
-    }
-
 
     TrackingStateType traverse_extremum(
         const Ray3f &/*ray*/,
@@ -76,7 +45,7 @@ public:
         TrackingFunctionType* func,
         Mask active
     ) const override {
-        ExtremumSegment segment(mint, maxt, m_scale*m_minorant, m_scale*m_majorant);
+        ExtremumSegment segment(mint, maxt, m_minorant, m_majorant);
 
         struct LoopState {
             ExtremumSegment segment;
@@ -104,14 +73,36 @@ public:
         return ls.state;
     }
 
+    ExtremumSegment next_segment(const Ray3f &ray, Float t,
+                                 Mask active) const override {
+        DRJIT_MARK_USED(active);
+
+        auto [hit, d0, d1] = m_bbox.ray_intersect(ray);
+        active &= hit;
+        if (dr::any_or<false>(!active)) {
+            return ExtremumSegment(t, dr::Infinity<Float>, Vector2f(0.f));
+        }
+
+        Float eps = dr::maximum(dr::abs(t), 1.f) * math::RayEpsilon<Float>;
+        Float tq  = t + eps;
+
+        Mask before = hit && (tq < d0);
+        Mask inside = hit && !before && (tq < d1);
+
+        Float maxt = dr::select(
+            inside, dr::maximum(d1, tq),
+            dr::select(before, d0, dr::Infinity<Float>));
+
+        Vector2f value = dr::select(
+            inside, Vector2f(m_minorant, m_majorant), Vector2f(0.f));
+
+        return ExtremumSegment(t, maxt, value);
+    }
+
     std::tuple<Float, Float> eval_1(const Interaction3f &/*it*/,
                                     Mask /*active*/) const override {
 
-        return { m_scale*m_minorant, m_scale*m_majorant };
-    }
-
-    void traverse(TraversalCallback *cb) override {
-        Base::traverse(cb);
+        return { Float(m_minorant), Float(m_majorant) };
     }
 
     std::string to_string() const override {
@@ -126,11 +117,8 @@ public:
     MI_DECLARE_CLASS(ExtremumGlobal)
 
 private:
-    ref<Volume> m_volume;
-    ScalarFloat m_scale;
-
-    ScalarFloat m_minorant;
-    ScalarFloat m_majorant;
+    ScalarFloat m_minorant = 0.f;
+    ScalarFloat m_majorant = 0.f;
 };
 
 MI_EXPORT_PLUGIN(ExtremumGlobal)

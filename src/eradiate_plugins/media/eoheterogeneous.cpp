@@ -106,6 +106,18 @@ public:
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
         m_min_density = dr::opaque<Float>(m_scale * m_sigmat->min());
 
+        // The domain bounds the support of the extinction; it defaults to
+        // the sigma_t volume's bounding box but may be overridden with a
+        // larger (even infinite) region, extended by the volume's boundary
+        // behavior.
+        if (props.has_property("aabb_min") && props.has_property("aabb_max")) {
+            ScalarPoint3f aabb_min = props.get<ScalarPoint3f>("aabb_min");
+            ScalarPoint3f aabb_max = props.get<ScalarPoint3f>("aabb_max");
+            m_aabb = ScalarBoundingBox3f(aabb_min, aabb_max);
+        } else {
+            m_aabb = m_sigmat->bbox();
+        }
+
         for (auto &prop : props.objects()) {
             if (auto *extremum = prop.try_get<ExtremumStructure>()) {
                 if (m_extremum_structure)
@@ -116,24 +128,17 @@ public:
 
         if (!m_extremum_structure) {
             // Create a default global extremum structure.
-            Properties props_extr("extremum_global");
-            props_extr.set("volume", (Object *) m_sigmat.get());
-            props_extr.set("scale", m_scale);
             m_extremum_structure =
-                PluginManager::instance()->create_object<ExtremumStructure>(props_extr);
+                PluginManager::instance()->create_object<ExtremumStructure>(
+                    Properties("extremum_global"));
         }
+
+        m_extremum_structure->build(m_aabb, m_sigmat.get(), m_scale);
 
         m_ddis_threshold = props.get<ScalarFloat>("ddis_threshold", 0.1f);
 
         if (m_ddis_threshold > 0.f) {
             m_ddis_phase_function = static_cast<PhaseFunction*>(create_ddis_phase_function());
-        }
-
-        // Optional user-provided bbox override
-        if (props.has_property("aabb_min") && props.has_property("aabb_max")) {
-            ScalarPoint3f aabb_min = props.get<ScalarPoint3f>("aabb_min");
-            ScalarPoint3f aabb_max = props.get<ScalarPoint3f>("aabb_max");
-            m_aabb = ScalarBoundingBox3f(aabb_min, aabb_max);
         }
     }
 
@@ -141,14 +146,32 @@ public:
         cb->put("scale",   m_scale,  ParamFlags::NonDifferentiable);
         cb->put("albedo",  m_albedo, ParamFlags::Differentiable);
         cb->put("sigma_t", m_sigmat, ParamFlags::Differentiable);
+        if (m_extremum_structure != nullptr)
+            cb->put("extremum_structure", m_extremum_structure, ParamFlags::Differentiable);
         if (m_ddis_phase_function != nullptr)
             cb->put("ddis_phase_function", m_ddis_phase_function, ParamFlags::Differentiable);
         Base::traverse(cb);
+
     }
 
     void parameters_changed(const std::vector<std::string> &/*keys*/) override {
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
         m_min_density = dr::opaque<Float>(m_scale * m_sigmat->min());
+        Log(Warn, "EOHeterogeneous updated");
+        m_extremum_structure->build(m_aabb, m_sigmat.get(), m_scale);
+    }
+
+    bool dirty_sigma_t() const override {
+        return m_sigmat->dirty();
+    };
+
+    void set_dirty_sigma_t(bool dirty) override {
+        return m_sigmat->set_dirty(dirty);
+    };
+
+    void update_extremum_structure() override {
+        Log(Warn, "EOHeterogeneous update extremum");
+        m_extremum_structure->build(m_aabb, m_sigmat.get(), m_scale);
     }
 
     UnpolarizedSpectrum
@@ -181,18 +204,12 @@ public:
 
     std::tuple<Mask, Float, Float>
     intersect_aabb(const Ray3f &ray) const override {
-        if (m_aabb.valid()) {
-            return m_aabb.ray_intersect(ray);
-        }
-        return m_sigmat->bbox().ray_intersect(ray);
+        return m_aabb.ray_intersect(ray);
     }
 
     virtual Mask
     in_aabb(const Point3f &pos) const override {
-        if (m_aabb.valid()) {
-            return m_aabb.contains(pos);
-        }
-        return m_sigmat->bbox().contains(pos);
+        return m_aabb.contains(pos);
     }
 
     std::string to_string() const override {

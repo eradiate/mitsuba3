@@ -177,12 +177,11 @@ public:
 
         if (!m_extremum_structure) {
             // Create a default global extremum structure.
-            Properties props_extr("extremum_global");
-            props_extr.set("volume", (Object *) m_sigmat.get());
-            props_extr.set("scale", m_scale);
             m_extremum_structure =
-                PluginManager::instance()->create_object<ExtremumStructure>(props_extr);
+                PluginManager::instance()->create_object<ExtremumStructure>(
+                    Properties("extremum_global"));
         }
+        m_extremum_structure->build(m_sigmat->bbox(), m_sigmat.get(), m_scale);
 // #ERADIATE_CHANGE_END
     }
 
@@ -197,6 +196,7 @@ public:
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
 // #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
         m_min_density = dr::opaque<Float>(m_scale * m_sigmat->min());
+        m_extremum_structure->build(m_sigmat->bbox(), m_sigmat.get(), m_scale);
 // #ERADIATE_CHANGE_END
     }
 
@@ -213,6 +213,18 @@ public:
                  Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
         return m_min_density;
+    }
+
+    bool dirty_sigma_t() const override {
+        return m_sigmat->dirty();
+    };
+
+    void set_dirty_sigma_t(bool dirty) override {
+        return m_sigmat->set_dirty(dirty);
+    };
+
+    void update_extremum_structure() override {
+        m_extremum_structure->build(m_sigmat->bbox(), m_sigmat.get(), m_scale);
     }
 // #ERADIATE_CHANGE_END
 

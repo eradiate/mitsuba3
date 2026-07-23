@@ -23,17 +23,10 @@ Multi Component medium (:monosp:`multicomponent`)
 
 .. pluginparameters::
 
- * - periodic_min, periodic_max
-   - |point|
-   - Periodic medium bounding box.
-
  * - aabb_min, aabb_max
    - |point|
-   - Medium bounding box
-
- * - periodic_condition
-   - |string|
-   - Periodic condition type. Can be {null, repeat}.
+   - Optional override to the medium bounding box. Defaults to the union of
+     the components' domains.
 
  * - (Nested plugin)
    - |medium|
@@ -54,16 +47,24 @@ Multi Component medium (:monosp:`multicomponent`)
      incident direction. Set to a negative value to disable. (Default: 0.1)
 
 
-This plugin provides an aggregate medium implementation. It accepts multiple
-nested media components, making the assumption that those media do not have a
-physical boundary, and that the data is not defined outside of their bounding
-box.
+This plugin provides an aggregate medium implementation for overlapping
+media. It accepts multiple nested media components, making the assumption
+that those media do not have a physical boundary, and that the data is not
+defined outside of their bounding box. Scattering coefficients are the sums
+of the components' coefficients, and the phase function at a scattering
+event is sampled among the components proportionally to their scattering
+coefficient.
+
+The components' extremum structures are aggregated into an
+:ref:`extremum_overlap <extremum-extremum_overlap>` structure, so no
+combined majorant structure needs to be built.
 */
 template <typename Float, typename Spectrum>
 class MultiComponentMedium final : public Medium<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
-                    m_phase_function, m_ddis_phase_function, m_ddis_threshold,
+                    m_phase_function, m_extremum_structure,
+                    m_ddis_phase_function, m_ddis_threshold,
                     create_ddis_phase_function
                 )
     MI_IMPORT_TYPES(Scene, Sampler, MediumPtr, ExtremumStructure,
@@ -92,8 +93,20 @@ public:
 
         m_phase_function = m_components[0]->phase_function();
 
-        // TODO: Extremum Structure compatibility, lets first make it work
-        //       with a more standard volpath.
+        // Aggregate the components' built structures; the aggregate is
+        // assembled rather than built.
+        Properties props_overlap("extremum_overlap");
+        for (size_t i = 0; i < m_components.size(); ++i) {
+            ExtremumStructure *structure = m_components[i]->extremum_structure();
+            if (!structure)
+                Throw("multicomponent: component %s has no extremum structure",
+                      m_components[i]->to_string());
+            props_overlap.set("structure_" + std::to_string(i),
+                              (Object *) structure);
+        }
+        m_extremum_structure =
+            PluginManager::instance()->create_object<ExtremumStructure>(
+                props_overlap);
 
         m_ddis_threshold = props.get<ScalarFloat>("ddis_threshold", 0.1f);
 
@@ -101,21 +114,13 @@ public:
             m_ddis_phase_function = static_cast<PhaseFunction*>(create_ddis_phase_function());
         }
 
-        // Periodic bounding box
-        // TODO:
-        //  - determine proper default values for periodic and medium bbox.
-        //  - determine the behaviour for homogeneous media.
-        if (props.has_property("paabb_min") && props.has_property("paabb_max")) {
-            ScalarPoint3f paabb_min = props.get<ScalarPoint3f>("paabb_min");
-            ScalarPoint3f paabb_max = props.get<ScalarPoint3f>("paabb_max");
-            m_paabb = ScalarBoundingBox3f(paabb_min, paabb_max);
-        }
-
-        // Medium bounding box
+        // Medium bounding box: union of the components' domains by default
         if (props.has_property("aabb_min") && props.has_property("aabb_max")) {
             ScalarPoint3f aabb_min = props.get<ScalarPoint3f>("aabb_min");
             ScalarPoint3f aabb_max = props.get<ScalarPoint3f>("aabb_max");
             m_aabb = ScalarBoundingBox3f(aabb_min, aabb_max);
+        } else {
+            m_aabb = m_extremum_structure->bbox();
         }
     }
 
@@ -180,33 +185,25 @@ public:
     PhaseFunctionPtr phase_function(const MediumInteraction3f &mi,
                                         Float sample,
                                         Mask active) const override {
-        Float summed_sigmat = 0.f;
-        std::vector<Float> cdf;
+        // Sample a component proportionally to its scattering coefficient
+        // at the interaction point
+        std::vector<Float> cdf(m_components.size());
+        Float total = 0.f;
 
         for (size_t i = 0; i < m_components.size(); ++i) {
             Mask accumulate = active && m_components[i]->in_aabb(mi.p);
-            UnpolarizedSpectrum sigmat = 0.f;
             if (dr::any_or<true>(accumulate)) {
                 auto [c_sigmas, c_sigman, c_sigmat] =
                     m_components[i]->get_scattering_coefficients(mi, accumulate);
-                dr::masked(sigmat, accumulate) = c_sigmat;
+                total += dr::select(accumulate, dr::mean(c_sigmas), 0.f);
             }
-
-            summed_sigmat += dr::max(sigmat);
-            cdf.push_back(summed_sigmat);
+            cdf[i] = total;
         }
 
-        sample *= summed_sigmat;
+        sample *= total;
         UInt32 index = 0;
-        for (size_t i = 0; i < cdf.size(); ++i) {
-            Mask select_component = sample < cdf[i];
-
-            if (dr::any_or<true>(select_component)) {
-                dr::masked(index, select_component) = i;
-                // This break might be an antipattern in llvm mode, need to confirm
-                break;
-            }
-        }
+        for (size_t i = 0; i + 1 < cdf.size(); ++i)
+            dr::masked(index, sample >= cdf[i]) = (uint32_t) i + 1;
 
         return dr::gather<MediumPtr>(m_components_dr, index, active)->phase_function();
     }
@@ -314,9 +311,8 @@ private:
     std::vector<ref<Base>> m_components;
     DynamicBuffer<MediumPtr> m_components_dr;
     ScalarBoundingBox3f m_aabb;
-    ScalarBoundingBox3f m_paabb;
 
-    MI_TRAVERSE_CB(Base, m_paabb, m_aabb)
+    MI_TRAVERSE_CB(Base, m_aabb)
 };
 
 MI_EXPORT_PLUGIN(MultiComponentMedium)

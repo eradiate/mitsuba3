@@ -85,7 +85,7 @@ MI_VARIANT Scene<Float, Spectrum>::Scene(const Properties &props)
     std::sort(m_media.begin(), m_media.end());
     auto last = std::unique(m_media.begin(), m_media.end());
     m_media.erase(last, m_media.end());
-
+    Log(Warn, "media size: %f", m_media.size());
 // #ERADIATE_CHANGE_END
     // Create sensors' shapes (environment sensors)
     for (Sensor *sensor: m_sensors)
@@ -595,12 +595,24 @@ MI_VARIANT void Scene<Float, Spectrum>::parameters_changed(const std::vector<std
     // been marked dirty. All media are updated before any dirty flag is
     // cleared so that media sharing the same phase function via a scene-level
     // ref all get rebuilt.
-    for (auto &m : m_media)
+    for (auto &m : m_media){
         if (m->phase_function() && m->phase_function()->dirty())
             m->update_ddis_phase_function();
-    for (auto &m : m_media)
+
+        // Log(Warn, "Scene dirty sigma t: %f", m->dirty_sigma_t());
+
+        // if (m->dirty_sigma_t()) {
+        //     m->update_extremum_structure();
+        // }
+    }
+
+    for (auto &m : m_media) {
         if (m->phase_function())
             m->phase_function()->set_dirty(false);
+
+        // m->set_dirty_sigma_t(false);
+    }
+
 // #ERADIATE_CHANGE_END
 }
 

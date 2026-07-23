@@ -146,12 +146,16 @@ public:
         m_scale = props.get<ScalarFloat>("scale", 1.0f);
         m_has_spectral_extinction = props.get<bool>("has_spectral_extinction", true);
 
-        // Create a default global extremum structure
-        Properties props_extr("extremum_global");
-        props_extr.set("volume", (Object *) m_sigmat.get());
-        props_extr.set("scale", m_scale);
+        // Create a default global extremum structure. A homogeneous medium
+        // is bounded by its enclosing shape, not an AABB: use an infinite
+        // domain.
         m_extremum_structure =
-            PluginManager::instance()->create_object<ExtremumStructure>(props_extr);
+            PluginManager::instance()->create_object<ExtremumStructure>(
+                Properties("extremum_global"));
+        ScalarBoundingBox3f domain(
+            ScalarPoint3f(-dr::Infinity<ScalarFloat>),
+            ScalarPoint3f(dr::Infinity<ScalarFloat>));
+        m_extremum_structure->build(domain, m_sigmat.get(), m_scale);
 // #ERADIATE_CHANGE_END
     }
 
@@ -182,6 +186,21 @@ public:
                  Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
         return eval_sigmat(mi, active) & active;
+    }
+
+    bool dirty_sigma_t() const override {
+        return m_sigmat->dirty();
+    };
+
+    void set_dirty_sigma_t(bool dirty) override {
+        return m_sigmat->set_dirty(dirty);
+    };
+
+    void update_extremum_structure() override {
+        ScalarBoundingBox3f domain(
+            ScalarPoint3f(-dr::Infinity<ScalarFloat>),
+            ScalarPoint3f(dr::Infinity<ScalarFloat>));
+        m_extremum_structure->build(domain, m_sigmat.get(), m_scale);
     }
 // #ERADIATE_CHANGE_END
 

@@ -647,7 +647,11 @@ public:
             if (dr::any_or<true>(act_medium_scatter)) {
 
                 PhaseFunctionContext phase_ctx(sampler);
-                auto phase = mei.medium->phase_function();
+                // Aggregate media sample the component phase function at the
+                // interaction point; other media ignore the sample
+                auto phase = mei.medium->phase_function(
+                    mei, sampler->next_1d(act_medium_scatter),
+                    act_medium_scatter);
                 auto ddis_phase = mei.medium->ddis_phase_function();
 
                 // --------------------- NLE setup ---------------------

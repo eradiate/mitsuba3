@@ -16,51 +16,32 @@ Extremum grid structure (:monosp:`extremum_grid`)
 
 .. pluginparameters::
 
- * - volume
-   - |volume|
-   - Extinction coefficient volume to build extremum grid from.
-   - |exposed|
-
- * - to_world
-   - |transform|
-   - Specifies the 4×4 transformation matrix of the underlying volume.
-
- * - scale
-   - |float|
-   - Scale factor for the extremum values. Default: 1.0
-
  * - resolution
    - |vector|
    - Grid resolution along the XYZ axis. Does not have to be a multiple of
      the underlying volume. Set to [0,0,0] to trigger an adaptive resolution
      routine. Default: [1,1,1]
 
- * - wrap_mode
-   - |string|
-   - **EXPERIMENTAL** Specifies how to handle extremum queries and traversal
-     outside its data definition. Values should be one of :monosp:`clamp`,
-     :monosp:`repeat`, :monosp:`mirror`. Should match the underlying volume to
-     ensure consistent extremum representation. Note that this is experimental
-     until proper periodic boundary conditions are defined for media.
-     Default: :monosp:`clamp`
-
 This plugin creates a regular grid structure storing local extremum values for
-efficient delta tracking in heterogeneous media. The grid is constructed
-by querying the extinction volume's extrema over each grid cell.
+efficient delta tracking in heterogeneous media. All geometric information
+(domain, extinction volume, scale) is provided by the owning medium through
+\ref ExtremumStructure::build(). The grid is constructed by querying the
+volume's extrema over each grid cell, in world space.
+
+The grid covers the intersection of the medium domain and the volume's
+bounding box. Queries for border cells are extended outward to the domain
+edge, so that the stored bounds remain valid over the whole domain for any
+volume edge behavior (clamp, repeat, mirror, none).
 
 At runtime, DDA (Digital Differential Analyzer) traversal through the grid provides
 tight-fitting local extrema, dramatically reducing null collisions in media with
 high spatial variance (*e.g.* clouds, fog).
-
-Note that the current implementation expects :monosp:`to_world` and
-:monosp:`scale` to match that of its volume and media to ensure correct extremum
-bounds and periodic behaviours.;
 */
 
 template <typename Float, typename Spectrum>
 class ExtremumGrid final : public ExtremumStructure<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(ExtremumStructure, m_bbox)
+    MI_IMPORT_BASE(ExtremumStructure, m_bbox, set_domain)
     MI_IMPORT_TYPES(Volume)
 
     using TrackingStateType    = TrackingState<Float, Spectrum>;
@@ -68,63 +49,35 @@ public:
     using FloatStorage         = DynamicBuffer<Float>;
 
     ExtremumGrid(const Properties &props) : Base(props) {
-        // Volume Parameters
-        m_volume = nullptr;
-        for (auto &prop : props.objects()) {
-            if (auto *vol = prop.try_get<Volume>()) {
-                m_volume = vol;
-                break;
-            }
-        }
-
-        if (!m_volume)
-            Throw("ExtremumGrid requires at least one volume");
-
-        // Register the extremum structure to the volume to trigger
-        // parameter_changed when the volume is modified.
-        m_volume->add_extremum_structure(this);
-        m_bbox = m_volume->bbox();
-
-        m_to_local = props.get<ScalarAffineTransform4f>("to_world", ScalarAffineTransform4f()).inverse();
-        m_scale = props.get<ScalarFloat>("scale", 1.0f);
-
-        std::string_view wrap_mode_str = props.get<std::string_view>("wrap_mode", "clamp");
-        if (wrap_mode_str == "repeat")
-            m_wrap_mode = dr::WrapMode::Repeat;
-        else if (wrap_mode_str == "mirror")
-            m_wrap_mode = dr::WrapMode::Mirror;
-        else if (wrap_mode_str == "clamp")
-            m_wrap_mode = dr::WrapMode::Clamp;
-        else
-            Throw("Invalid wrap_mode \"%s\", must be one of: \"repeat\", "
-                  "\"mirror\", or \"clamp\"!", wrap_mode_str);
-
-        // Resolution Parameters
         m_resolution = props.get<ScalarVector3i>("resolution", ScalarVector3i(1,1,1));
-
-        m_adaptive = false;
-        if (dr::all(m_resolution <= ScalarVector3i(0))) {
-            m_adaptive = true;
-            m_resolution = find_resolution(m_volume);
-        }
-
-        for (size_t i = 0; i < 3; ++i)
-            m_inv_resolution[i] = dr::divisor<int32_t>((int32_t) m_resolution[i]);
-
-
-        build_grid(m_volume.get(), m_resolution);
+        m_adaptive   = dr::all(m_resolution <= ScalarVector3i(0));
     }
 
-    void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override {
-        if (m_adaptive) {
-            m_resolution = find_resolution(m_volume.get());
+    void build(const ScalarBoundingBox3f &domain, const Volume *volume,
+               ScalarFloat scale) override {
+        Log(Warn, "Extremum grid build, scale: %f", scale);
 
-            for (size_t i = 0; i < 3; ++i)
-                m_inv_resolution[i] = dr::divisor<int32_t>((int32_t) m_resolution[i]);
-        }
-        build_grid(m_volume.get(), m_resolution);
+        set_domain(domain, volume);
+        m_scale = scale;
+
+        // The grid only covers the region where the volume defines data;
+        // border-cell extension makes its bounds valid over the rest of the
+        // domain.
+        m_extent = domain;
+        m_extent.clip(volume->bbox());
+        if (!m_extent.valid())
+            Throw("extremum_grid: the medium domain %s does not intersect "
+                  "the volume's bounding box %s!", domain,
+                  volume->bbox());
+
+        m_to_local = ScalarAffineTransform4f::scale(dr::rcp(m_extent.extents())) *
+                     ScalarAffineTransform4f::translate(-ScalarVector3f(m_extent.min));
+
+        if (m_adaptive)
+            m_resolution = find_resolution(volume);
+
+        build_grid(volume, m_resolution);
     }
-
 
     TrackingStateType traverse_extremum(
         const Ray3f &ray,
@@ -146,10 +99,57 @@ public:
         );
     }
 
+    ExtremumSegment next_segment(const Ray3f &ray, Float t,
+                                 Mask active) const override {
+        auto [hit, d0, d1] = m_bbox.ray_intersect(ray);
+
+        // Forward nudge: select the cell at p(t + eps), but measure exit
+        // distances from exact p(t)
+        Float eps = dr::maximum(dr::abs(t), 1.f) * math::RayEpsilon<Float>;
+        Float tq  = t + eps;
+
+        Mask before = hit && (tq < d0);
+        Mask inside = hit && !before && (tq < d1);
+
+        // Grid-coordinate ray in [0, res]^3 over the grid extent
+        Vector3f res(m_resolution);
+        Point3f  o = (m_to_local * ray.o) * res;
+        Vector3f d = (m_to_local * ray.d) * res;
+        Vector3i pi = dr::floor2int<Vector3i>(dr::fmadd(d, tq, o));
+
+        // Per-axis next cell boundary. Beyond the grid extent, cells are
+        // semi-infinite: the only boundary along such an axis is the grid
+        // face (when approaching). Stale boundaries (at or behind tq, e.g.
+        // when leaving the grid) resolve to +inf.
+        Float t_exit = d1;
+        for (size_t i = 0; i < 3; ++i) {
+            Int32 b_idx = dr::select(d[i] > 0.f, pi[i] + 1, pi[i]);
+            Float b     = Float(dr::clip(b_idx, 0, m_resolution[i]));
+            Float ti    = dr::select(d[i] != 0.f, (b - o[i]) / d[i],
+                                     dr::Infinity<Float>);
+            dr::masked(ti, ti <= tq) = dr::Infinity<Float>;
+            t_exit = dr::minimum(t_exit, ti);
+        }
+
+        Vector3i piw = dr::clip(pi, 0, m_resolution - 1);
+        UInt32 idx = dr::fmadd(dr::fmadd(piw.z(), m_resolution.y(), piw.y()),
+                               m_resolution.x(), piw.x());
+        Vector2f value =
+            dr::gather<Vector2f>(m_extremum_grid, idx, active && inside);
+
+        Float maxt = dr::select(
+            inside, dr::maximum(t_exit, tq),
+            dr::select(before, d0, dr::Infinity<Float>));
+
+        return ExtremumSegment(t, maxt,
+                               dr::select(inside, value, Vector2f(0.f)));
+    }
+
     std::tuple<Float, Float> eval_1(const Interaction3f &it,
                                     Mask active) const override {
         Point3f po = m_to_local * it.p;
-        Vector3i piw = wrap(dr::floor2int<Vector3i>(po * m_resolution));
+        Vector3i piw = dr::clip(dr::floor2int<Vector3i>(po * m_resolution),
+                                0, m_resolution - 1);
 
         UInt32 idx = dr::fmadd(dr::fmadd(piw.z(), m_resolution.y(), piw.y()),
                                m_resolution.x(), piw.x());
@@ -168,7 +168,6 @@ public:
         oss << "ExtremumGrid[" << std::endl
             << "  resolution = " << m_resolution << "," << std::endl
             << "  bbox = " << m_bbox << "," << std::endl
-            << "  wrap_mode = " << (uint32_t) m_wrap_mode << "," << std::endl
             << "]";
         return oss.str();
     }
@@ -188,20 +187,9 @@ private:
         using ScalarIndex        = DynamicBuffer<ScalarUInt32>;
         using ScalarFloatStorage = DynamicBuffer<ScalarFloat>;
 
-        ScalarVector3i result            = dr::full<ScalarVector3i>(1);
-        ScalarVector3i fine_res          = volume->resolution();
-        ScalarAffineTransform4f to_world = m_to_local.inverse();
-
-        // Extract scale from to_world transform. Note this does not work with
-        // shear
-        ScalarVector3f dim;
-        for (size_t i = 0; i < 3; ++i) {
-            ScalarVector3f basis;
-            for (size_t j = 0; j < 3; ++j) {
-                basis[j] = to_world.matrix.entry(i, j);
-            }
-            dim[i] = dr::norm(basis);
-        }
+        ScalarVector3i result   = dr::full<ScalarVector3i>(1);
+        ScalarVector3i fine_res = volume->resolution();
+        ScalarVector3f dim      = m_extent.extents();
 
         ScalarFloat denom =
             dim.x() * dim.y() + dim.x() * dim.z() + dim.y() * dim.z();
@@ -281,12 +269,37 @@ private:
         return result;
     }
 
+    /// World-space query box of a grid cell. Border cells are extended
+    /// outward to the domain edge so that their bounds remain valid over
+    /// everything outside the grid that a clamped lookup maps to them.
+    template <typename Vector3iT, typename PointT>
+    auto cell_bounds(const Vector3iT &ijk, const PointT &cell_size,
+                     const ScalarVector3i &resolution) const {
+        PointT cell_min = PointT(ijk) * cell_size;
+        PointT cell_max = cell_min + cell_size;
+
+        // Small inward shrink avoids bleeding into adjacent data texels at
+        // exact cell boundaries
+        cell_min += math::RayEpsilon<Float>;
+        cell_max -= math::RayEpsilon<Float>;
+
+        PointT wmin = PointT(m_extent.min) + cell_min * PointT(m_extent.extents());
+        PointT wmax = PointT(m_extent.min) + cell_max * PointT(m_extent.extents());
+
+        for (size_t i = 0; i < 3; ++i) {
+            wmin[i] = dr::select(ijk[i] == 0, m_bbox.min[i], wmin[i]);
+            wmax[i] = dr::select(ijk[i] == (uint32_t) (resolution[i] - 1),
+                                 m_bbox.max[i], wmax[i]);
+        }
+        return BoundingBox<PointT>(wmin, wmax);
+    }
+
     /**
      * \brief Build the extremum grid from a volume
      *
      * This method constructs a lower-resolution grid where each cell stores
-     * the majorant (maximum) extinction value over the corresponding region
-     * of the high-resolution volume.
+     * the extinction bounds over the corresponding world-space region,
+     * queried directly from the volume.
      */
     void build_grid(const Volume *volume, ScalarVector3i resolution) {
 
@@ -319,25 +332,17 @@ private:
             dr::parallel_for(
                 dr::blocked_range<size_t>(0, n, grain_size),
                 [&](const dr::blocked_range<size_t> &range) {
-                    // Recover x, y, z from block start (one-time div/mod per
-                    // block)
-
                     for (auto idx = range.begin(); idx != range.end(); ++idx) {
                         // Store in linear array (Z-slowest, X-fastest)
-                        int32_t x = idx % resolution.x();
-                        int32_t y = (idx / resolution.x()) % resolution.y();
-                        int32_t z = idx / (resolution.x() * resolution.y());
+                        uint32_t x = (uint32_t) (idx % resolution.x());
+                        uint32_t y = (uint32_t) ((idx / resolution.x()) % resolution.y());
+                        uint32_t z = (uint32_t) (idx / (resolution.x() * resolution.y()));
 
-                        ScalarPoint3f cell_min =
-                            ScalarVector3f(x, y, z) * cell_size;
-                        ScalarPoint3f cell_max = cell_min + cell_size;
-                        ScalarBoundingBox3f cell_bounds(
-                            cell_min + math::RayEpsilon<Float>,
-                            cell_max - math::RayEpsilon<Float>);
+                        auto bounds = cell_bounds(ScalarVector3u(x, y, z),
+                                                  ScalarPoint3f(cell_size),
+                                                  resolution);
 
-                        // Query volume for local extremum, currently assume
-                        // local bounds.
-                        auto [min, maj] = volume->extremum(cell_bounds);
+                        auto [min, maj] = volume->extremum(bounds);
 
                         dr::scatter(m_extremum_grid,
                                     m_scale * Vector2f(min, maj) *
@@ -353,14 +358,10 @@ private:
             UInt32 y = (idx / resolution.x())  % resolution.y();
             UInt32 z =  idx / (resolution.x() * resolution.y());
 
-            Point3f cell_min = Vector3f(x, y, z) * cell_size;
-            Point3f cell_max = cell_min + cell_size;
-            BoundingBox3f cell_bounds(
-                            cell_min + math::RayEpsilon<Float>,
-                            cell_max - math::RayEpsilon<Float>
-                        );
+            auto bounds = cell_bounds(Vector3u(x, y, z), Point3f(cell_size),
+                                      resolution);
 
-            auto [min, maj]= volume->extremum(cell_bounds);
+            auto [min, maj] = volume->extremum(bounds);
 
             dr::scatter(m_extremum_grid, m_scale * min * safety_factor.x(), idx*2);
             dr::scatter(m_extremum_grid, m_scale * maj * safety_factor.y(), idx*2+1);
@@ -409,9 +410,8 @@ private:
 
         ExtremumSegment segment = dr::zeros<ExtremumSegment>();
 
-        // Currently assuming that the majorant aligns perfectly with the
-        // volume and that values outside the bbox cannot be evaluated.
-        // Transform ray to local grid coordinates [0,res]³
+        // Transform ray to local grid coordinates [0,res]³. Positions beyond
+        // the grid extent look up the (extended) border cells via clamping.
         Vector3f res = Vector3f(m_resolution);
         Ray3f local_ray((m_to_local * ray.o) * res, // Normalize origin
                         (m_to_local * ray.d) * res, // Normalize direction
@@ -490,7 +490,7 @@ private:
 
             // Note: not multiplying the index by 2 because we gather using
             // Vector2f.
-            Vector3i piw = wrap(pi);
+            Vector3i piw = dr::clip(pi, 0, m_resolution - 1);
             UInt32 idx = dr::fmadd(dr::fmadd(piw.z(), m_resolution.y(), piw.y()),
                                    m_resolution.x(), piw.x());
 
@@ -518,44 +518,16 @@ private:
         return ls.state;
     };
 
-    /**
-     * \brief Applies the configured texture wrapping mode to an integer
-     * position
-     */
-    Vector3i wrap(const Vector3i &pos) const {
-        if (m_wrap_mode == dr::WrapMode::Clamp) {
-            return dr::clip(pos, 0, m_resolution - 1);
-        } else {
-            Vector3i value_shift_neg = dr::select(pos < 0, pos + 1, pos);
-
-            Vector3i div;
-            for (size_t i = 0; i < 3; ++i)
-                div[i] = m_inv_resolution[i](value_shift_neg[i]);
-
-            Vector3i mod = pos - div * m_resolution;
-            mod[mod < 0] += Vector3i(m_resolution);
-
-            if (m_wrap_mode == dr::WrapMode::Mirror)
-                // Starting at 0, flip the texture every other repetition
-                // (flip when: even number of repetitions in negative direction,
-                // or odd number of repetitions in positive direction)
-                mod = dr::select(((div & 1) == 0) ^ (pos < 0), mod, m_resolution - 1 - mod);
-
-            return mod;
-        }
-    }
-
 private:
     /// Grid storing pre-computed local majorants
     FloatStorage m_extremum_grid;
 
-    ref<Volume> m_volume;
-    ScalarFloat m_scale;
+    /// World-space region covered by the grid (domain ∩ volume bbox)
+    ScalarBoundingBox3f m_extent;
+    ScalarFloat m_scale = 1.f;
 
     bool m_adaptive;
     ScalarVector3i m_resolution;
-    dr::divisor<int32_t> m_inv_resolution[3];
-    dr::WrapMode m_wrap_mode;
 
     ScalarAffineTransform4f m_to_local;
 };

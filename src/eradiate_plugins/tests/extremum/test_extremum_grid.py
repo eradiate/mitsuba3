@@ -1,304 +1,162 @@
-import drjit as dr
 import mitsuba as mi
 import numpy as np
+import pytest
 
 
-def generate_extremum_grid(
-    volume_grid,
-    extremum_res,
-    filter_type,
-    transform=None,
-):
-    if transform is None:
-        transform = mi.ScalarAffineTransform4f()
+def make_gridvolume(data, filter_type="nearest", to_world=None, wrap_mode="clamp"):
+    wrap = wrap_mode != "none"
+    wrap_mode = wrap_mode if wrap_mode != "none" else "clamp"
 
-    volume = mi.load_dict(
-        {
-            "type": "gridvolume",
-            "grid": volume_grid,
-            "filter_type": filter_type,
-            "accel": False,
-            "to_world": transform,
-        }
-    )
-    extremum_struct = mi.load_dict(
-        {"type": "extremum_grid", "volume": volume, "resolution": extremum_res}
-    )
-
-    extremum_grid = mi.traverse(extremum_struct)["data"].numpy()
-    extremum_grid = extremum_grid.reshape(
-        extremum_res.z, extremum_res.y, extremum_res.x, 2
-    )
-    extremum_grid = extremum_grid.transpose(2, 1, 0, 3)
-    return extremum_struct, extremum_grid
+    d = {
+        "type": "gridvolume",
+        "grid": mi.VolumeGrid(data.astype(np.float32)),
+        "filter_type": filter_type,
+        "accel": False,
+        "wrap_mode": wrap_mode,
+        "wrap": wrap,
+    }
+    if to_world is not None:
+        d["to_world"] = to_world
+    return mi.load_dict(d)
 
 
-def test_build_high_res(variant_scalar_rgb):
-
-    n_x = 4
-    n_y = 8
-    n_z = 3
-    n_prod = n_x * n_y * n_z
-    data = np.linspace(1, n_prod, n_prod).reshape(n_x, n_y, n_z)
-    volume_grid = mi.VolumeGrid(data.transpose(2, 1, 0))
-
-    extremum_resolution = mi.ScalarVector3i(n_x, n_y, n_z)
-    _, extremum_grid = generate_extremum_grid(
-        volume_grid, extremum_resolution, "nearest"
-    )
-
-    assert np.allclose(data, extremum_grid[:, :, :, 0])
-    assert np.allclose(data, extremum_grid[:, :, :, 1])
+def build_extremum_grid(volume, resolution, domain=None, scale=1.0):
+    struct = mi.load_dict({"type": "extremum_grid", "resolution": list(resolution)})
+    if domain is None:
+        domain = volume.bbox()
+    struct.build(mi.BoundingBox3f(domain.min, domain.max), volume, scale)
+    return struct
 
 
-def test_build_half_res(variant_scalar_rgb):
-
-    n_x = 4
-    n_y = 8
-    n_z = 4
-    n_prod = n_x * n_y * n_z
-    data = np.linspace(1, n_prod, n_prod).reshape(n_x, n_y, n_z)
-    volume_grid = mi.VolumeGrid(data.transpose(2, 1, 0))
-
-    extremum_resolution = mi.ScalarVector3i(2, 4, 2)
-    _, extremum_grid = generate_extremum_grid(
-        volume_grid, extremum_resolution, "nearest"
-    )
-
-    assert np.allclose(data[::2, ::2, ::2], extremum_grid[:, :, :, 0])
-    assert np.allclose(data[1::2, 1::2, 1::2], extremum_grid[:, :, :, 1])
+def extremum_data(struct, resolution):
+    data = mi.traverse(struct)["data"].numpy()
+    data = data.reshape(resolution[2], resolution[1], resolution[0], 2)
+    return data.transpose(2, 1, 0, 3)  # -> [x, y, z, {minorant, majorant}]
 
 
-def test_build_not_multiple(variant_scalar_rgb):
-    n_x = 4
-    n_y = 9
-    n_z = 1
-    n_prod = n_x * n_y * n_z
-    data = np.linspace(1, n_prod, n_prod).reshape(n_x, n_y, n_z)
-    volume_grid = mi.VolumeGrid(data.transpose(2, 1, 0))
-
-    extremum_resolution = mi.ScalarVector3i(3, 4, 1)
-    _, extremum_grid = generate_extremum_grid(
-        volume_grid, extremum_resolution, "nearest"
-    )
-
-    minorant_reference = np.array(
-        [1.0, 3.0, 5.0, 7.0, 10.0, 12.0, 14.0, 16.0, 19.0, 21.0, 23.0, 25.0]
-    ).reshape(3, 4, 1)
-    majorant_reference = np.array(
-        [12.0, 14.0, 16.0, 18.0, 21.0, 23.0, 25.0, 27.0, 30.0, 32.0, 34.0, 36.0]
-    ).reshape(3, 4, 1)
-
-    assert np.allclose(minorant_reference, extremum_grid[:, :, :, 0])
-    assert np.allclose(majorant_reference, extremum_grid[:, :, :, 1])
+def march(struct, ray, t=0.0, max_steps=200):
+    """March next_segment until the segment extends to infinity."""
+    segments = []
+    for _ in range(max_steps):
+        seg = struct.next_segment(ray, t)
+        assert seg.mint == t
+        assert seg.maxt > seg.mint, "no forward progress"
+        segments.append((seg.mint, seg.maxt, seg.minorant(), seg.majorant()))
+        t = seg.maxt
+        if not np.isfinite(t):
+            return segments
+    pytest.fail("next_segment did not terminate")
 
 
-def test_build_trilinear(variant_scalar_rgb):
-    n_x = 3
-    n_y = 6
-    n_z = 1
-    n_prod = n_x * n_y * n_z
-    data = np.linspace(1, n_prod, n_prod).reshape(n_x, n_y, n_z)
-    volume_grid = mi.VolumeGrid(data.transpose(2, 1, 0))
-
-    extremum_resolution = mi.ScalarVector3i(3, 6, 1)
-    _, extremum_grid = generate_extremum_grid(
-        volume_grid, extremum_resolution, "trilinear"
-    )
-
-    minorant_reference = np.array(
-        [
-            1.0,
-            1.0,
-            2.0,
-            3.0,
-            4.0,
-            5.0,
-            1.0,
-            1.0,
-            2.0,
-            3.0,
-            4.0,
-            5.0,
-            7.0,
-            7.0,
-            8.0,
-            9.0,
-            10.0,
-            11.0,
-        ]
-    ).reshape(3, 6, 1)
-    majorant_reference = np.array(
-        [
-            8.0,
-            9.0,
-            10.0,
-            11.0,
-            12.0,
-            12.0,
-            14.0,
-            15.0,
-            16.0,
-            17.0,
-            18.0,
-            18.0,
-            14.0,
-            15.0,
-            16.0,
-            17.0,
-            18.0,
-            18.0,
-        ]
-    ).reshape(3, 6, 1)
-
-    assert np.allclose(minorant_reference, extremum_grid[:, :, :, 0])
-    assert np.allclose(majorant_reference, extremum_grid[:, :, :, 1])
+# ------------------------------------------------------------------------
+# Build: stored bounds
+# ------------------------------------------------------------------------
 
 
-def test_build_rotated(variant_scalar_rgb):
-    n_x = 3
-    n_y = 4
-    n_z = 1
-    n_prod = n_x * n_y * n_z
-    data = np.linspace(1, n_prod, n_prod).reshape(n_x, n_y, n_z)
-    volume_grid = mi.VolumeGrid(data.transpose(2, 1, 0))
+def test_build_high_res(variant_scalar_mono_double):
+    n_x, n_y, n_z = 4, 8, 3
+    data = np.linspace(1, n_x * n_y * n_z, n_x * n_y * n_z).reshape(n_x, n_y, n_z)
+    volume = make_gridvolume(data.transpose(2, 1, 0))
 
-    extremum_resolution = mi.ScalarVector3i(3, 4, 1)
-    _, extremum_grid = generate_extremum_grid(
-        volume_grid,
-        extremum_resolution,
-        "nearest",
-        transform=mi.ScalarAffineTransform4f.rotate([0, 0, 1], 180),
-    )
+    struct = build_extremum_grid(volume, (n_x, n_y, n_z))
+    grid = extremum_data(struct, (n_x, n_y, n_z))
 
-    assert np.allclose(data.squeeze(), extremum_grid[:, :, :, 1].squeeze())
+    # One extremum cell per data texel: minorant == majorant == texel value
+    assert np.allclose(data, grid[:, :, :, 0])
+    assert np.allclose(data, grid[:, :, :, 1])
 
 
-def test_build_scaled(variant_scalar_rgb):
-    pass
+def test_build_half_res(variant_scalar_mono_double):
+    n_x, n_y, n_z = 4, 8, 4
+    data = np.linspace(1, n_x * n_y * n_z, n_x * n_y * n_z).reshape(n_x, n_y, n_z)
+    volume = make_gridvolume(data.transpose(2, 1, 0))
+
+    struct = build_extremum_grid(volume, (2, 4, 2))
+    grid = extremum_data(struct, (2, 4, 2))
+
+    assert np.allclose(data[::2, ::2, ::2], grid[:, :, :, 0])
+    assert np.allclose(data[1::2, 1::2, 1::2], grid[:, :, :, 1])
 
 
-def assert_compare_segment(ref, other):
-    assert dr.allclose(ref.mint, other.mint)
-    assert dr.allclose(ref.maxt, other.maxt)
-    assert dr.allclose(ref.minorant(), other.minorant())
-    assert dr.allclose(ref.majorant(), other.majorant())
+def test_build_scale(variant_scalar_mono_double):
+    data = np.ones((2, 2, 2))
+    volume = make_gridvolume(data)
+    struct = build_extremum_grid(volume, (2, 2, 2), scale=3.0)
+    grid = extremum_data(struct, (2, 2, 2))
+    assert np.allclose(grid, 3.0)
 
 
-def test_sample_horizontal_homogeneous(variants_any_scalar, variants_any_llvm):
-    n_x = 4
-    n_y = 3
-    n_z = 1
-    mult = 0.5
-    data = np.ones((n_x, n_y, n_z)) * mult
-    volume_grid = mi.VolumeGrid(data.transpose(2, 1, 0))
-
-    extremum_resolution = mi.ScalarVector3i(4, 3, 1)
-    extremum_struct, _ = generate_extremum_grid(
-        volume_grid, extremum_resolution, "nearest"
-    )
-
-    ray = mi.Ray3f(
-        o=mi.ScalarVector3f(0.0, 0.5, 0.5),
-        d=mi.ScalarVector3f(1.0, 0.0, 0.0),
-    )
-    mint = 0.0
-    maxt = 4.0
-    desired_tau = 0.2
-    active = True
-
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    ref_segment = mi.ExtremumSegment(mint=0.25, maxt=0.5, majorant=0.5, minorant=0.5)
-    ref_tau = 0.125
-
-    # Test ray starting at segment start
-    assert dr.allclose(ref_tau, ot_acc)
-    assert_compare_segment(ref_segment, res)
-
-    ray = mi.Ray3f(
-        o=mi.ScalarVector3f(-1.0, 0.5, 0.5),
-        d=mi.ScalarVector3f(1.0, 0.0, 0.0),
-    )
-    ref_segment = mi.ExtremumSegment(mint=1.25, maxt=1.5, majorant=0.5, minorant=0.5)
-    ref_tau = 0.125
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    # Test ray starting outside of the grid
-    assert dr.allclose(ref_tau, ot_acc)
-    assert_compare_segment(ref_segment, res)
-
-    ray = mi.Ray3f(
-        o=mi.ScalarVector3f(0.125, 0.5, 0.5),
-        d=mi.ScalarVector3f(1.0, 0.0, 0.0),
-    )
-    ref_segment = mi.ExtremumSegment(mint=0.375, maxt=0.625, majorant=0.5, minorant=0.5)
-    ref_tau = 0.1875
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    # Test ray starting outside of the grid
-    assert dr.allclose(ref_tau, ot_acc)
-    assert_compare_segment(ref_segment, res)
-
-    desired_tau = 0.8
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    # Test ray exiting grid
-    assert not res.valid()
+def test_double_build_guard(variant_scalar_mono_double):
+    # Invariant: one structure belongs to one medium — rebuilding with a
+    # different domain must fail loudly.
+    volume = make_gridvolume(np.ones((2, 2, 2)))
+    struct = build_extremum_grid(volume, (2, 2, 2))
+    with pytest.raises(RuntimeError, match="different domain"):
+        struct.build(mi.BoundingBox3f([0, 0, 0], [2, 2, 2]), volume, 1.0)
 
 
-def test_sample_horizontal_heterogeneous(variants_any_scalar, variants_any_llvm):
-    n_x = 8
-    n_y = 6
-    n_z = 1
-    mult = 0.1
-
-    data = np.linspace(1, n_x, n_x).reshape(-1, 1, 1) * mult
-    data = np.ones((n_x, n_y, n_z)) * data
-    volume_grid = mi.VolumeGrid(data.transpose(2, 1, 0))
-
-    extremum_resolution = mi.ScalarVector3i(4, 3, 1)
-    extremum_struct, _ = generate_extremum_grid(
-        volume_grid, extremum_resolution, "nearest"
-    )
-
-    ray = mi.Ray3f(
-        o=mi.ScalarVector3f(0.0, 0.5, 0.5),
-        d=mi.ScalarVector3f(1.0, 0.0, 0.0),
-    )
-    mint = 0.0
-    maxt = 10.0
-    desired_tau = 0.2
-    active = True
-
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    ref_segment = mi.ExtremumSegment(mint=0.5, maxt=0.75, majorant=0.6, minorant=0.5)
-    ref_tau = 0.15
-    # Test ray starting at segment start
-    assert_compare_segment(ref_segment, res)
-    assert dr.allclose(ref_tau, ot_acc)
+# ------------------------------------------------------------------------
+# next_segment
+# ------------------------------------------------------------------------
 
 
-def test_sample_diagonal(variants_any_scalar, variants_any_llvm):
-    data_res = mi.ScalarVector3i(2, 2, 2)
-    extremum_res = mi.ScalarVector3i(2, 2, 2)
-    mult = 0.5
+def test_next_segment_march(variant_scalar_mono_double):
+    # Volume over [0,1]^3 (values varying along x), clamp-extended domain
+    # [-1,2]^3. Exercises: empty segment outside the domain, semi-infinite
+    # border cells on both sides, exact tiling of interior cells.
+    values = np.array([1.0, 2.0, 3.0, 4.0])
+    data = values.reshape(1, 1, 4)  # (z, y, x)
+    volume = make_gridvolume(data)
+    domain = mi.BoundingBox3f([-1, -1, -1], [2, 2, 2])
+    struct = build_extremum_grid(volume, (4, 1, 1), domain=domain)
 
-    data = np.linspace(1, data_res.x, data_res.x).reshape(-1, 1, 1) * mult
-    data = np.ones((data_res.x, data_res.y, data_res.y)) * data
-    volume_grid = mi.VolumeGrid(data.transpose(2, 1, 0))
+    ray = mi.Ray3f(o=[-2.0, 0.5, 0.5], d=[1.0, 0.0, 0.0])
+    segments = march(struct, ray)
 
-    extremum_struct, _ = generate_extremum_grid(volume_grid, extremum_res, "nearest")
+    reference = [
+        (0.0, 1.0, 0.0, 0.0),  # before the domain
+        (1.0, 2.0, 1.0, 1.0),  # border region x in [-1, 0]: clamped to cell 0
+        (2.0, 2.25, 1.0, 1.0),  # interior cells
+        (2.25, 2.5, 2.0, 2.0),
+        (2.5, 2.75, 3.0, 3.0),
+        (2.75, 3.0, 4.0, 4.0),
+        (3.0, 4.0, 4.0, 4.0),  # border region x in [1, 2]: clamped to cell 3
+        (4.0, np.inf, 0.0, 0.0),  # past the domain
+    ]
+    assert len(segments) == len(reference)
+    for seg, ref in zip(segments, reference):
+        assert np.allclose(seg, ref, rtol=1e-5)
 
-    # perfect diagonal direction
-    ray = mi.Ray3f(
-        o=mi.ScalarVector3f(0.0, 0.0, 0.0),
-        d=mi.ScalarVector3f(0.5, 0.5, 0.5),
-    )
-    mint = 0.0
-    maxt = 10.0
-    desired_tau = 0.6
-    active = True
 
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    ref_segment = mi.ExtremumSegment(mint=1.0, maxt=2.0, majorant=1.0, minorant=1.0)
-    ref_tau = 0.5
-    # Test ray starting at segment start
-    assert_compare_segment(ref_segment, res)
-    assert dr.allclose(ref_tau, ot_acc)
+def test_next_segment_outside_miss(variant_scalar_mono_double):
+    volume = make_gridvolume(np.ones((2, 2, 2)))
+    struct = build_extremum_grid(volume, (2, 2, 2))
+
+    # Ray that never enters the domain: one empty segment to infinity
+    ray = mi.Ray3f(o=[-1.0, 5.0, 0.5], d=[1.0, 0.0, 0.0])
+    seg = struct.next_segment(ray, 0.0)
+    assert seg.maxt == np.inf
+    assert seg.minorant() == 0.0 and seg.majorant() == 0.0
+
+
+@pytest.mark.parametrize(
+    "origin, direction",
+    [
+        # Along the x=0.5, y=0.5 cell face/edge line
+        ([0.5, 0.5, -1.0], [0.0, 0.0, 1.0]),
+        # Through cell corners on the main diagonal
+        ([-0.5, -0.5, -0.5], [1.0, 1.0, 1.0]),
+        # Starting exactly on a face
+        ([0.25, 0.5, 0.5], [1.0, 0.0, 0.0]),
+    ],
+)
+def test_next_segment_stall(variant_scalar_mono_double, origin, direction):
+    # Regression for the forward-nudge: rays exactly along cell boundaries
+    # must make forward progress and terminate (march() asserts both)
+    rng = np.random.default_rng(11)
+    volume = make_gridvolume(rng.uniform(0.1, 2.0, (4, 4, 4)))
+    struct = build_extremum_grid(volume, (4, 4, 4))
+
+    d = np.array(direction, dtype=np.float64)
+    ray = mi.Ray3f(o=origin, d=(d / np.linalg.norm(d)).tolist())
+    march(struct, ray)

@@ -149,14 +149,16 @@ Medium<Float, Spectrum>::prepare_medium_traversal(const Ray3f& ray, Mask active)
     mei.wavelengths = ray.wavelengths;
     mei.medium      = this;
 
-    // Intersect AABB
+    // Intersect AABB. Clamp mint before the finiteness gate: media with an
+    // infinite domain (e.g. an aggregate containing a homogeneous component)
+    // legitimately return (-inf, inf), which must not be rejected as a miss.
     auto [aabb_its, mint, maxt] = intersect_aabb(ray);
+    dr::masked(mint, aabb_its) = dr::maximum(0.f, mint);
     aabb_its &= (dr::isfinite(mint) || dr::isfinite(maxt));
     active &= aabb_its;
     dr::masked(mint, !active) = 0.f;
     dr::masked(maxt, !active) = dr::Infinity<Float>;
 
-    dr::masked(mint, active) = dr::maximum(0.f, mint);
     dr::masked(maxt, active) = dr::minimum(ray.maxt, maxt);
     mei.mint = mint;
 

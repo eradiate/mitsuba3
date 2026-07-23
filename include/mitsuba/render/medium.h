@@ -180,6 +180,11 @@ public:
         return m_extremum_structure.get();
     }
 
+    /// Returns the extremum structure, non const
+    MI_INLINE ExtremumStructure *extremum_structure() {
+        return m_extremum_structure.get();
+    }
+
     /// Check if medium uses extremum structure
     MI_INLINE bool has_extremum_structure() const {
         return m_extremum_structure.get() != nullptr;
@@ -188,6 +193,16 @@ public:
     MI_INLINE bool use_rrt() const {
         return m_use_rrt;
     }
+
+    /// Indicates whether the underlying sigma_t data is dirty
+    virtual MI_INLINE bool dirty_sigma_t() const {
+        return false;
+    };
+
+    /// Update the sigma_t dirty flag.
+    virtual MI_INLINE void set_dirty_sigma_t(bool /*dirty*/) {};
+
+    virtual MI_INLINE void update_extremum_structure() {};
 // #ERADIATE_CHANGE_END
 
 // #ERADIATE_CHANGE_BEGIN: DDIS

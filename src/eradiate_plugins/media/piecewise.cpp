@@ -185,11 +185,10 @@ public:
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
 
         // Create a default global extremum structure.
-        Properties props_extr("extremum_global");
-        props_extr.set("volume", (Object *) m_sigmat.get());
-        props_extr.set("scale", m_scale);
         m_extremum_structure =
-            PluginManager::instance()->create_object<ExtremumStructure>(props_extr);
+            PluginManager::instance()->create_object<ExtremumStructure>(
+                Properties("extremum_global"));
+        m_extremum_structure->build(m_sigmat->bbox(), m_sigmat.get(), m_scale);
 
         precompute_optical_thickness();
 
@@ -555,6 +554,18 @@ public:
     virtual Mask
     in_aabb(const Point3f &pos) const override {
         return m_sigmat->bbox().contains(pos);
+    }
+
+    bool dirty_sigma_t() const override {
+        return m_sigmat->dirty();
+    };
+
+    void set_dirty_sigma_t(bool dirty) override {
+        return m_sigmat->set_dirty(dirty);
+    };
+
+    void update_extremum_structure() override {
+        m_extremum_structure->build(m_sigmat->bbox(), m_sigmat.get(), m_scale);
     }
 // #ERADIATE_CHANGE_END
     std::string to_string() const override {
