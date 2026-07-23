@@ -31,6 +31,9 @@ strive to document breaking API changes in the release notes below.
 - Add an experimental implementation for periodic boundaries of extremum grid
   structures
   (PR [#34](https://github.com/eradiate/mitsuba3/pull/34)).
+- Create a new custom scene traversal function which traverses all parents of
+  a node, not just the first one. Combine it with Eradiate's traversal function
+  (PR [#37](https://github.com/eradiate/mitsuba3/pull/37)).
 
 ## v0.5.0 (9th June 2026)
 
