@@ -1,6 +1,7 @@
 #include <mitsuba/core/frame.h>
 #include <mitsuba/core/properties.h>
 #include <mitsuba/core/spectrum.h>
+#include <mitsuba/core/string.h>
 #include <mitsuba/core/warp.h>
 #include <mitsuba/render/interaction.h>
 #include <mitsuba/render/medium.h>
@@ -154,24 +155,12 @@ public:
 
     }
 
-    void parameters_changed(const std::vector<std::string> &/*keys*/) override {
+    void parameters_changed(const std::vector<std::string> &keys = {}) override {
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
         m_min_density = dr::opaque<Float>(m_scale * m_sigmat->min());
-        Log(Warn, "EOHeterogeneous updated");
-        m_extremum_structure->build(m_aabb, m_sigmat.get(), m_scale);
-    }
-
-    bool dirty_sigma_t() const override {
-        return m_sigmat->dirty();
-    };
-
-    void set_dirty_sigma_t(bool dirty) override {
-        return m_sigmat->set_dirty(dirty);
-    };
-
-    void update_extremum_structure() override {
-        Log(Warn, "EOHeterogeneous update extremum");
-        m_extremum_structure->build(m_aabb, m_sigmat.get(), m_scale);
+        if (keys.empty() || string::contains(keys, "sigma_t") ||
+            string::contains(keys, "scale"))
+            m_extremum_structure->build(m_aabb, m_sigmat.get(), m_scale);
     }
 
     UnpolarizedSpectrum

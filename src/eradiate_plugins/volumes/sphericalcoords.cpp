@@ -80,7 +80,7 @@ plane.
 template <typename Float, typename Spectrum>
 class SphericalCoordsVolume final : public Volume<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(Volume, m_to_local, m_bbox, m_dirty)
+    MI_IMPORT_BASE(Volume, m_to_local, m_bbox)
     MI_IMPORT_TYPES(VolumeGrid, ExtremumStructure)
 
     using VolumeType = Volume<Float, Spectrum>;
@@ -194,10 +194,6 @@ public:
     void traverse(TraversalCallback *cb) override {
         cb->put("volume", m_volume.get(), ParamFlags::NonDifferentiable);
         Base::traverse(cb);
-    }
-
-    void parameters_changed(const std::vector<std::string> &/*keys*/) override {
-        m_dirty = true;
     }
 
     std::string to_string() const override {

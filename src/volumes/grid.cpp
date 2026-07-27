@@ -166,10 +166,8 @@ little endian encoding and is specified as follows:
 template <typename Float, typename Spectrum>
 class GridVolume final : public Volume<Float, Spectrum> {
 public:
-// #ERADIATE_CHANGE_BEGIN: Local extrema support
-    MI_IMPORT_BASE(Volume, update_bbox, m_to_local, m_bbox, m_channel_count, m_dirty)
-// #ERADIATE_CHANGE_END
-    MI_IMPORT_TYPES(VolumeGrid, ExtremumStructure)
+    MI_IMPORT_BASE(Volume, update_bbox, m_to_local, m_bbox, m_channel_count)
+    MI_IMPORT_TYPES(VolumeGrid)
 
     GridVolume(const Properties &props) : Base(props) {
         std::string_view filter_type_str = props.get<std::string_view>("filter_type", "trilinear");
@@ -358,10 +356,6 @@ public:
             if (!m_fixed_min)
                 m_min = (float) dr::min_nested(dr::detach(m_texture.value()));
         }
-
-// #ERADIATE_CHANGE_BEGIN: Local extrema support
-        m_dirty = true;
-// #ERADIATE_CHANGE_END
     }
 
     UnpolarizedSpectrum eval(const Interaction3f &it,

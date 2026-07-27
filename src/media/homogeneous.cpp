@@ -9,6 +9,7 @@
 #include <mitsuba/render/scene.h>
 #include <mitsuba/render/volume.h>
 // #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
+#include <mitsuba/core/string.h>
 #include <mitsuba/render/eradiate/extremum.h>
 // #ERADIATE_CHANGE_END
 
@@ -166,6 +167,18 @@ public:
         Base::traverse(cb);
     }
 
+// #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
+    void parameters_changed(const std::vector<std::string> &keys = {}) override {
+        if (keys.empty() || string::contains(keys, "sigma_t") ||
+            string::contains(keys, "scale")) {
+            ScalarBoundingBox3f domain(
+                ScalarPoint3f(-dr::Infinity<ScalarFloat>),
+                ScalarPoint3f(dr::Infinity<ScalarFloat>));
+            m_extremum_structure->build(domain, m_sigmat.get(), m_scale);
+        }
+    }
+// #ERADIATE_CHANGE_END
+
     MI_INLINE auto eval_sigmat(const MediumInteraction3f &mi, Mask active) const {
         auto sigmat = m_sigmat->eval(mi) * m_scale;
         if (has_flag(m_phase_function->flags(), PhaseFunctionFlags::Microflake))
@@ -186,21 +199,6 @@ public:
                  Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
         return eval_sigmat(mi, active) & active;
-    }
-
-    bool dirty_sigma_t() const override {
-        return m_sigmat->dirty();
-    };
-
-    void set_dirty_sigma_t(bool dirty) override {
-        return m_sigmat->set_dirty(dirty);
-    };
-
-    void update_extremum_structure() override {
-        ScalarBoundingBox3f domain(
-            ScalarPoint3f(-dr::Infinity<ScalarFloat>),
-            ScalarPoint3f(dr::Infinity<ScalarFloat>));
-        m_extremum_structure->build(domain, m_sigmat.get(), m_scale);
     }
 // #ERADIATE_CHANGE_END
 

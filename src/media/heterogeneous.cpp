@@ -9,6 +9,7 @@
 #include <mitsuba/render/scene.h>
 #include <mitsuba/render/volume.h>
 // #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
+#include <mitsuba/core/string.h>
 #include <mitsuba/render/eradiate/extremum.h>
 // #ERADIATE_CHANGE_END
 
@@ -192,11 +193,13 @@ public:
         Base::traverse(cb);
     }
 
-    void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override {
-        m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
 // #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
+    void parameters_changed(const std::vector<std::string> &keys = {}) override {
+        m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
         m_min_density = dr::opaque<Float>(m_scale * m_sigmat->min());
-        m_extremum_structure->build(m_sigmat->bbox(), m_sigmat.get(), m_scale);
+        if (keys.empty() || string::contains(keys, "sigma_t") ||
+            string::contains(keys, "scale"))
+            m_extremum_structure->build(m_sigmat->bbox(), m_sigmat.get(), m_scale);
 // #ERADIATE_CHANGE_END
     }
 
@@ -213,18 +216,6 @@ public:
                  Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
         return m_min_density;
-    }
-
-    bool dirty_sigma_t() const override {
-        return m_sigmat->dirty();
-    };
-
-    void set_dirty_sigma_t(bool dirty) override {
-        return m_sigmat->set_dirty(dirty);
-    };
-
-    void update_extremum_structure() override {
-        m_extremum_structure->build(m_sigmat->bbox(), m_sigmat.get(), m_scale);
     }
 // #ERADIATE_CHANGE_END
 

@@ -118,14 +118,6 @@ public:
         return SphericalParameters<ScalarFloat>();
     };
 
-    MI_INLINE bool dirty() const {
-        return m_dirty;
-    }
-
-    MI_INLINE void set_dirty(bool dirty) {
-        m_dirty = dirty;
-    }
-
 // #ERADIATE_CHANGE_END
 
     /// Returns the bounding box of the volume
@@ -214,10 +206,6 @@ protected:
     ScalarBoundingBox3f m_bbox;
     /// Number of channels stored in the volume
     uint32_t m_channel_count;
-
-// #ERADIATE_CHANGE_BEGIN: Local extremum support
-    bool m_dirty;
-// #ERADIATE_CHANGE_END
 
     MI_TRAVERSE_CB(Object)
 };

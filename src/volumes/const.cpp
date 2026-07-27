@@ -55,9 +55,7 @@ Depending on how it is used, its value can either be a scalar or a color spectru
 template <typename Float, typename Spectrum>
 class ConstVolume final : public Volume<Float, Spectrum> {
 public:
-// #ERADIATE_CHANGE_BEGIN: Local extrema support
-    MI_IMPORT_BASE(Volume, m_to_local, m_dirty)
-// #ERADIATE_CHANGE_END
+    MI_IMPORT_BASE(Volume, m_to_local)
     MI_IMPORT_TYPES(Texture)
 
     ConstVolume(const Properties &props) : Base(props) {
@@ -90,10 +88,6 @@ public:
     std::pair<Float, Float>
     extremum(const BoundingBox3f & /*bbox*/) const override {
         return { m_value->min(), m_value->max() };
-    }
-
-    void parameters_changed(const std::vector<std::string> &/*keys*/) override {
-        m_dirty = true;
     }
 // #ERADIATE_CHANGE_END
 

@@ -194,15 +194,6 @@ public:
         return m_use_rrt;
     }
 
-    /// Indicates whether the underlying sigma_t data is dirty
-    virtual MI_INLINE bool dirty_sigma_t() const {
-        return false;
-    };
-
-    /// Update the sigma_t dirty flag.
-    virtual MI_INLINE void set_dirty_sigma_t(bool /*dirty*/) {};
-
-    virtual MI_INLINE void update_extremum_structure() {};
 // #ERADIATE_CHANGE_END
 
 // #ERADIATE_CHANGE_BEGIN: DDIS

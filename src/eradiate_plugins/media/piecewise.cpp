@@ -2,6 +2,7 @@
 #include <mitsuba/core/frame.h>
 #include <mitsuba/core/properties.h>
 #include <mitsuba/core/spectrum.h>
+#include <mitsuba/core/string.h>
 #include <mitsuba/core/warp.h>
 #include <mitsuba/render/interaction.h>
 #include <mitsuba/render/medium.h>
@@ -448,10 +449,13 @@ public:
     }
 
     void parameters_changed(
-        const std::vector<std::string> & /*keys*/ = {}) override {
-        m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
-        Log(Info, "Medium Parameters changed!");
-        precompute_optical_thickness();
+        const std::vector<std::string> &keys = {}) override {
+        if (keys.empty() || string::contains(keys, "sigma_t") ||
+            string::contains(keys, "scale")) {
+            m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
+            precompute_optical_thickness();
+            m_extremum_structure->build(m_sigmat->bbox(), m_sigmat.get(), m_scale);
+        }
     }
 
     void precompute_optical_thickness() {
@@ -549,25 +553,12 @@ public:
     intersect_aabb(const Ray3f &ray) const override {
         return m_sigmat->bbox().ray_intersect(ray);
     }
-// #ERADIATE_CHANGE_BEGIN: Overlapping media
 
     virtual Mask
     in_aabb(const Point3f &pos) const override {
         return m_sigmat->bbox().contains(pos);
     }
 
-    bool dirty_sigma_t() const override {
-        return m_sigmat->dirty();
-    };
-
-    void set_dirty_sigma_t(bool dirty) override {
-        return m_sigmat->set_dirty(dirty);
-    };
-
-    void update_extremum_structure() override {
-        m_extremum_structure->build(m_sigmat->bbox(), m_sigmat.get(), m_scale);
-    }
-// #ERADIATE_CHANGE_END
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "PiecewiseMedium[" << std::endl

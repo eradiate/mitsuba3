@@ -133,10 +133,6 @@ public:
         Base::traverse(cb);
     }
 
-    void parameters_changed(const std::vector<std::string> &/*keys*/) override {
-        // for now empty..
-    }
-
     UnpolarizedSpectrum
     get_majorant(const MediumInteraction3f &mi, Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
