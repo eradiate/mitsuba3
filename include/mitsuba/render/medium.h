@@ -8,12 +8,36 @@
 
 NAMESPACE_BEGIN(mitsuba)
 
+
+// #ERADIATE_CHANGE_BEGIN: Overlapping media
+/**
+ * \brief Data structure for medium scattering property point queries.
+ *
+ * Holds the scattering properties at a point query, as well as the sampled
+ * medium component.
+ */
+template <typename Float, typename Spectrum>
+struct MI_EXPORT_LIB MediumContext {
+    using UnpolarizedSpectrum = unpolarized_spectrum_t<Spectrum>;
+    using UInt32 = dr::uint32_array_t<Float>;
+
+    UnpolarizedSpectrum sigma_s;
+    UnpolarizedSpectrum sigma_n;
+    UnpolarizedSpectrum sigma_t;
+    UInt32 sampled_component;
+
+    DRJIT_STRUCT(MediumContext, sigma_s, sigma_n, sigma_t, sampled_component)
+};
+// #ERADIATE_CHANGE_END
+
 template <typename Float, typename Spectrum>
 class MI_EXPORT_LIB Medium : public JitObject<Medium<Float, Spectrum>> {
 public:
 // #ERADIATE_CHANGE_BEGIN: Overlapping media
     MI_IMPORT_TYPES(PhaseFunction, Sampler, Scene, Texture, ExtremumStructure,
                     PhaseFunctionPtr);
+
+    using MediumContext = MediumContext<Float, Spectrum>;
 // #ERADIATE_CHANGE_END
 
     /// Destructor
@@ -146,6 +170,8 @@ public:
 // #ERADIATE_CHANGE_BEGIN: Overlapping media
     virtual PhaseFunctionPtr phase_function(const MediumInteraction3f &mei,
                                                 Float sample, Mask active) const;
+    virtual PhaseFunctionPtr phase_function(const UInt32 &component,
+                                            Mask active = true) const;
 // #ERADIATE_CHANGE_END
 
     /// Returns whether this specific medium instance uses emitter sampling
@@ -194,6 +220,9 @@ public:
         return m_use_rrt;
     }
 
+    virtual MediumContext get_medium_context(
+        const MediumInteraction3f &mei, UnpolarizedSpectrum sigma_maj,
+        Float sample, Mask active) const;
 // #ERADIATE_CHANGE_END
 
 // #ERADIATE_CHANGE_BEGIN: DDIS
@@ -294,6 +323,7 @@ DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::Medium)
 // #ERADIATE_CHANGE_END
     DRJIT_CALL_METHOD(get_scattering_coefficients)
 // #ERADIATE_CHANGE_BEGIN: Extremum Support && Residual Ratio Tracking && DDIS
+    DRJIT_CALL_METHOD(get_medium_context)
     DRJIT_CALL_GETTER(ddis_phase_function)
     DRJIT_CALL_GETTER(ddis_threshold)
     DRJIT_CALL_GETTER(use_rrt)

@@ -13,7 +13,6 @@
 
 NAMESPACE_BEGIN(mitsuba)
 
-
 /**!
 
 .. _medium-multicomponent:
@@ -69,7 +68,11 @@ public:
                 )
     MI_IMPORT_TYPES(Scene, Sampler, MediumPtr, ExtremumStructure,
                     ExtremumStructurePtr, PhaseFunction, PhaseFunctionPtr)
+
     using FloatStorage = DynamicBuffer<Float>;
+    using MediumContext = MediumContext<Float, Spectrum>;
+
+    static constexpr size_t MAX_COMPONENTS = 16;
 
     MultiComponentMedium(const Properties &props) : Base(props) {
         m_has_spectral_extinction = false;
@@ -86,6 +89,9 @@ public:
 
         if(m_components.empty())
             Throw("Must have at least one medium component.");
+
+        if (m_components.size() > MAX_COMPONENTS)
+            Throw("multicomponent: too many components (%zu > %zu)", m_components.size(), MAX_COMPONENTS);
 
         m_components_dr = dr::load<DynamicBuffer<MediumPtr>>(
             m_components.data(), m_components.size());
@@ -183,7 +189,7 @@ public:
                                         Mask active) const override {
         // Sample a component proportionally to its scattering coefficient
         // at the interaction point
-        std::vector<Float> cdf(m_components.size());
+        std::array<Float, MAX_COMPONENTS> cdf;
         Float total = 0.f;
 
         for (size_t i = 0; i < m_components.size(); ++i) {
@@ -198,10 +204,50 @@ public:
 
         sample *= total;
         UInt32 index = 0;
-        for (size_t i = 0; i + 1 < cdf.size(); ++i)
+        for (size_t i = 0; i + 1 < m_components.size(); ++i)
             dr::masked(index, sample >= cdf[i]) = (uint32_t) i + 1;
 
         return dr::gather<MediumPtr>(m_components_dr, index, active)->phase_function();
+    }
+
+    PhaseFunctionPtr phase_function(const UInt32 &component, Mask active /*= true*/) const override {
+        return dr::gather<MediumPtr>(m_components_dr, component, active)->phase_function();
+    }
+
+    MediumContext get_medium_context(const MediumInteraction3f &mei,
+        UnpolarizedSpectrum sigma_maj, Float sample, Mask active) const override {
+        // Sample a component proportionally to its scattering coefficient
+        // at the interaction poin
+        MediumContext ctx = dr::zeros<MediumContext>();
+        std::array<Float, MAX_COMPONENTS> cdf;
+        Float summed_sigmas = 0.f;
+        Float summed_sigmat = 0.f;
+
+        // compute the total sigma numbers.
+        for (size_t i = 0; i < m_components.size(); ++i) {
+            Mask accumulate = active && m_components[i]->in_aabb(mei.p);
+            if (dr::any_or<true>(accumulate)) {
+                auto [c_sigmas, c_sigman, c_sigmat] =
+                    m_components[i]->get_scattering_coefficients(mei, accumulate);
+                summed_sigmas += dr::select(accumulate, dr::mean(c_sigmas), 0.f);
+                summed_sigmat += dr::select(accumulate, dr::mean(c_sigmat), 0.f);
+            }
+            cdf[i] = summed_sigmas;
+        }
+
+        dr::masked(ctx.sigma_s, active) = summed_sigmas;
+        dr::masked(ctx.sigma_n, active) = sigma_maj - summed_sigmat;
+        dr::masked(ctx.sigma_t, active) = summed_sigmat;
+
+        // Sample medium component from CDF.
+        sample *= summed_sigmas;
+        UInt32 index = 0;
+        for (size_t i = 0; i + 1 < m_components.size(); ++i)
+            dr::masked(index, sample >= cdf[i]) = (uint32_t) i + 1;
+        dr::masked(ctx.sampled_component, active) = index;
+
+
+        return ctx;
     }
 
     std::tuple<Mask, Float, Float>

@@ -135,6 +135,13 @@ Medium<Float, Spectrum>::phase_function(const MediumInteraction3f&/*mei*/,
                                         Mask /*active*/) const {
     return m_phase_function.get();
 }
+
+MI_VARIANT
+typename Medium<Float, Spectrum>::PhaseFunctionPtr
+Medium<Float, Spectrum>::phase_function(const UInt32 &/*component*/,
+                                        Mask /*active = true*/) const {
+    return m_phase_function.get();
+}
 // #ERADIATE_CHANGE_END
 
 // #ERADIATE_CHANGE_BEGIN: Extremum structure accessor
@@ -163,6 +170,19 @@ Medium<Float, Spectrum>::prepare_medium_traversal(const Ray3f& ray, Mask active)
     mei.mint = mint;
 
     return {mei, mint, maxt};
+}
+
+MI_VARIANT
+typename Medium<Float, Spectrum>::MediumContext
+Medium<Float, Spectrum>::get_medium_context(const MediumInteraction3f &mei,
+                                            UnpolarizedSpectrum /*sigma_maj*/,
+                                            Float /*sample*/,
+                                            Mask active) const {
+    MediumContext ctx = dr::zeros<MediumContext>();
+    std::tie(ctx.sigma_s, ctx.sigma_n, ctx.sigma_t) =
+        get_scattering_coefficients(mei, active);
+    ctx.sampled_component = 0;
+    return ctx;
 }
 // #ERADIATE_CHANGE_END
 

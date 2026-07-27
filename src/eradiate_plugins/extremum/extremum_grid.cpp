@@ -55,7 +55,7 @@ public:
 
     void build(const ScalarBoundingBox3f &domain, const Volume *volume,
                ScalarFloat scale) override {
-        Log(Warn, "Extremum grid build, scale: %f", scale);
+        // Log(Warn, "Extremum grid build, scale: %f", scale);
 
         set_domain(domain, volume);
         m_scale = scale;

@@ -504,6 +504,8 @@ public:
                 active_medium &= !escaped_medium;
             }
 
+            UInt32 medium_component = 0;
+
             if (dr::any_or<true>(active_medium)) {
                 // Prepare Extremum traversal
                 auto extremum = medium->extremum_structure();
@@ -523,7 +525,8 @@ public:
                     target_ot,
                     medium->use_rrt(),
                     medium->has_spectral_extinction(),
-                    /*throughput=*/UnpolarizedSpectrum(1.f),
+                    /*medium_component=*/0,
+                    /*throughput=*/UnpolarizedSpectrum(1.f)
                 };
 
                 // Traverse extremum segments and perform delta tracking
@@ -576,10 +579,20 @@ public:
                         mei.p = state.ray(maxt);
 
                         // Retrieve scattering coefficients at position.
-                        UnpolarizedSpectrum sigma_s, sigma_n, sigma_t;
-                        std::tie(sigma_s, std::ignore, sigma_t) =
-                            medium->get_scattering_coefficients(mei, sampled);
-                        sigma_n = segment.majorant() - sigma_t;
+                        // UnpolarizedSpectrum sigma_s, sigma_n, sigma_t;
+                        // std::tie(sigma_s, std::ignore, sigma_t) =
+                        //     medium->get_scattering_coefficients(mei, sampled);
+                        // sigma_n = segment.majorant() - sigma_t;
+                        auto medium_ctx = medium->get_medium_context(
+                            mei,
+                            segment.majorant(),
+                            rng.template next_float<Float>(sampled),
+                            sampled
+                        );
+
+                        UnpolarizedSpectrum &sigma_s = medium_ctx.sigma_s;
+                        UnpolarizedSpectrum &sigma_n = medium_ctx.sigma_n;
+                        UnpolarizedSpectrum &sigma_t = medium_ctx.sigma_t;
 
                         // Sample event type
                         Float null_scatter_prob =
@@ -609,6 +622,11 @@ public:
                                     sigma_s / sigma_t;
                             }
 
+                            // set phase function sampled previously to reduce the
+                            // number of lookups to the underlying data volumes.
+                            dr::masked(state.medium_component, real_scatter) =
+                                medium_ctx.sampled_component;
+
                             // disable the loop once we encounter a real
                             // scattering interaction
                             active &= !real_scatter;
@@ -629,6 +647,7 @@ public:
                 // Update throughput by the transmittance and pdf weight
                 dr::masked(throughput, active_medium) *= state.throughput;
                 dr::masked(mei, active_medium) = state.mei;
+                dr::masked(medium_component, active_medium) = state.medium_component;
 
                 escaped_medium |= active_medium && !mei.is_valid();
                 active_medium &= mei.is_valid();
@@ -649,9 +668,10 @@ public:
                 PhaseFunctionContext phase_ctx(sampler);
                 // Aggregate media sample the component phase function at the
                 // interaction point; other media ignore the sample
-                auto phase = mei.medium->phase_function(
-                    mei, sampler->next_1d(act_medium_scatter),
-                    act_medium_scatter);
+                // auto phase = mei.medium->phase_function(
+                //     mei, sampler->next_1d(act_medium_scatter),
+                //     act_medium_scatter);
+                auto phase = mei.medium->phase_function(medium_component);
                 auto ddis_phase = mei.medium->ddis_phase_function();
 
                 // --------------------- NLE setup ---------------------
@@ -1143,6 +1163,7 @@ public:
                     target_ot,
                     medium->use_rrt(),
                     medium->has_spectral_extinction(),
+                    /*medium_component=*/0,
                     /*throughput=*/UnpolarizedSpectrum(1.f),
                 };
 

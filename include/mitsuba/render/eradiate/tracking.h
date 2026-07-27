@@ -7,13 +7,13 @@
 NAMESPACE_BEGIN(mitsuba)
 
 /**
- * \brief State carried through extremum traversal to accumulate the throughput 
+ * \brief State carried through extremum traversal to accumulate the throughput
  * and its PDF.
- * 
+ *
  * Can be used to for delta tracking, ratio tracking, and residual ratio tracking.
- * Note: Since the number of required dimensions is different for all pixel 
+ * Note: Since the number of required dimensions is different for all pixel
  * samples, ``rng`` is used to sample distances and event types.
- * 
+ *
  */
 template< typename Float, typename Spectrum >
 struct TrackingState {
@@ -25,52 +25,53 @@ struct TrackingState {
     Float target_ot;
     Mask use_rrt;
     Mask has_spectral_extinction;
+    UInt32 medium_component;
 
     // Note that ``throughput`` is shared between algorithm and should be accumulated
-    // accordingly. If used for volpathmis, new members and data types will need to 
+    // accordingly. If used for volpathmis, new members and data types will need to
     // be introduced.
     UnpolarizedSpectrum throughput;
 
     DRJIT_STRUCT(TrackingState, ray, rng, mei, target_ot, use_rrt, \
-        has_spectral_extinction, throughput)
+        has_spectral_extinction, medium_component, throughput)
 };
 
 /**
- * \brief Signature of the tracking function callback accepted by 
+ * \brief Signature of the tracking function callback accepted by
  * ``ExtremumStructures::traverse_extremum``.
- * 
+ *
  * \param segment
  *      An extremum segment along a ray.
  * \param state
- *      The tracking state that holds interaction information and accumulates 
+ *      The tracking state that holds interaction information and accumulates
  *      throughput and pdfs.
  * \param channel
  *      The channel to use for sampling.
  * \param active
  *      Represents the active lanes.
- * 
- * 
+ *
+ *
  * \return A pair (advance, active):
  *      advance:    If true, tracking has exited the segment and requires a
  *                  new one. If false, repeat the loop with the same segment.
- *      active:     Represent active lanes. Lanes that have sampled a real 
- *                  interaction or terminated for other reasons will return 
+ *      active:     Represent active lanes. Lanes that have sampled a real
+ *                  interaction or terminated for other reasons will return
  *                  ``false``, prompting the termination of the traversal.
  */
 template< typename Float, typename Spectrum >
-using TrackingFunction = 
+using TrackingFunction =
     std::pair<dr::mask_t<Float>, dr::mask_t<Float>>(
     const ExtremumSegment<Float, Spectrum>& /*segment*/,
     TrackingState<Float, Spectrum>& /*state*/,
-    const dr::uint32_array_t<Float>& /*channel*/, 
+    const dr::uint32_array_t<Float>& /*channel*/,
     dr::mask_t<Float> /*active*/
 );
 
-/// Helper function to index the channel of an ``UnpolarizedSpectrum``. 
+/// Helper function to index the channel of an ``UnpolarizedSpectrum``.
 template< typename Float, typename Spectrum >
 MI_INLINE
 Float index_spectrum(
-    const unpolarized_spectrum_t<Spectrum> &spec, 
+    const unpolarized_spectrum_t<Spectrum> &spec,
     const dr::uint32_array_t<Float> &idx
 ) {
     Float m = spec[0];

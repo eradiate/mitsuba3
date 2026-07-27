@@ -55,10 +55,12 @@ public:
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
                     m_phase_function, m_extremum_structure,
                     m_ddis_phase_function, m_ddis_threshold,
-                    create_ddis_phase_function
+                    ddis_phase_function, ddis_threshold
                 )
     MI_IMPORT_TYPES(Scene, Sampler, ExtremumStructure, PhaseFunction,
                     PhaseFunctionPtr)
+
+    using MediumContext = MediumContext<Float, Spectrum>;
 
     RepeatMedium(const Properties &props) : Base(props) {
         m_is_homogeneous = false;
@@ -120,10 +122,9 @@ public:
             PluginManager::instance()->create_object<ExtremumStructure>(
                 props_repeat);
 
-        m_ddis_threshold = props.get<ScalarFloat>("ddis_threshold", 0.1f);
-        if (m_ddis_threshold > 0.f)
-            m_ddis_phase_function =
-                static_cast<PhaseFunction *>(create_ddis_phase_function());
+        m_ddis_threshold = m_inner->ddis_threshold();
+        m_ddis_phase_function =
+            const_cast<PhaseFunction *>(m_inner->ddis_phase_function());
     }
 
     void traverse(TraversalCallback *cb) override {
@@ -153,10 +154,20 @@ public:
         return m_inner->get_scattering_coefficients(fold(mi), active);
     }
 
+    MediumContext get_medium_context(const MediumInteraction3f &mei,
+        UnpolarizedSpectrum sigma_maj, Float sample, Mask active) const override {
+        return m_inner->get_medium_context(fold(mei), sigma_maj, sample, active);
+    }
+
     PhaseFunctionPtr phase_function(const MediumInteraction3f &mi,
                                     Float sample,
                                     Mask active) const override {
         return m_inner->phase_function(fold(mi), sample, active);
+    }
+
+    PhaseFunctionPtr phase_function(const UInt32 &component,
+                                    Mask active /*= true*/) const override {
+        return m_inner->phase_function(component, active);
     }
 
     std::tuple<Mask, Float, Float>
