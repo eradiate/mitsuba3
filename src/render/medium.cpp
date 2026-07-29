@@ -175,12 +175,13 @@ Medium<Float, Spectrum>::prepare_medium_traversal(const Ray3f& ray, Mask active)
 MI_VARIANT
 typename Medium<Float, Spectrum>::MediumContext
 Medium<Float, Spectrum>::get_medium_context(const MediumInteraction3f &mei,
-                                            UnpolarizedSpectrum /*sigma_maj*/,
+                                            UnpolarizedSpectrum sigma_maj,
                                             Float /*sample*/,
                                             Mask active) const {
     MediumContext ctx = dr::zeros<MediumContext>();
     std::tie(ctx.sigma_s, ctx.sigma_n, ctx.sigma_t) =
         get_scattering_coefficients(mei, active);
+    ctx.sigma_n = sigma_maj - ctx.sigma_t;
     ctx.sampled_component = 0;
     return ctx;
 }
