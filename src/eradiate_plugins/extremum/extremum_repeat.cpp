@@ -18,9 +18,9 @@ Extremum repeat structure (:monosp:`extremum_repeat`)
    - |extremum|
    - The inner extremum structure to tile.
 
- * - lattice_0, lattice_1, lattice_2
+ * - lattice
    - |vector|
-   - Lattice translation vectors. Default: the axis-aligned extents of the
+   - Axis-aligned lattice period along x, y, z. Default: the extents of the
      inner structure's domain.
 
  * - aabb_min, aabb_max
@@ -32,11 +32,12 @@ lattice. It is assembled — typically by a :monosp:`repeat` medium — from the
 inner medium's *built* structure; \ref ExtremumStructure::build() is never
 called on it.
 
-Traversal loops over the lattice cells intersected by the ray, delegating
-each whole cell span to the inner structure's native traversal with a
-lattice-translated ray. Translations preserve ray parameterization and
-directions, so the tracking callback contract is untouched; the state's ray
-remains the world ray.
+Only next_segment() is implemented: it folds the query point into the inner
+structure's tile and delegates a single-segment lookup, clipped to the tile
+edge. Traversal itself uses ExtremumStructure's generic default, which steps
+through next_segment() one segment at a time — this keeps traversal cheap
+whether this structure is used standalone or aggregated as a child of e.g.
+extremum_overlap.
 */
 
 template <typename Float, typename Spectrum>
@@ -44,9 +45,6 @@ class ExtremumRepeat final : public ExtremumStructure<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(ExtremumStructure, m_bbox)
     MI_IMPORT_TYPES(Volume, ExtremumStructure)
-
-    using TrackingStateType    = TrackingState<Float, Spectrum>;
-    using TrackingFunctionType = TrackingFunction<Float, Spectrum>;
 
     ExtremumRepeat(const Properties &props) : Base(props) {
         for (auto &prop : props.objects()) {
@@ -66,18 +64,8 @@ public:
                   "domain (one tile), got %s", tile);
         m_origin = tile.min;
 
-        ScalarVector3f l[3];
-        for (size_t i = 0; i < 3; ++i) {
-            ScalarVector3f def(0.f);
-            def[i] = tile.extents()[i];
-            l[i] = props.get<ScalarVector3f>("lattice_" + std::to_string(i),
-                                             def);
-        }
-        // Lattice vectors as matrix columns
-        m_lattice = ScalarMatrix3f(l[0].x(), l[1].x(), l[2].x(),
-                                   l[0].y(), l[1].y(), l[2].y(),
-                                   l[0].z(), l[1].z(), l[2].z());
-        m_lattice_inv = dr::inverse(m_lattice);
+        m_lattice = props.get<ScalarVector3f>("lattice", tile.extents());
+        m_lattice_rcp = 1.f / m_lattice;
 
         if (props.has_property("aabb_min") && props.has_property("aabb_max")) {
             m_bbox = ScalarBoundingBox3f(props.get<ScalarPoint3f>("aabb_min"),
@@ -89,84 +77,41 @@ public:
         }
     }
 
-    TrackingStateType traverse_extremum(
-        const Ray3f &ray,
-        Float mint,
-        Float maxt,
-        UInt32 channel,
-        TrackingStateType state,
-        TrackingFunctionType* func,
-        Mask active
-    ) const override {
-        struct LoopState {
-            TrackingStateType state;
-            Mask active;
-            Float t;
-
-            DRJIT_STRUCT(LoopState, state, active, t)
-        } ls = {
-            state,
-            active && (maxt > mint),
-            mint
-        };
-
-        dr::tie(ls) = dr::while_loop(
-            dr::make_tuple(ls),
-            [](const LoopState &ls) { return ls.active; },
-            [this, func, ray, maxt, channel](LoopState &ls) {
-
-            auto [shift, t_edge] = tile_at(ray, ls.t);
-            Float t_end = dr::minimum(t_edge, maxt);
-
-            // Delegate the whole tile span with the lattice-translated ray;
-            // the state's ray stays the world ray so that interaction
-            // positions remain world-space.
-            Ray3f shifted = ray;
-            shifted.o -= shift;
-            ls.state = m_inner->traverse_extremum(
-                shifted, ls.t, t_end, channel, ls.state, func, ls.active);
-
-            // A valid interaction is a sampled real scatter — stop
-            ls.active &= !ls.state.mei.is_valid();
-            ls.t = t_end;
-            ls.active &= ls.t < maxt;
-        },
-        "Repeat Traversal");
-
-        return ls.state;
-    }
-
     ExtremumSegment next_segment(const Ray3f &ray, Float t,
                                  Mask active) const override {
         auto [hit, d0, d1] = m_bbox.ray_intersect(ray);
 
+        ExtremumSegment segment(t, dr::Infinity<Float>, Vector2f(0.f));
+
         Float eps = dr::maximum(dr::abs(t), 1.f) * math::RayEpsilon<Float>;
         Float tq  = t + eps;
 
-        Mask before = hit && (tq < d0);
-        Mask inside = hit && !before && (tq < d1);
+        active &= hit;
+        Mask before = active && (tq < d0);
+        Mask inside = active && !before && (tq < d1);
+
+        dr::masked(segment.maxt, before) = d0;
+
+        // early exit
+        if (dr::any_or<false>(!inside))
+            return segment;
 
         auto [shift, t_edge] = tile_at(ray, t);
         Ray3f shifted = ray;
         shifted.o -= shift;
 
-        ExtremumSegment s = m_inner->next_segment(shifted, t, active && inside);
+        ExtremumSegment s = m_inner->next_segment(shifted, t, inside);
+        dr::masked(segment.value, inside) = s.value;
+        dr::masked(segment.maxt, inside) = dr::clip(dr::minimum(s.maxt, t_edge), tq, d1);
 
-        // Clamp to the tile edge and the domain so segments compose
-        Float maxt = dr::select(
-            inside,
-            dr::maximum(dr::minimum(dr::minimum(s.maxt, t_edge), d1), tq),
-            dr::select(before, d0, dr::Infinity<Float>));
-
-        return ExtremumSegment(t, maxt,
-                               dr::select(inside, s.value, Vector2f(0.f)));
+        return segment;
     }
 
     std::tuple<Float, Float> eval_1(const Interaction3f &it,
                                     Mask active) const override {
-        Vector3f c = Matrix3f(m_lattice_inv) * (it.p - m_origin);
+        Vector3f c = (it.p - m_origin) * m_lattice_rcp;
         Interaction3f it_folded = it;
-        it_folded.p = it.p - Matrix3f(m_lattice) * dr::floor(c);
+        it_folded.p = it.p - m_lattice * dr::floor(c);
         return m_inner->eval_1(it_folded, active);
     }
 
@@ -189,8 +134,8 @@ private:
         Float eps = dr::maximum(dr::abs(t), 1.f) * math::RayEpsilon<Float>;
 
         // Ray in lattice coordinates: same t parameterization
-        Vector3f o = Matrix3f(m_lattice_inv) * (ray.o - m_origin);
-        Vector3f d = Matrix3f(m_lattice_inv) * ray.d;
+        Vector3f o = (ray.o - m_origin) * m_lattice_rcp;
+        Vector3f d = ray.d * m_lattice_rcp;
         Vector3f k = dr::floor(dr::fmadd(d, t + eps, o));
 
         Float t_edge = dr::Infinity<Float>;
@@ -202,13 +147,13 @@ private:
             t_edge = dr::minimum(t_edge, ti);
         }
 
-        return { Matrix3f(m_lattice) * k, t_edge };
+        return { k * m_lattice, t_edge };
     }
 
 private:
     ref<ExtremumStructure> m_inner;
-    ScalarMatrix3f m_lattice = dr::identity<ScalarMatrix3f>();
-    ScalarMatrix3f m_lattice_inv = dr::identity<ScalarMatrix3f>();
+    ScalarVector3f m_lattice = ScalarVector3f(1.f);
+    ScalarVector3f m_lattice_rcp = ScalarVector3f(1.f);
     ScalarPoint3f m_origin = 0.f;
 };
 

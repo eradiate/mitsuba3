@@ -24,11 +24,10 @@ Repeating medium (:monosp:`repeat`)
    - |medium|
    - The inner medium to tile. Its domain defines the canonical tile.
 
- * - lattice_0, lattice_1, lattice_2
+ * - lattice
    - |vector|
-   - Lattice translation vectors. May be rotated (tilted tiling); per-tile
-     rotation of the content is not supported. Default: the axis-aligned
-     extents of the inner medium's domain.
+   - Axis-aligned lattice period along x, y, z. Default: the extents of the
+     inner medium's domain.
 
  * - aabb_min, aabb_max
    - |point|
@@ -94,18 +93,9 @@ public:
         Properties props_repeat("extremum_repeat");
         props_repeat.set("structure", (Object *) inner_structure);
 
-        ScalarVector3f l[3];
-        for (size_t i = 0; i < 3; ++i) {
-            ScalarVector3f def(0.f);
-            def[i] = tile.extents()[i];
-            l[i] = props.get<ScalarVector3f>("lattice_" + std::to_string(i),
-                                             def);
-            props_repeat.set("lattice_" + std::to_string(i), l[i]);
-        }
-        m_lattice = ScalarMatrix3f(l[0].x(), l[1].x(), l[2].x(),
-                                   l[0].y(), l[1].y(), l[2].y(),
-                                   l[0].z(), l[1].z(), l[2].z());
-        m_lattice_inv = dr::inverse(m_lattice);
+        m_lattice = props.get<ScalarVector3f>("lattice", tile.extents());
+        m_lattice_rcp = 1.f / m_lattice;
+        props_repeat.set("lattice", m_lattice);
 
         if (props.has_property("aabb_min") && props.has_property("aabb_max")) {
             m_aabb = ScalarBoundingBox3f(props.get<ScalarPoint3f>("aabb_min"),
@@ -195,16 +185,16 @@ public:
 private:
     /// Fold the interaction point into the canonical tile
     MediumInteraction3f fold(const MediumInteraction3f &mi) const {
-        Vector3f c = Matrix3f(m_lattice_inv) * (mi.p - m_origin);
+        Vector3f c = (mi.p - m_origin) * m_lattice_rcp;
         MediumInteraction3f folded = mi;
-        folded.p = mi.p - Matrix3f(m_lattice) * dr::floor(c);
+        folded.p = mi.p - m_lattice * dr::floor(c);
         return folded;
     }
 
 private:
     ref<Base> m_inner;
-    ScalarMatrix3f m_lattice = dr::identity<ScalarMatrix3f>();
-    ScalarMatrix3f m_lattice_inv = dr::identity<ScalarMatrix3f>();
+    ScalarVector3f m_lattice = ScalarVector3f(1.f);
+    ScalarVector3f m_lattice_rcp = ScalarVector3f(1.f);
     ScalarPoint3f m_origin = 0.f;
     ScalarBoundingBox3f m_aabb;
 
