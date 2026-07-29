@@ -196,8 +196,9 @@ private:
         Int32 stack_counter;  // -1 means empty (no saved state)
         Sampler* sampler;
         Mask active;
+        PCG32<UInt32> rng;
 
-        DRJIT_STRUCT(LoopState, current, result, stack, counts, stack_counter, sampler, active)
+        DRJIT_STRUCT(LoopState, current, result, stack, counts, stack_counter, sampler, active, rng)
     };
 
 public:
@@ -394,6 +395,11 @@ public:
         CountStack counts;
         Int32 stack_counter = Int32(-1);
 
+        auto [rng_seed, rng_offset] = new_seed_offset(
+            sampler->next_1d(active), sampler->next_1d(active));
+        PCG32<UInt32> rng;
+        rng.seed(rng_seed, rng_offset);
+
         LoopState ls {
             ps,
             result,
@@ -401,7 +407,8 @@ public:
             counts,
             stack_counter,
             sampler,
-            active
+            active,
+            rng
         };
 
         // Base sentinel: push the initial path state with count 1 so that
@@ -510,17 +517,11 @@ public:
                 // Prepare Extremum traversal
                 auto extremum = medium->extremum_structure();
 
-                Float sample1 = sampler->next_1d();
-                Float sample2 = sampler->next_1d();
-                auto [seed, offset] = new_seed_offset(sample1, sample2);
-                PCG32<UInt32> rng;
-                rng.seed(seed, offset);
-
                 Float target_ot = -dr::log( 1.f - sampler->next_1d(active_medium));
 
                 TrackingStateType state {
                     ray,
-                    rng,
+                    ls.rng,
                     mei,
                     target_ot,
                     medium->use_rrt(),
@@ -648,6 +649,7 @@ public:
                 dr::masked(throughput, active_medium) *= state.throughput;
                 dr::masked(mei, active_medium) = state.mei;
                 dr::masked(medium_component, active_medium) = state.medium_component;
+                dr::masked(ls.rng, active_medium) = state.rng;
 
                 escaped_medium |= active_medium && !mei.is_valid();
                 active_medium &= mei.is_valid();
@@ -1091,6 +1093,11 @@ public:
         SurfaceInteraction3f si = dr::zeros<SurfaceInteraction3f>();
         DirectionSample3f dir_sample = ds;
 
+        auto [rng_seed, rng_offset] = new_seed_offset(
+            sampler->next_1d(active), sampler->next_1d(active));
+        PCG32<UInt32> rng;
+        rng.seed(rng_seed, rng_offset);
+
         struct LoopState {
             Mask active;
             Ray3f ray;
@@ -1099,9 +1106,10 @@ public:
             SurfaceInteraction3f si;
             Spectrum transmittance;
             Sampler* sampler;
+            PCG32<UInt32> rng;
 
             DRJIT_STRUCT(LoopState, active, ray, total_dist, \
-                medium, si, transmittance, sampler)
+                medium, si, transmittance, sampler, rng)
         } ls = {
             active,
             ray,
@@ -1109,7 +1117,8 @@ public:
             medium,
             si,
             transmittance,
-            sampler
+            sampler,
+            rng
         };
 
         dr::tie(ls) = dr::while_loop(dr::make_tuple(ls),
@@ -1148,17 +1157,11 @@ public:
                 // Prepare extremum traversal
                 auto extremum = medium->extremum_structure();
 
-                Float sample1 = sampler->next_1d();
-                Float sample2 = sampler->next_1d();
-                auto [seed, offset] = new_seed_offset(sample1, sample2);
-                PCG32<UInt32> rng;
-                rng.seed(seed, offset);
-
                 Float target_ot = -dr::log( 1.f - sampler->next_1d(active_medium));
 
                 TrackingStateType state {
                     ray,
-                    rng,
+                    ls.rng,
                     mei,
                     target_ot,
                     medium->use_rrt(),
@@ -1178,7 +1181,7 @@ public:
                     UnpolarizedSpectrum &throughput = state.throughput;
                     PCG32<UInt32> &rng       = state.rng;
                     MediumInteraction3f& mei = state.mei;
-                    Mask use_rrt             = state.use_rrt;
+                    Mask use_rrt             = state.use_rrt && active;
                     MediumPtr medium         = mei.medium;
                     Mask act_spectral =
                         state.has_spectral_extinction && active;
@@ -1256,6 +1259,7 @@ public:
                 }, active_medium);
 
                 dr::masked(transmittance, active_medium) *= state.throughput;
+                dr::masked(ls.rng, active_medium) = state.rng;
             }
 
             // Handle interactions with surfaces
