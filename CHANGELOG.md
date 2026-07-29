@@ -25,6 +25,8 @@ strive to document breaking API changes in the release notes below.
 - Implement prediction-based splitting (PBS) and N-tuple local estimate (NLE)
   variance reduction methods, completing work on VROOM method support in the
   `eovolpath` integrator.
+- Add an experimental implementation for periodic boundaries of extremum grid
+  structures.
 
 ## v0.5.0 (9th June 2026)
 
