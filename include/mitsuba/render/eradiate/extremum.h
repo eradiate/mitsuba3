@@ -69,7 +69,8 @@ public:
      * segment, the callback ``func`` is called to advance the ``state``. This
      * is useful for example to implement Delta Tracking, Ratio Tracking, and
      * Residual Ratio Tracking. The callback is typically defined in the
-     * integrator.
+     * integrator. By default, the traversal is achieved using ``next_segment``.
+     * This function can be overriden to achieve better traversal performance.
      *
      * \param ray           Ray along which to sample
      * \param mint          Minimum distance to consider
