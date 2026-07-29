@@ -1,3 +1,4 @@
+#include <array>
 #include <mitsuba/core/properties.h>
 #include <mitsuba/core/plugin.h>
 #include <mitsuba/render/medium.h>
@@ -48,7 +49,9 @@ public:
         DRJIT_STRUCT(MediumContext, active, segment)
     };
 
-    using MediumContextArr = DynamicBuffer<MediumContext>;
+    // should externalize this somewhere since it should match the one in multicomponent.
+    static constexpr size_t MAX_COMPONENTS = 16;
+    using MediumContextArr = std::array<MediumContext, MAX_COMPONENTS>;
 
     ExtremumOverlap(const Properties &props) : Base(props) {
         for (auto &prop : props.objects()) {
@@ -59,6 +62,9 @@ public:
         if (m_children.empty())
             Throw("extremum_overlap requires at least one nested extremum "
                   "structure");
+        if (m_children.size() > MAX_COMPONENTS)
+            Throw("extremum_overlap: at most %zu nested extremum structures "
+                  "are supported, got %zu", MAX_COMPONENTS, m_children.size());
 
         m_bbox.reset();
         for (const auto &child : m_children)
@@ -76,9 +82,10 @@ public:
     ) const override {
         active &= maxt > mint;
 
-        MediumContextArr ctx_arr = dr::zeros<MediumContextArr>(m_children.size());
+        const size_t n_children = m_children.size();
+        MediumContextArr ctx_arr{};
 
-        for (size_t i = 0; i < m_children.size(); ++i) {
+        for (size_t i = 0; i < n_children; ++i) {
             auto [hit, child_mint, child_maxt] = m_children[i]->bbox().ray_intersect(ray);
             ctx_arr[i].active = active && hit;
             ctx_arr[i].segment = ExtremumSegment(mint,
@@ -107,7 +114,7 @@ public:
         dr::tie(ls) = dr::while_loop(
             dr::make_tuple(ls),
             [](const LoopState &ls) { return ls.active; },
-            [this, func, ray, maxt, channel](LoopState &ls) {
+            [this, func, ray, maxt, channel, n_children](LoopState &ls) {
 
             // expose combined segment directly in the function
             Float seg_maxt = maxt;
@@ -116,7 +123,7 @@ public:
             // only recompute the segment when requested i.e. advance is true.
             if (dr::any_or<true>(ls.advance)) {
 
-                for (size_t i = 0; i < m_children.size(); ++i) {
+                for (size_t i = 0; i < n_children; ++i) {
                     const auto &child = m_children[i];
                     auto &ctx = ls.ctx_arr[i];
 
