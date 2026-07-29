@@ -1123,7 +1123,7 @@ public:
 
         dr::tie(ls) = dr::while_loop(dr::make_tuple(ls),
             [](const LoopState& ls) { return dr::detach(ls.active); },
-            [this, scene, channel, max_dist](LoopState& ls) {
+            [scene, channel, max_dist](LoopState& ls) {
 
             Mask& active = ls.active;
             Ray3f& ray = ls.ray;
