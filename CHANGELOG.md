@@ -6,7 +6,7 @@ strive to document breaking API changes in the release notes below.
 
 ---
 
-## v0.6.0
+## v0.6.0 (upcoming release)
 
 ### New features
 
@@ -14,19 +14,23 @@ strive to document breaking API changes in the release notes below.
   the upstream `heterogeneous` medium. Introduces a separate bounding box
   parametrization that allows the medium to have a different bounding box to
   the underlying `sigma_t` volume bbox. In turns allows to exploit the wrap
-  mechanism of the volume and implement periodic boundaries.
+  mechanism of the volume and implement periodic boundaries
+  (PR [#32](https://github.com/eradiate/mitsuba3/pull/32)).
 
 ### Improvements
 
 - Improve the *DDIS* (Detector Directional Importance Sampling) variance
   reduction technique by generating DDIS phase functions, envelopes of the
   max phase function used in a medium. Implemented by `piecewise` and
-  `eoheterogeneous` media.
+  `eoheterogeneous` media
+  (PR [#32](https://github.com/eradiate/mitsuba3/pull/32)).
 - Implement prediction-based splitting (PBS) and N-tuple local estimate (NLE)
   variance reduction methods, completing work on VROOM method support in the
-  `eovolpath` integrator.
+  `eovolpath` integrator
+  (PR [#33](https://github.com/eradiate/mitsuba3/pull/33)).
 - Add an experimental implementation for periodic boundaries of extremum grid
-  structures.
+  structures
+  (PR [#34](https://github.com/eradiate/mitsuba3/pull/34)).
 
 ## v0.5.0 (9th June 2026)
 
