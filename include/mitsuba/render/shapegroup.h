@@ -51,6 +51,11 @@ public:
     /// Returns a union of ShapeType flags denoting what is present in the ShapeGroup
     uint32_t shape_types() const { return m_shape_types; }
 
+// #ERADIATE_CHANGE_BEGIN: This fix resets the dirty flags to avoid rebuilding the kdtree (from #b494500)
+    /// Read-only access to the contained shapes.
+    const std::vector<ref<Base>> &shapes() const { return m_shapes; }
+// #ERADIATE_CHANGE_END
+
     void traverse(TraversalCallback *callback) override;
     void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override;
     bool parameters_grad_enabled() const override;

@@ -636,8 +636,15 @@ MI_VARIANT void Scene<Float, Spectrum>::static_accel_shutdown() {
 MI_VARIANT void Scene<Float, Spectrum>::clear_shapes_dirty() {
     for (auto &s : m_shapes)
         s->m_dirty = false;
-    for (auto &s : m_shapegroups)
+// #ERADIATE_CHANGE_BEGIN: This fix resets the dirty flags to avoid rebuilding the kdtree (from #b494500)
+    for (auto &s : m_shapegroups) {
         s->m_dirty = false;
+        // Clear the group's children too (consumed into its accel by the same
+        // build); a backend's per-group dirty check relies on this.
+        for (auto &c : s->shapes())
+            const_cast<Shape *>(c.get())->m_dirty = false;
+    }
+// #ERADIATE_CHANGE_END
 }
 
 MI_VARIANT void Scene<Float, Spectrum>::static_accel_initialization_cpu() { }
