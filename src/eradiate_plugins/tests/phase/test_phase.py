@@ -27,7 +27,7 @@ def tabphase_irregular(tabphase_nodes):
 
 
 def reference_accumulate_envelope(phase, nodes):
-    """Replicate the C++ ``PhaseFunction::eval_max`` evaluation for a single
+    """Replicate the C++ ``PhaseFunction::accumulate_envelope`` evaluation for a single
     (non-composite) phase function.
 
     For each node ``mu`` (cos_theta in physics convention, +1 = forward
@@ -50,7 +50,7 @@ def reference_accumulate_envelope(phase, nodes):
     return out
 
 
-def test_get_nodes_default(variant_scalar_rgb):
+def test_get_envelope_nodes_default(variant_scalar_rgb):
     # A leaf phase function without irregular nodes falls back to the base
     # implementation: 256 nodes spread uniformly over [-1, 1].
     phase = mi.load_dict({"type": "isotropic"})
@@ -63,7 +63,7 @@ def test_get_nodes_default(variant_scalar_rgb):
     assert np.all(np.diff(nodes) > 0)
 
 
-def test_get_nodes_tabphase_irregular(
+def test_get_envelope_nodes_tabphase_irregular(
     variant_scalar_rgb, tabphase_nodes, tabphase_irregular
 ):
     # tabphase_irregular overrides get_envelope_nodes() to expose its own grid.
@@ -72,7 +72,7 @@ def test_get_nodes_tabphase_irregular(
     )
 
 
-def test_get_nodes_blendphase_merged(
+def test_get_envelope_nodes_blendphase_merged(
     variant_scalar_rgb, tabphase_nodes, tabphase_irregular
 ):
     # A composite phase function merges (sorts + de-duplicates) the node grids
@@ -98,7 +98,7 @@ def test_get_nodes_blendphase_merged(
     assert np.all(np.diff(nodes) > 0)
 
 
-def test_eval_max_single(variant_scalar_rgb, hg):
+def test_accumulate_envelope_single(variant_scalar_rgb, hg):
     # The envelope of a single phase function is just the phase function
     # evaluated at every node.
     nodes = hg.get_envelope_nodes()
@@ -108,7 +108,7 @@ def test_eval_max_single(variant_scalar_rgb, hg):
     assert np.allclose(np.array(values), reference_accumulate_envelope(hg, nodes))
 
 
-def test_eval_max_blendphase(variant_scalar_rgb, hg):
+def test_accumulate_envelope_blendphase(variant_scalar_rgb, hg):
     # A composite envelope is the pointwise maximum over its (unweighted)
     # children, regardless of the blend weight.
     iso = mi.load_dict({"type": "isotropic"})
@@ -127,7 +127,7 @@ def test_eval_max_blendphase(variant_scalar_rgb, hg):
     assert np.allclose(np.array(values), ref)
 
 
-def test_eval_max_multiphase(variant_scalar_rgb, hg, tabphase_irregular):
+def test_accumulate_envelope_multiphase(variant_scalar_rgb, hg, tabphase_irregular):
     # Same envelope semantics for the N-component mixture.
     iso = mi.load_dict({"type": "isotropic"})
     multi = mi.load_dict(

@@ -250,16 +250,16 @@ public:
      * Delegating the comparison to the callee rather than the caller enables
      * natural recursion through composite phase functions (e.g.
      * \ref BlendPhaseFunction, \ref MultiPhaseFunction): a composite
-     * implementation simply calls \c eval_max on each child with the same
+     * implementation simply calls \c accumulate_envelope on each child with the same
      * buffer, and each child accumulates its contribution independently. The
      * resulting buffer holds the pointwise supremum over the entire
      * phase-function tree without the caller needing to know its structure.
      *
-     * \note cos_theta follows the physics convention (see \ref get_nodes).
+     * \note cos_theta follows the physics convention (see \ref get_envelope_nodes).
      *
      * \param nodes
      *     cos_theta values at which to evaluate the phase function, as
-     *     returned by \ref get_nodes.
+     *     returned by \ref get_envelope_nodes.
      * \param values
      *     In/out buffer. Must have the same length as \c nodes and be
      *     zero-initialised before the first comparison. On return, each entry
@@ -283,7 +283,7 @@ protected:
     /// Flags for each component of this phase function.
     std::vector<uint32_t> m_components;
     // #ERADIATE_CHANGE_BEGIN: DDIS
-    /// Number of nodes to regularly discretize the cos theta dimension in \ref eval_max
+    /// Number of nodes to regularly discretize the cos theta dimension in \ref accumulate_envelope
     size_t m_node_count;
     /// True if the phase function's parameters have changed since the last scene update
     bool m_dirty = false;
@@ -322,8 +322,8 @@ DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::PhaseFunction)
     DRJIT_CALL_GETTER(flags)
     DRJIT_CALL_GETTER(component_count)
 // #ERADIATE_CHANGE_BEGIN: DDIS
-    DRJIT_CALL_METHOD(get_nodes)
-    DRJIT_CALL_METHOD(eval_max)
+    DRJIT_CALL_METHOD(get_envelope_nodes)
+    DRJIT_CALL_METHOD(accumulate_envelope)
 // #ERADIATE_CHANGE_END
 DRJIT_CALL_END()
 

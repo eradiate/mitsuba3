@@ -4790,6 +4790,11 @@ static const char *__doc_mitsuba_Medium_Medium_2 = R"doc()doc";
 
 static const char *__doc_mitsuba_Medium_class_name = R"doc()doc";
 
+static const char *__doc_mitsuba_Medium_create_ddis_phase_function =
+R"doc(Create the tabphase irregular plugin used as DDIS phase function.
+
+This method is an helper function for child classes.)doc";
+
 static const char *__doc_mitsuba_Medium_ddis_phase_function =
 R"doc(Return the ddis phase function of this medium. Can be null for medium
 that don't specify such phase function.)doc";
@@ -5988,16 +5993,17 @@ p(\mu_i))`.
 Delegating the comparison to the callee rather than the caller enables
 natural recursion through composite phase functions (e.g.
 BlendPhaseFunction, MultiPhaseFunction): a composite implementation
-simply calls ``eval_max`` on each child with the same buffer, and each
-child accumulates its contribution independently. The resulting buffer
-holds the pointwise supremum over the entire phase-function tree
-without the caller needing to know its structure.
+simply calls ``accumulate_envelope`` on each child with the same
+buffer, and each child accumulates its contribution independently. The
+resulting buffer holds the pointwise supremum over the entire phase-
+function tree without the caller needing to know its structure.
 
-\note cos_theta follows the physics convention (see get_nodes).
+\note cos_theta follows the physics convention (see
+get_envelope_nodes).
 
 Parameter ``nodes``:
     cos_theta values at which to evaluate the phase function, as
-    returned by get_nodes.
+    returned by get_envelope_nodes.
 
 Parameter ``values``:
     In/out buffer. Must have the same length as ``nodes`` and be zero-
@@ -6070,7 +6076,7 @@ static const char *__doc_mitsuba_PhaseFunction_m_flags = R"doc(Type of phase fun
 
 static const char *__doc_mitsuba_PhaseFunction_m_node_count =
 R"doc(Number of nodes to regularly discretize the cos theta dimension in
-eval_max)doc";
+accumulate_envelope)doc";
 
 static const char *__doc_mitsuba_PhaseFunction_max_projected_area = R"doc(Return the maximum projected area of the microflake distribution)doc";
 
