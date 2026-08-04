@@ -203,7 +203,7 @@ void Medium<Float, Spectrum>::update_ddis_phase_function() {
 
     m_ddis_phase_function->traverse(&cb);
 
-    Assert(cb.taget_values && cb.target_nodes);
+    Assert(cb.target_values && cb.target_nodes);
 
     if (cb.target_values)
         *cb.target_values = values;
