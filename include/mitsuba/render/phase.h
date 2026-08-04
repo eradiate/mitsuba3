@@ -206,19 +206,8 @@ public:
 
     /// Set type of phase function
     void set_flags(uint32_t flags) { m_flags = flags; }
+
 // #ERADIATE_CHANGE_BEGIN: DDIS
-    /**
-     * Return whether this phase function's parameters have changed since the
-     * last call to set_dirty(false). Set by parameters_changed(), cleared by
-     * the scene after all dependent media have been updated.
-    */
-    bool dirty() const { return m_dirty; }
-
-    /// Modify the phase function's dirty flag
-    void set_dirty(bool dirty) { m_dirty = dirty; }
-
-    void parameters_changed(const std::vector<std::string> &keys = {}) override;
-
     /**
      * \brief Populate a set of cos_theta nodes suitable for representing this
      * phase function.
@@ -268,6 +257,7 @@ public:
      */
     virtual void accumulate_envelope(const FloatStorage &nodes, FloatStorage &values) const;
 // #ERADIATE_CHANGE_END
+
     //! @}
     // -----------------------------------------------------------------------
 
@@ -285,8 +275,6 @@ protected:
     // #ERADIATE_CHANGE_BEGIN: DDIS
     /// Number of nodes to regularly discretize the cos theta dimension in \ref accumulate_envelope
     size_t m_node_count;
-    /// True if the phase function's parameters have changed since the last scene update
-    bool m_dirty = false;
     // #ERADIATE_CHANGE_END
 };
 

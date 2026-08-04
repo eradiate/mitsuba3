@@ -154,3 +154,78 @@ def test_accumulate_envelope_multiphase(variant_scalar_rgb, hg, tabphase_irregul
         ]
     )
     assert np.allclose(np.array(values), ref)
+
+
+def _make_ddis_medium(medium_type, phase, ddis_threshold=0.5):
+    return mi.load_dict(
+        {
+            "type": medium_type,
+            "sigma_t": 0.5,
+            "albedo": 0.8,
+            "phase": phase,
+            "ddis_threshold": ddis_threshold,
+        }
+    )
+
+
+def _ddis_phase_tree(combo, shared):
+    """Embed ``shared`` as the medium's phase function, either directly or as
+    one branch of a composite phase function."""
+    if combo == "hg":
+        return shared
+    if combo == "blendphase":
+        return {
+            "type": "blendphase",
+            "weight": 0.5,
+            "phase_0": shared,
+            "phase_1": {"type": "isotropic"},
+        }
+    if combo == "multiphase":
+        return {
+            "type": "multiphase",
+            "phase0": shared,
+            "weight0": 1.0,
+            "phase1": {"type": "isotropic"},
+            "weight1": 1.0,
+        }
+    raise ValueError(combo)
+
+
+@pytest.mark.parametrize("medium_type", ["piecewise", "eoheterogeneous"])
+@pytest.mark.parametrize("phase_combo", ["hg", "blendphase", "multiphase"])
+def test_ddis_phase_function_update(
+    variant_scalar_mono_double, medium_type, phase_combo
+):
+    # Two media share a single leaf phase function: one uses it as its direct
+    # phase function, the other reaches it only as a child of a composite
+    # phase function (except for the "hg" combo, where both use it
+    # directly). The layout of the scene relies on the more robust traversal
+    # function of `eradiate.traverse`.
+    shared = mi.load_dict({"type": "hg", "g": 0.2})
+
+    media = {
+        "medium_direct": _make_ddis_medium(medium_type, shared),
+        "medium_composite": _make_ddis_medium(
+            medium_type, _ddis_phase_tree(phase_combo, shared)
+        ),
+    }
+    scene = mi.load_dict({"type": "scene", **media})
+
+    params = mi.eradiate.traverse(scene)
+    g_key = next(k for k in params.keys() if k.endswith(".g"))
+    params[g_key] = 0.8
+    params.update()
+
+    for name, medium in media.items():
+        # Recompute the expected DDIS envelope directly from the medium's
+        # (now updated) phase function, and compare against the DDIS phase
+        # function's tabulated values exposed as scene parameters.
+        phase = medium.phase_function()
+        nodes = phase.get_envelope_nodes()
+        expected = dr.zeros(type(nodes), dr.width(nodes))
+        phase.accumulate_envelope(nodes, expected)
+
+        got = params[f"{name}.ddis_phase_function.values"]
+        assert dr.allclose(got, expected), (
+            f"DDIS phase function of medium '{name}' was not updated"
+        )
