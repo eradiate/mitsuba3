@@ -194,14 +194,9 @@ public:
      * \brief Rebuild any DDIS-related derived data when the phase function has
      * changed.
      *
-     * This method is called by the scene's `parameters_changed()` for every
-     * medium whose phase function is marked dirty. The default implementation
+     * This method is to be called by media's `parameters_changed()` anytime
+     * its phase function is modified. The default implementation
      * is a no-op; subclasses that maintain a DDIS phase function override it.
-     *
-     * This is intentionally separate from `parameters_changed()` so that the
-     * scene can drive all media to completion before clearing dirty flags,
-     * which is required when multiple media share the same phase function via
-     * a scene-level reference.
      */
     virtual void update_ddis_phase_function();
 
