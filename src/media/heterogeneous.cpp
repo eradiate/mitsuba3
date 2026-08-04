@@ -193,12 +193,16 @@ public:
         Base::traverse(cb);
     }
 
-    void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override {
-        m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
 // #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
+    void parameters_changed(const std::vector<std::string> &keys = {}) override {
+        m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
         m_min_density = dr::opaque<Float>(m_scale * m_sigmat->min());
-// #ERADIATE_CHANGE_END
+
+        // #TODO: refactor extremum interface to expose a build function for more robust updates
+        if (string::contains(keys, "sigma_t"))
+            m_extremum_structure->parameters_changed(keys);
     }
+// #ERADIATE_CHANGE_END
 
     UnpolarizedSpectrum
     get_majorant(const MediumInteraction3f & /* mi */,

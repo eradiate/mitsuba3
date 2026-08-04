@@ -100,10 +100,6 @@ public:
         update_bbox_sphere();
     }
 
-    void add_extremum_structure(ExtremumStructure* extremum) override {
-        m_volume->add_extremum_structure(extremum);
-    }
-
     UnpolarizedSpectrum eval(const Interaction3f &it, Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::TextureEvaluate, active);
 
@@ -153,7 +149,7 @@ public:
     }
 
     ScalarFloat max() const override { return dr::maximum(dr::maximum(m_volume->max(), m_fillmin), m_fillmax); }
-    
+
     ScalarFloat min() const override { return dr::minimum(dr::minimum(m_volume->min(), m_fillmin), m_fillmax); }
 
     ScalarVector3i resolution() const override { return m_volume->resolution(); };
@@ -161,7 +157,7 @@ public:
 // #ERADIATE_CHANGE_BEGIN: Spatial extremum queries for grid volumes
     std::pair<Float, Float>
     extremum(BoundingBox3f bbox, Mask local) const override {
-        
+
         if (dr::any(!local))
             NotImplementedError("SphericalCoords only supports local bounds");
 

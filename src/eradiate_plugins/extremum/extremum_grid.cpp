@@ -80,9 +80,6 @@ public:
         if (!m_volume)
             Throw("ExtremumGrid requires at least one volume");
 
-        // Register the extremum structure to the volume to trigger
-        // parameter_changed when the volume is modified.
-        m_volume->add_extremum_structure(this);
         m_bbox = m_volume->bbox();
 
         m_to_local = props.get<ScalarAffineTransform4f>("to_world", ScalarAffineTransform4f()).inverse();

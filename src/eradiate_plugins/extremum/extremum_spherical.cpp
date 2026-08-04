@@ -158,8 +158,6 @@ public:
 
         m_volume = volume;
         m_bbox = m_volume->bbox();
-        // Register the extremum structure to the volume.
-        volume->add_extremum_structure(this);
 
         ScalarAffineTransform4f to_world = props.get<ScalarAffineTransform4f>(
             "to_world", ScalarAffineTransform4f());

@@ -454,6 +454,10 @@ public:
 
         if(string::contains(keys, "phase_function"))
             update_ddis_phase_function();
+
+        // #TODO: refactor extremum interface to expose a build function for more robust updates
+        if (string::contains(keys, "sigma_t"))
+            m_extremum_structure->parameters_changed(keys);
     }
 
     void precompute_optical_thickness() {
