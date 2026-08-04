@@ -89,7 +89,7 @@ public:
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
                     m_phase_function, m_extremum_structure,
                     m_ddis_phase_function, m_ddis_threshold,
-                    create_ddis_phase_function
+                    create_ddis_phase_function, update_ddis_phase_function
                 )
     MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, ExtremumStructure,
                     ExtremumStructurePtr, PhaseFunction)
@@ -146,9 +146,12 @@ public:
         Base::traverse(cb);
     }
 
-    void parameters_changed(const std::vector<std::string> &/*keys*/) override {
+    void parameters_changed(const std::vector<std::string> &keys) override {
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
         m_min_density = dr::opaque<Float>(m_scale * m_sigmat->min());
+
+        if(string::contains(keys, "phase_function"))
+            update_ddis_phase_function();
     }
 
     UnpolarizedSpectrum

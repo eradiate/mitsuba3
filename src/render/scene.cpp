@@ -30,9 +30,6 @@ MI_VARIANT Scene<Float, Spectrum>::Scene(const Properties &props)
         Emitter *emitter       = dynamic_cast<Emitter *>(v.get());
         Sensor *sensor         = dynamic_cast<Sensor *>(v.get());
         Integrator *integrator = dynamic_cast<Integrator *>(v.get());
-// #ERADIATE_CHANGE_BEGIN: DDIS phase dirty tracking
-        Medium *medium         = dynamic_cast<Medium *>(v.get());
-// #ERADIATE_CHANGE_END
 
         if (Scene *scene = dynamic_cast<Scene *>(v.get())) {
             // Skip nested scenes in children list
@@ -53,12 +50,6 @@ MI_VARIANT Scene<Float, Spectrum>::Scene(const Properties &props)
             }
             if (mesh)
                 mesh->set_scene(this);
-// #ERADIATE_CHANGE_BEGIN: DDIS phase dirty tracking
-            if (shape->interior_medium())
-                m_media.push_back(shape->interior_medium());
-            if (shape->exterior_medium())
-                m_media.push_back(shape->exterior_medium());
-// #ERADIATE_CHANGE_END
         } else if (emitter) {
             // Surface emitters will be added to the list when attached to a shape
             if (!has_flag(emitter->flags(), EmitterFlags::Surface))
@@ -75,18 +66,9 @@ MI_VARIANT Scene<Float, Spectrum>::Scene(const Properties &props)
             if (m_integrator)
                 Throw("Only one integrator can be specified per scene.");
             m_integrator = integrator;
-// #ERADIATE_CHANGE_BEGIN: DDIS phase dirty tracking
-        } else if (medium) {
-            m_media.push_back(medium);
         }
     }
 
-    // remove duplicate media introduced by gathering both top level and shapes.
-    std::sort(m_media.begin(), m_media.end());
-    auto last = std::unique(m_media.begin(), m_media.end());
-    m_media.erase(last, m_media.end());
-
-// #ERADIATE_CHANGE_END
     // Create sensors' shapes (environment sensors)
     for (Sensor *sensor: m_sensors)
         sensor->set_scene(this);
@@ -202,9 +184,6 @@ MI_VARIANT Scene<Float, Spectrum>::~Scene() {
     m_shapes.clear();
     m_shapegroups.clear();
     m_sensors.clear();
-// #ERADIATE_CHANGE_BEGIN: DDIS phase dirty tracking
-    m_media.clear();
-// #ERADIATE_CHANGE_END
     m_children.clear();
     m_integrator = nullptr;
     m_environment = nullptr;
@@ -590,18 +569,6 @@ MI_VARIANT void Scene<Float, Spectrum>::parameters_changed(const std::vector<std
             break;
         }
     }
-// #ERADIATE_CHANGE_BEGIN: DDIS phase dirty tracking
-    // Update the DDIS phase function for all media whose phase function has
-    // been marked dirty. All media are updated before any dirty flag is
-    // cleared so that media sharing the same phase function via a scene-level
-    // ref all get rebuilt.
-    for (auto &m : m_media)
-        if (m->phase_function() && m->phase_function()->dirty())
-            m->update_ddis_phase_function();
-    for (auto &m : m_media)
-        if (m->phase_function())
-            m->phase_function()->set_dirty(false);
-// #ERADIATE_CHANGE_END
 }
 
 MI_VARIANT std::string Scene<Float, Spectrum>::to_string() const {

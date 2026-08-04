@@ -6,10 +6,10 @@ NAMESPACE_BEGIN(mitsuba)
 
 // #ERADIATE_CHANGE_BEGIN: DDIS
 MI_VARIANT PhaseFunction<Float, Spectrum>::PhaseFunction(const Properties &props)
-    : JitObject<PhaseFunction>(props.id()), 
+    : JitObject<PhaseFunction>(props.id()),
       m_flags(+PhaseFunctionFlags::Empty),
       m_node_count(256) {
-}   
+}
 
 MI_VARIANT typename PhaseFunction<Float, Spectrum>::FloatStorage
 PhaseFunction<Float, Spectrum>::get_envelope_nodes() const {
@@ -44,11 +44,5 @@ PhaseFunction<Float, Spectrum>::accumulate_envelope(const FloatStorage &nodes,
 }
 // #ERADIATE_CHANGE_END
 
-// #ERADIATE_CHANGE_BEGIN: DDIS phase dirty flag
-MI_VARIANT void PhaseFunction<Float, Spectrum>::parameters_changed(
-        const std::vector<std::string> &/*keys*/) {
-    m_dirty = true;
-}
-// #ERADIATE_CHANGE_END
 MI_INSTANTIATE_CLASS(PhaseFunction)
 NAMESPACE_END(mitsuba)
