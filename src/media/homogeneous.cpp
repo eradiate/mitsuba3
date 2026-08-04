@@ -150,7 +150,7 @@ public:
         Properties props_extr("extremum_global");
         props_extr.set("volume", (Object *) m_sigmat.get());
         props_extr.set("scale", m_scale);
-        m_extremum_structure = 
+        m_extremum_structure =
             PluginManager::instance()->create_object<ExtremumStructure>(props_extr);
 // #ERADIATE_CHANGE_END
     }
@@ -161,6 +161,14 @@ public:
         cb->put("sigma_t", m_sigmat, ParamFlags::Differentiable);
         Base::traverse(cb);
     }
+
+// #ERADIATE_CHANGE_BEGIN:
+    void parameters_changed(const std::vector<std::string> &keys = {}) override {
+        // #TODO: refactor extremum interface to expose a build function for more robust updates
+        if (string::contains(keys, "sigma_t"))
+            m_extremum_structure->parameters_changed(keys);
+    }
+// #ERADIATE_CHANGE_END
 
     MI_INLINE auto eval_sigmat(const MediumInteraction3f &mi, Mask active) const {
         auto sigmat = m_sigmat->eval(mi) * m_scale;

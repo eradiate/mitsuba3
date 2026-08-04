@@ -50,9 +50,6 @@ public:
         if (!m_volume)
             Throw("ExtremumGlobal requires at least one volume");
 
-        // Register the extremum structure to the volume to trigger
-        // parameter_changed when the volume is modified.
-        m_volume->add_extremum_structure(this);
         m_scale = props.get<ScalarFloat>("scale", 1.f);
         m_bbox = m_volume->bbox();
 

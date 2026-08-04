@@ -110,15 +110,6 @@ public:
     virtual Float minorant(const BoundingBox3f& bbox, Mask local = true) const {
         return extremum(bbox, local).first;
     }
-
-    /**
-     * \brief Register an extremum structure to the list of structures to update
-     * on parameter changed.
-     * 
-     * \param extremum  Extremum structure to register for update.
-     */
-    virtual void add_extremum_structure(ExtremumStructure* extremum);
-        
 // #ERADIATE_CHANGE_END
 
     /// Returns the bounding box of the volume
@@ -162,9 +153,9 @@ public:
 // #ERADIATE_CHANGE_BEGIN: Local extremum support
     /**
      * \brief A Scoped Guard that pins the reference count of the volume.
-     * 
+     *
      * Use for bulk operations in scalar mode.
-     */ 
+     */
     struct PinGuard {
         const Volume *volume;
         explicit PinGuard(const Volume* v) : volume(v) { volume->pin_ref_count(); }
@@ -197,7 +188,7 @@ protected:
     /// Pin the reference count of the data that constitutes the volume e.g. Texture/
     virtual void pin_ref_count() const {};
     /// Unpin the reference count.
-    virtual void unpin_ref_count() const {}; 
+    virtual void unpin_ref_count() const {};
 // #ERADIATE_CHANGE_END
 
 protected:
@@ -207,10 +198,6 @@ protected:
     ScalarBoundingBox3f m_bbox;
     /// Number of channels stored in the volume
     uint32_t m_channel_count;
-
-// #ERADIATE_CHANGE_BEGIN: Local extremum support
-    std::vector<ExtremumStructure*> m_extremum_structures;  
-// #ERADIATE_CHANGE_END
 
     MI_TRAVERSE_CB(Object)
 };

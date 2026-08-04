@@ -159,7 +159,7 @@ little endian encoding and is specified as follows:
 template <typename Float, typename Spectrum>
 class GridVolume final : public Volume<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(Volume, update_bbox, m_to_local, m_bbox, m_channel_count, m_extremum_structures)
+    MI_IMPORT_BASE(Volume, update_bbox, m_to_local, m_bbox, m_channel_count)
     MI_IMPORT_TYPES(VolumeGrid, ExtremumStructure)
 
     GridVolume(const Properties &props) : Base(props) {
@@ -279,11 +279,11 @@ public:
                     channel_count
                 };
                 m_texture = Texture3f(TensorXf(volume_grid->data(), 4, shape),
-                                      m_accel, m_accel, filter_mode, wrap_mode);             
+                                      m_accel, m_accel, filter_mode, wrap_mode);
                 m_max = volume_grid->max();
                 m_max_per_channel.resize(volume_grid->channel_count());
                 volume_grid->max_per_channel(m_max_per_channel.data());
-                
+
                 m_min = volume_grid->min();
                 m_min_per_channel.resize(volume_grid->channel_count());
                 volume_grid->min_per_channel(m_min_per_channel.data());
@@ -344,14 +344,7 @@ public:
 
             if (!m_fixed_min)
                 m_min = (float) dr::min_nested(dr::detach(m_texture.value()));
-
-// #ERADIATE_CHANGE_BEGIN: Spatial extremum queries for grid volumes
-            for (auto extremum : m_extremum_structures) {
-                if(extremum != nullptr)
-                    extremum->parameters_changed(keys);
-            }
         }
-// #ERADIATE_CHANGE_END
     }
 
     UnpolarizedSpectrum eval(const Interaction3f &it,
@@ -509,15 +502,15 @@ public:
 
         if constexpr ( !dr::is_jit_v<Float>){
             // If possible use pinned data to avoid ref count issues.
-            const ScalarFloat *data = m_pinned_data 
-                                    ? m_pinned_data 
+            const ScalarFloat *data = m_pinned_data
+                                    ? m_pinned_data
                                     : m_texture.tensor().data();
 
             for (int32_t z = voxel_min.z(); z <= voxel_max.z(); ++z) {
                 for (int32_t y = voxel_min.y(); y <= voxel_max.y(); ++y) {
                     for (int32_t x = voxel_min.x(); x <= voxel_max.x(); ++x) {
-                        size_t idx = ( x 
-                                    + y * res.x() 
+                        size_t idx = ( x
+                                    + y * res.x()
                                     + z * res.x() * res.y() );
                         ScalarFloat val = data[idx];
                         max_val = dr::maximum(max_val, val);
@@ -579,7 +572,7 @@ public:
                     ls.active &= ls.z < range.z();
                 });
             max_val = ls.max_val;
-            min_val = ls.min_val; 
+            min_val = ls.min_val;
         }
 
         return { min_val, max_val };
@@ -796,7 +789,7 @@ protected:
     ScalarFloat m_min;
     std::vector<ScalarFloat> m_min_per_channel;
 // #ERADIATE_CHANGE_END
-    
+
 // #ERADIATE_CHANGE_BEGIN: Local extremum support
     mutable const ScalarFloat* m_pinned_data = nullptr;
 // #ERADIATE_CHANGE_END
