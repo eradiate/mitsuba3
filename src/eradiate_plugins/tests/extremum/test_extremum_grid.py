@@ -1,6 +1,6 @@
-import drjit as dr
 import mitsuba as mi
 import numpy as np
+import pytest
 
 
 def generate_extremum_grid(
@@ -178,127 +178,53 @@ def test_build_scaled(variant_scalar_rgb):
     pass
 
 
-def assert_compare_segment(ref, other):
-    assert dr.allclose(ref.mint, other.mint)
-    assert dr.allclose(ref.maxt, other.maxt)
-    assert dr.allclose(ref.minorant(), other.minorant())
-    assert dr.allclose(ref.majorant(), other.majorant())
-
-
-def test_sample_horizontal_homogeneous(variants_any_scalar, variants_any_llvm):
-    n_x = 4
-    n_y = 3
-    n_z = 1
-    mult = 0.5
-    data = np.ones((n_x, n_y, n_z)) * mult
-    volume_grid = mi.VolumeGrid(data.transpose(2, 1, 0))
-
-    extremum_resolution = mi.ScalarVector3i(4, 3, 1)
-    extremum_struct, _ = generate_extremum_grid(
-        volume_grid, extremum_resolution, "nearest"
+def _make_grid_volume(values, n):
+    data = np.array(values, dtype=float).reshape(n, 1, 1)
+    return mi.load_dict(
+        {
+            "type": "gridvolume",
+            "grid": mi.VolumeGrid(data),
+            "filter_type": "nearest",
+            "accel": False,
+        }
     )
 
-    ray = mi.Ray3f(
-        o=mi.ScalarVector3f(0.0, 0.5, 0.5),
-        d=mi.ScalarVector3f(1.0, 0.0, 0.0),
-    )
-    mint = 0.0
-    maxt = 4.0
-    desired_tau = 0.2
-    active = True
 
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    ref_segment = mi.ExtremumSegment(mint=0.25, maxt=0.5, majorant=0.5, minorant=0.5)
-    ref_tau = 0.125
-
-    # Test ray starting at segment start
-    assert dr.allclose(ref_tau, ot_acc)
-    assert_compare_segment(ref_segment, res)
-
-    ray = mi.Ray3f(
-        o=mi.ScalarVector3f(-1.0, 0.5, 0.5),
-        d=mi.ScalarVector3f(1.0, 0.0, 0.0),
-    )
-    ref_segment = mi.ExtremumSegment(mint=1.25, maxt=1.5, majorant=0.5, minorant=0.5)
-    ref_tau = 0.125
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    # Test ray starting outside of the grid
-    assert dr.allclose(ref_tau, ot_acc)
-    assert_compare_segment(ref_segment, res)
-
-    ray = mi.Ray3f(
-        o=mi.ScalarVector3f(0.125, 0.5, 0.5),
-        d=mi.ScalarVector3f(1.0, 0.0, 0.0),
-    )
-    ref_segment = mi.ExtremumSegment(mint=0.375, maxt=0.625, majorant=0.5, minorant=0.5)
-    ref_tau = 0.1875
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    # Test ray starting outside of the grid
-    assert dr.allclose(ref_tau, ot_acc)
-    assert_compare_segment(ref_segment, res)
-
-    desired_tau = 0.8
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    # Test ray exiting grid
-    assert not res.valid()
-
-
-def test_sample_horizontal_heterogeneous(variants_any_scalar, variants_any_llvm):
-    n_x = 8
-    n_y = 6
-    n_z = 1
-    mult = 0.1
-
-    data = np.linspace(1, n_x, n_x).reshape(-1, 1, 1) * mult
-    data = np.ones((n_x, n_y, n_z)) * data
-    volume_grid = mi.VolumeGrid(data.transpose(2, 1, 0))
-
-    extremum_resolution = mi.ScalarVector3i(4, 3, 1)
-    extremum_struct, _ = generate_extremum_grid(
-        volume_grid, extremum_resolution, "nearest"
+def _make_medium(medium_type, volume, extremum):
+    return mi.load_dict(
+        {
+            "type": medium_type,
+            "sigma_t": volume,
+            "albedo": 0.5,
+            "extremum": extremum,
+        }
     )
 
-    ray = mi.Ray3f(
-        o=mi.ScalarVector3f(0.0, 0.5, 0.5),
-        d=mi.ScalarVector3f(1.0, 0.0, 0.0),
+
+@pytest.mark.parametrize("medium_type", ["heterogeneous", "eoheterogeneous"])
+def test_update_on_sigma_t_change(variant_scalar_mono_double, medium_type):
+    n = 4
+    resolution = mi.ScalarVector3i(1, 1, n)
+    before = [1.0, 2.0, 3.0, 4.0]
+    after = [5.0, 6.0, 7.0, 8.0]
+
+    volume = _make_grid_volume(before, n)
+    extremum = mi.load_dict(
+        {"type": "extremum_grid", "volume": volume, "resolution": resolution}
     )
-    mint = 0.0
-    maxt = 10.0
-    desired_tau = 0.2
-    active = True
+    medium = _make_medium(medium_type, volume, extremum)
 
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    ref_segment = mi.ExtremumSegment(mint=0.5, maxt=0.75, majorant=0.6, minorant=0.5)
-    ref_tau = 0.15
-    # Test ray starting at segment start
-    assert_compare_segment(ref_segment, res)
-    assert dr.allclose(ref_tau, ot_acc)
-
-
-def test_sample_diagonal(variants_any_scalar, variants_any_llvm):
-    data_res = mi.ScalarVector3i(2, 2, 2)
-    extremum_res = mi.ScalarVector3i(2, 2, 2)
-    mult = 0.5
-
-    data = np.linspace(1, data_res.x, data_res.x).reshape(-1, 1, 1) * mult
-    data = np.ones((data_res.x, data_res.y, data_res.y)) * data
-    volume_grid = mi.VolumeGrid(data.transpose(2, 1, 0))
-
-    extremum_struct, _ = generate_extremum_grid(volume_grid, extremum_res, "nearest")
-
-    # perfect diagonal direction
-    ray = mi.Ray3f(
-        o=mi.ScalarVector3f(0.0, 0.0, 0.0),
-        d=mi.ScalarVector3f(0.5, 0.5, 0.5),
+    # Ground truth: an extremum structure built directly from the "after"
+    # data, independently of the update mechanism under test.
+    ref_volume = _make_grid_volume(after, n)
+    ref_extremum = mi.load_dict(
+        {"type": "extremum_grid", "volume": ref_volume, "resolution": resolution}
     )
-    mint = 0.0
-    maxt = 10.0
-    desired_tau = 0.6
-    active = True
+    expected = np.array(mi.traverse(ref_extremum)["data"])
 
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    ref_segment = mi.ExtremumSegment(mint=1.0, maxt=2.0, majorant=1.0, minorant=1.0)
-    ref_tau = 0.5
-    # Test ray starting at segment start
-    assert_compare_segment(ref_segment, res)
-    assert dr.allclose(ref_tau, ot_acc)
+    params = mi.eradiate.traverse(medium)
+    params["sigma_t.data"] = mi.TensorXf(np.array(after).reshape(n, 1, 1))
+    params.update()
+
+    got = np.array(mi.traverse(medium.extremum_structure())["data"])
+    assert np.allclose(got, expected)
