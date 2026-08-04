@@ -178,9 +178,6 @@ MI_VARIANT
 void Medium<Float, Spectrum>::update_ddis_phase_function() {
     using FloatStorage = DynamicBuffer<Float>;
 
-    // DDIS rebuild is driven exclusively by Scene::parameters_changed()
-    // via update_ddis_phase_function(), which ensures all media sharing a
-    // phase function via ref are updated before dirty flags are cleared.
     if (m_ddis_threshold <= 0.f || m_ddis_phase_function == nullptr)
         return;
 

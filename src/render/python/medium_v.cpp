@@ -2,6 +2,9 @@
 #include <mitsuba/render/medium.h>
 #include <mitsuba/render/phase.h>
 #include <mitsuba/render/scene.h>
+// #ERADIATE_CHANGE_BEGIN: Local extremum structure
+#include <mitsuba/render/eradiate/extremum.h>
+// #ERADIATE_CHANGE_END
 #include <mitsuba/python/python.h>
 #include <nanobind/trampoline.h>
 #include <nanobind/stl/string.h>
@@ -89,14 +92,14 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
                 return ptr->transmittance_eval_pdf(mi, si, active); },
             "mi"_a, "si"_a, "active"_a,
             D(Medium, transmittance_eval_pdf))
-// #ERADIATE_CHANGE_BEGIN: Add function that calculates the transmittance and pdf 
+// #ERADIATE_CHANGE_BEGIN: Add function that calculates the transmittance and pdf
         .def("sample_interaction_analytical",
             [](Ptr ptr, const Ray3f &ray, const Interaction3f &it, Float sample, UInt32 channel, Mask active) {
                 return ptr->sample_interaction_analytical(ray, it, sample, channel, active); },
             "ray"_a, "it"_a, "sample"_a, "channel"_a, "active"_a,
             D(Medium, sample_interaction_analytical))
         .def("transmittance_eval_analytical",
-            [](Ptr ptr, const Ray3f &ray,  
+            [](Ptr ptr, const Ray3f &ray,
                 const Interaction3f &it, Mask active) {
                 return ptr->transmittance_eval_analytical(ray, it, active); },
             "ray"_a, "it"_a, "active"_a,
@@ -119,6 +122,11 @@ MI_PY_EXPORT(Medium) {
         .def_field(PyMedium, m_sample_emitters, D(Medium, m_sample_emitters))
         .def_field(PyMedium, m_is_homogeneous, D(Medium, m_is_homogeneous))
         .def_field(PyMedium, m_has_spectral_extinction, D(Medium, m_has_spectral_extinction))
+// #ERADIATE_CHANGE_BEGIN: Local extremum structure
+        .def("extremum_structure",
+             [](Medium *ptr) { return ptr->extremum_structure(); },
+             D(Medium, extremum_structure))
+// #ERADIATE_CHANGE_END
         .def("__repr__", &Medium::to_string, D(Medium, to_string));
 
     drjit::bind_traverse(medium);
