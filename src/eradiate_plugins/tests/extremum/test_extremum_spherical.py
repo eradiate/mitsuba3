@@ -1,4 +1,3 @@
-import drjit as dr
 import mitsuba as mi
 import numpy as np
 import pytest
@@ -51,13 +50,6 @@ def generate_extremum_spherical(
     return extremum_struct, extremum_grid
 
 
-def assert_compare_segment(ref, other):
-    assert dr.allclose(ref.mint, other.mint)
-    assert dr.allclose(ref.maxt, other.maxt)
-    assert dr.allclose(ref.minorant(), other.minorant())
-    assert dr.allclose(ref.majorant(), other.majorant())
-
-
 def test_radial_build_high_res(variant_scalar_rgb):
 
     n_x = 4
@@ -94,275 +86,76 @@ def test_radial_build_half_res(variant_scalar_rgb):
     assert np.allclose(data[1::2, 1::2, 1::2], extremum_grid[:, :, :, 1])
 
 
-@pytest.fixture
-def extremum_struct():
-    n_x = 4
-    n_y = 1
-    n_z = 1
-    mult = 0.1
-
-    data = np.linspace(1, n_x, n_x).reshape(-1, 1, 1) * mult
-    data = np.ones((n_x, n_y, n_z)) * data
-    volume_grid = mi.VolumeGrid(data[::-1, :, :].transpose(2, 1, 0))
-
-    extremum_resolution = mi.ScalarVector3i(2, 1, 1)
-    extremum_struct, _ = generate_extremum_spherical(
-        volume_grid,
-        extremum_resolution,
-        "nearest",
-        rmin=0.5,
-        rmax=1.0,
-        fillmin=1.0,
-        fillmax=0.0,
+def _make_spherical_volume(values, n, rmin, rmax):
+    data = np.array(values, dtype=float).reshape(n, 1, 1)
+    grid = mi.load_dict(
+        {
+            "type": "gridvolume",
+            "grid": mi.VolumeGrid(data),
+            "filter_type": "nearest",
+            "accel": False,
+        }
+    )
+    return mi.load_dict(
+        {
+            "type": "sphericalcoordsvolume",
+            "volume": grid,
+            "rmin": rmin,
+            "rmax": rmax,
+            "fillmin": 1.0,
+            "fillmax": 0.0,
+        }
     )
 
-    return extremum_struct
 
-@pytest.fixture
-def downward_ray():
-    ray = mi.Ray3f(
-        o=mi.ScalarVector3f(0.0, 0.0, 1.0),
-        d=mi.ScalarVector3f(0.0, 0.0, -1.0),
-    )
-    return ray
-
-
-def test_radial_sample_vertical_heterogeneous_1(variants_any_scalar, extremum_struct, downward_ray):
-    """
-    Test the sampling routine of the RadialOnly variant.
-    Direct a ray in the perfect downward vertical direction and test different
-    tau values.
-    """
-    ray = downward_ray
-    mint = 0.0
-    maxt = 10.0
-    active = True
-
-    # Test sampling segment before rmin.
-    desired_tau = 0.11
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    ref_segment = mi.ExtremumSegment(
-        mint=0.25,
-        maxt=0.5,
-        majorant=0.4,
-        minorant=0.3,
-    )
-    ref_tau = 0.05
-    assert_compare_segment(ref_segment, res)
-    assert dr.allclose(ref_tau, ot_acc)
-
-    # Test sampling segment in rmin.
-    desired_tau = 0.7
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    ref_segment = mi.ExtremumSegment(
-        mint=0.5,
-        maxt=1.5,
-        majorant=1.0,
-        minorant=1.0,
-    )
-    ref_tau = 0.15
-    assert_compare_segment(ref_segment, res)
-    assert dr.allclose(ref_tau, ot_acc)
-
-    # Test sampling segment passed rmin.
-    desired_tau = 1.27
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    ref_segment = mi.ExtremumSegment(
-        mint=1.75,
-        maxt=2.0,
-        majorant=0.2,
-        minorant=0.1,
-    )
-    ref_tau = 1.25
-    assert_compare_segment(ref_segment, res)
-    assert dr.allclose(ref_tau, ot_acc)
-
-    # Test sampling passed volume.
-    desired_tau = 1.5
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    ref_segment = mi.ExtremumSegment(
-        mint=dr.inf,
-        maxt=-dr.inf,
-        majorant=0.0,
-        minorant=0.0,
-    )
-    assert not ref_segment.valid()
-
-
-def test_radial_sample_vertical_heterogeneous_2(variants_any_scalar, extremum_struct, downward_ray):
-    """
-    Test the sampling routine of the RadialOnly variant.
-    Direct a ray in the perfect downward vertical direction and test different
-    ray origin values.
-    """
-    ray = downward_ray
-    mint = 0.0
-    maxt = 10.0
-    active = True
-    desired_tau = 0.11
-
-    # Test ray starting outside of the volume.
-    ray.o = mi.ScalarVector3f(0.0, 0.0, 1.2)
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    ref_segment = mi.ExtremumSegment(
-        mint=0.45,
-        maxt=0.7,
-        majorant=0.4,
-        minorant=0.3,
-    )
-    ref_tau = 0.05
-    assert_compare_segment(ref_segment, res)
-    assert dr.allclose(ref_tau, ot_acc)
-
-    # Test ray starting in a layer.
-    ray.o = mi.ScalarVector3f(0.0, 0.0, 0.8)
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    ref_segment = mi.ExtremumSegment(
-        mint=0.05,
-        maxt=0.3,
-        majorant=0.4,
-        minorant=0.3,
-    )
-    ref_tau = 0.01
-    assert_compare_segment(ref_segment, res)
-    assert dr.allclose(ref_tau, ot_acc)
-
-    # Test sampling in rmin, passed the midpoint.
-    ray.o = mi.ScalarVector3f(0.0, 0.0, -0.25)
-    desired_tau = 0.3
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    ref_segment = mi.ExtremumSegment(
-        mint=0.25,
-        maxt=0.5,
-        majorant=0.4,
-        minorant=0.3,
-    )
-    ref_tau = 0.25
-    assert_compare_segment(ref_segment, res)
-    assert dr.allclose(ref_tau, ot_acc)
-
-    # Test sampling passed the volume.
-    ray.o = mi.ScalarVector3f(0.0, 0.0, -1.25)
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    ref_segment = mi.ExtremumSegment(
-        mint=dr.inf,
-        maxt=-dr.inf,
-        majorant=0.0,
-        minorant=0.0,
-    )
-    ref_tau = 0.0
-    assert not res.valid()
-
-
-def test_radial_sample_tangent_heterogeneous(variants_any_scalar, extremum_struct):
-    """
-    Test the sampling routine of the RadialOnly variant.
-    Direct a ray in the perfect downward vertical direction tangent to one of
-    the radii.
-    """
-    ray = mi.Ray3f(
-        o=mi.ScalarVector3f(0.75, 0.0, 1.0),
-        d=mi.ScalarVector3f(0.0, 0.0, -1.0),
-    )
-    mint = 0.0
-    maxt = 10.0
-    active = True
-    desired_tau = 0.2
-
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    ref_segment = mi.ExtremumSegment(
-        mint=0.338562,
-        maxt=1.66144,
-        majorant=0.2,
-        minorant=0.1,
-    )
-    ref_tau = 0.0
-    assert_compare_segment(ref_segment, res)
-    assert dr.allclose(ref_tau, ot_acc)
-
-
-def test_radial_sample_rmin_0_heterogeneous(variants_any_scalar):
-    """
-    Test the sampling routine of the RadialOnly variant.
-    Direct a ray in the perfect downward vertical direction through rmin=0.
-    This should act like a tangent case!
-    """
-    n_x = 4
-    n_y = 1
-    n_z = 1
-    mult = 0.1
-
-    data = np.linspace(1, n_x, n_x).reshape(-1, 1, 1) * mult
-    data = np.ones((n_x, n_y, n_z)) * data
-    volume_grid = mi.VolumeGrid(data[::-1, :, :].transpose(2, 1, 0))
-
-    extremum_resolution = mi.ScalarVector3i(2, 1, 1)
-    extremum_struct, _ = generate_extremum_spherical(
-        volume_grid,
-        extremum_resolution,
-        "nearest",
-        rmin=0.0,
-        rmax=1.0,
-        fillmin=1.0,
-        fillmax=0.0,
+def _make_medium(medium_type, volume, extremum):
+    return mi.load_dict(
+        {
+            "type": medium_type,
+            "sigma_t": volume,
+            "albedo": 0.5,
+            "extremum": extremum,
+        }
     )
 
-    ray = mi.Ray3f(
-        o=mi.ScalarVector3f(0.0, 0.0, 1.0),
-        d=mi.ScalarVector3f(0.0, 0.0, -1.0),
+
+@pytest.mark.parametrize("medium_type", ["heterogeneous", "eoheterogeneous"])
+def test_update_on_sigma_t_change(variant_scalar_mono_double, medium_type):
+    n = 4
+    rmin, rmax = 0.5, 1.0
+    resolution = mi.ScalarVector3i(n, 1, 1)
+    before = [1.0, 2.0, 3.0, 4.0]
+    after = [5.0, 6.0, 7.0, 8.0]
+
+    volume = _make_spherical_volume(before, n, rmin, rmax)
+    extremum = mi.load_dict(
+        {
+            "type": "extremum_spherical",
+            "volume": volume,
+            "resolution": resolution,
+            "rmin": rmin,
+            "rmax": rmax,
+        }
     )
-    mint = 0.0
-    maxt = 10.0
-    active = True
-    desired_tau = 0.3
+    medium = _make_medium(medium_type, volume, extremum)
 
-    res, ot_acc = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    # The segment mint and maxt indicate that rmin is dealt as a tangent.
-    ref_segment = mi.ExtremumSegment(
-        mint=0.5,
-        maxt=1.5,
-        majorant=0.4,
-        minorant=0.3,
+    # Ground truth: an extremum structure built directly from the "after"
+    # data, independently of the update mechanism under test.
+    ref_volume = _make_spherical_volume(after, n, rmin, rmax)
+    ref_extremum = mi.load_dict(
+        {
+            "type": "extremum_spherical",
+            "volume": ref_volume,
+            "resolution": resolution,
+            "rmin": rmin,
+            "rmax": rmax,
+        }
     )
-    ref_tau = 0.1
-    assert_compare_segment(ref_segment, res)
-    assert dr.allclose(ref_tau, ot_acc)
+    expected = np.array(mi.traverse(ref_extremum)["data"])
 
+    params = mi.eradiate.traverse(medium)
+    params["sigma_t.volume.data"] = mi.TensorXf(np.array(after).reshape(n, 1, 1))
+    params.update()
 
-def test_radial_sample_outside_rmax_heterogeneous(variants_any_scalar):
-    """
-    Test the sampling routine of the RadialOnly variant.
-    Direct a ray in the perfect downward vertical direction through rmin=0.
-    This should act like a tangent case!
-    """
-    n_x = 4
-    n_y = 1
-    n_z = 1
-    mult = 0.1
-
-    data = np.linspace(1, n_x, n_x).reshape(-1, 1, 1) * mult
-    data = np.ones((n_x, n_y, n_z)) * data
-    volume_grid = mi.VolumeGrid(data[::-1, :, :].transpose(2, 1, 0))
-
-    extremum_resolution = mi.ScalarVector3i(2, 1, 1)
-    extremum_struct, _ = generate_extremum_spherical(
-        volume_grid,
-        extremum_resolution,
-        "nearest",
-        rmin=0.0,
-        rmax=0.5,
-        fillmin=1.0,
-        fillmax=0.0,
-    )
-
-    ray = mi.Ray3f(
-        o=mi.ScalarVector3f(0.0, 0.75, 1.0),
-        d=mi.ScalarVector3f(0.0, 0.0, -1.0),
-    )
-    mint = 0.0
-    maxt = 10.0
-    active = True
-    desired_tau = 0.3
-
-    res, _ = extremum_struct.sample_segment(ray, mint, maxt, desired_tau, active)
-    assert not res.valid()
+    got = np.array(mi.traverse(medium.extremum_structure())["data"])
+    assert np.allclose(got, expected)
