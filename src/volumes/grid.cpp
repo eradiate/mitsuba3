@@ -13,6 +13,7 @@
 NAMESPACE_BEGIN(mitsuba)
 
 
+// #ERADIATE_CHANGE_BEGIN: Add `wrap` parameter
 /**!
 .. _volume-gridvolume:
 
@@ -56,6 +57,11 @@ Grid-based volume data source (:monosp:`gridvolume`)
 
      - ``nearest``: disable interpolation. In this mode, the plugin
        performs nearest neighbor lookups of volume values.
+
+ * - wrap
+   - |bool|
+   - Specify whether wrap conditions should be applied outside of [0,1]^3. When
+     not applied, queries outside the domain evaluate to zero (Default: true).
 
  * - wrap_mode
    - |string|
@@ -142,6 +148,7 @@ little endian encoding and is specified as follows:
         }
 
 */
+// #ERADIATE_CHANGE_END
 
 /**
  * Interpolated 3D grid texture of scalar or color values.
@@ -172,6 +179,10 @@ public:
         else
             Throw("Invalid filter type \"%s\", must be one of: \"nearest\" or "
                   "\"trilinear\"!", filter_type_str);
+
+// #ERADIATE_CHANGE_BEGIN: add `wrap` parameter
+        m_wrap = props.get<bool>("wrap", true);
+// #ERADIATE_CHANGE_END
 
         std::string_view wrap_mode_st = props.get<std::string_view>("wrap_mode", "clamp");
         dr::WrapMode wrap_mode;
@@ -455,8 +466,11 @@ public:
             out[i] = m_max_per_channel[i];
     }
 
-// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
-    ScalarFloat min() const override { return m_min; }
+// #ERADIATE_CHANGE_BEGIN: Tracking estimators extension && add `wrap` parameter
+    ScalarFloat min() const override {
+        // possibility to evaluate to zero outside [0,1]^3
+        return m_wrap ? m_min : 0.f;
+    }
 
     void min_per_channel(ScalarFloat *out) const override {
         for (size_t i=0; i<m_min_per_channel.size(); ++i)
@@ -593,6 +607,7 @@ public:
             << "  max = " << m_max << "," << std::endl
 // #ERADIATE_CHANGE_BEGIN: Tracking estimators extension
             << "  min = " << m_min << "," << std::endl
+            << "  wrap = " << m_wrap << "," << std::endl
 // #ERADIATE_CHANGE_END
             << "  channels = " << m_texture.shape()[3] << std::endl
             << "]";
@@ -618,6 +633,18 @@ protected:
         return channels;
     }
 
+// #ERADIATE_CHANGE_BEGIN: add `wrap` parameter
+    /**
+     * \brief Calculates the wrap mask given a position
+     *
+     * Evaluates to true if `m_wrap` is true or that `p` is within [0,1]^3
+     * (inclusive). Otherwise evaluates to false.
+     */
+    MI_INLINE Mask wrap_mask(const Point3f &p) const {
+        return m_wrap || !dr::any((p < 0.f) || (p > 1.f));
+    }
+// #ERADIATE_CHANGE_END
+
     /**
      * \brief Evaluates the volume at the given interaction using spectral
      * upsampling
@@ -627,6 +654,12 @@ protected:
         MI_MASK_ARGUMENT(active);
 
         Point3f p = m_to_local * it.p;
+// #ERADIATE_CHANGE_BEGIN: add `wrap` parameter
+        active &= wrap_mask(p);
+        if (dr::any_or<false>(!active)) {
+            return 0.f;
+        }
+// #ERADIATE_CHANGE_END
 
         if (m_texture.filter_mode() == dr::FilterMode::Linear) {
             dr::Array<Float, 4> d000, d100, d010, d110, d001, d101, d011, d111;
@@ -702,6 +735,13 @@ protected:
         MI_MASK_ARGUMENT(active);
 
         Point3f p = m_to_local * it.p;
+// #ERADIATE_CHANGE_BEGIN: add `wrap` parameter
+        active &= wrap_mask(p);
+        if (dr::any_or<false>(!active)) {
+            return 0.f;
+        }
+// #ERADIATE_CHANGE_END
+
         Float result;
         if (m_accel)
             m_texture.template eval<Float>(p, &result, active);
@@ -721,6 +761,13 @@ protected:
         MI_MASK_ARGUMENT(active);
 
         Point3f p = m_to_local * it.p;
+// #ERADIATE_CHANGE_BEGIN: add `wrap` parameter
+        active &= wrap_mask(p);
+        if (dr::any_or<false>(!active)) {
+            return 0.f;
+        }
+// #ERADIATE_CHANGE_END
+
         Color3f result;
         if (m_accel)
             m_texture.template eval<Float>(p, result.data(), active);
@@ -740,6 +787,13 @@ protected:
         MI_MASK_ARGUMENT(active);
 
         Point3f p = m_to_local * it.p;
+// #ERADIATE_CHANGE_BEGIN: add `wrap` parameter
+        active &= wrap_mask(p);
+        if (dr::any_or<false>(!active)) {
+            return 0.f;
+        }
+// #ERADIATE_CHANGE_END
+
         dr::Array<Float, 6> result;
         if (m_accel)
             m_texture.template eval<Float>(p, result.data(), active);
@@ -760,6 +814,13 @@ protected:
         MI_MASK_ARGUMENT(active);
 
         Point3f p = m_to_local * it.p;
+// #ERADIATE_CHANGE_BEGIN: add `wrap` parameter
+        active &= wrap_mask(p);
+        if (dr::any_or<false>(!active)) {
+            return;
+        }
+// #ERADIATE_CHANGE_END
+
         if (m_accel)
             m_texture.template eval<Float>(p, out, active);
         else
@@ -781,6 +842,9 @@ protected:
     Texture3f m_texture;
     bool m_accel;
     bool m_raw;
+// #ERADIATE_CHANGE_BEGIN: add `wrap` parameter
+    bool m_wrap = true;
+// #ERADIATE_CHANGE_END
     bool m_fixed_max = false;
     ScalarFloat m_max;
     std::vector<ScalarFloat> m_max_per_channel;
