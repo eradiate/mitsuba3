@@ -22,8 +22,9 @@ def generate_extremum_grid(
         }
     )
     extremum_struct = mi.load_dict(
-        {"type": "extremum_grid", "volume": volume, "resolution": extremum_res}
+        {"type": "extremum_grid", "resolution": extremum_res}
     )
+    extremum_struct.update_extremum(volume.bbox(), volume)
 
     extremum_grid = mi.traverse(extremum_struct)["data"].numpy()
     extremum_grid = extremum_grid.reshape(
@@ -178,6 +179,113 @@ def test_build_scaled(variant_scalar_rgb):
     pass
 
 
+def test_build_adaptive_full(variant_scalar_rgb):
+    n_x, n_y, n_z = 8, 8, 8
+    n_prod = n_x * n_y * n_z
+    data = np.linspace(1, n_prod, n_prod).reshape(n_x, n_y, n_z)
+    volume_grid = mi.VolumeGrid(data.transpose(2, 1, 0))
+
+    volume = mi.load_dict(
+        {
+            "type": "gridvolume",
+            "grid": volume_grid,
+            "filter_type": "nearest",
+            "accel": False,
+        }
+    )
+
+    extremum_struct = mi.load_dict(
+        {"type": "extremum_grid", "resolution": mi.ScalarVector3i(0, 0, 0)}
+    )
+    extremum_struct.update_extremum(volume.bbox(), volume)
+
+    resolution = np.array(mi.traverse(extremum_struct)["resolution"])
+    fine_res = np.array([n_x, n_y, n_z])
+
+    # Fully adaptive search must pick a resolution no finer than the
+    # underlying volume on every axis, and never collapse to zero cells.
+    assert np.all(resolution >= 1)
+    assert np.all(resolution <= fine_res)
+
+    # The grid extrema must still conservatively bound the volume's data.
+    extremum_grid = mi.traverse(extremum_struct)["data"].numpy().reshape(-1, 2)
+    assert extremum_grid[:, 0].min() <= data.min()
+    assert extremum_grid[:, 1].max() >= data.max()
+
+
+def test_build_adaptive_partial(variant_scalar_rgb):
+    n_x, n_y, n_z = 8, 8, 4
+    n_prod = n_x * n_y * n_z
+    data = np.linspace(1, n_prod, n_prod).reshape(n_x, n_y, n_z)
+    volume_grid = mi.VolumeGrid(data.transpose(2, 1, 0))
+
+    volume = mi.load_dict(
+        {
+            "type": "gridvolume",
+            "grid": volume_grid,
+            "filter_type": "nearest",
+            "accel": False,
+        }
+    )
+
+    # Only the x axis is left adaptive (0). y and z are user-fixed (coarser
+    # than the volume's own resolution), to check that fixed dimensions are
+    # preserved exactly and are not touched by the adaptive search.
+    fixed_y, fixed_z = 4, 2
+    extremum_struct = mi.load_dict(
+        {
+            "type": "extremum_grid",
+            "resolution": mi.ScalarVector3i(0, fixed_y, fixed_z),
+        }
+    )
+    extremum_struct.update_extremum(volume.bbox(), volume)
+
+    resolution = np.array(mi.traverse(extremum_struct)["resolution"])
+
+    # Fixed dimensions must be preserved exactly.
+    assert resolution[1] == fixed_y
+    assert resolution[2] == fixed_z
+
+    # The adaptive x dimension must fall within the search's valid bounds.
+    assert 1 <= resolution[0] <= n_x
+
+    extremum_grid = mi.traverse(extremum_struct)["data"].numpy().reshape(-1, 2)
+    assert extremum_grid[:, 0].min() <= data.min()
+    assert extremum_grid[:, 1].max() >= data.max()
+
+
+def test_build_resolution_clamped_to_volume(variant_scalar_rgb):
+    # A fixed resolution requested finer than the volume's own resolution
+    # along some axis is not a valid extremum grid (it wouldn't be coarser
+    # than what it summarizes), so that axis must be clamped down to match
+    # the volume's resolution. TODO: Come back to this if change to world
+    # coordinates.
+    n_x, n_y, n_z = 8, 8, 4
+    n_prod = n_x * n_y * n_z
+    data = np.linspace(1, n_prod, n_prod).reshape(n_x, n_y, n_z)
+    volume_grid = mi.VolumeGrid(data.transpose(2, 1, 0))
+
+    volume = mi.load_dict(
+        {
+            "type": "gridvolume",
+            "grid": volume_grid,
+            "filter_type": "nearest",
+            "accel": False,
+        }
+    )
+
+    extremum_struct = mi.load_dict(
+        {
+            "type": "extremum_grid",
+            "resolution": mi.ScalarVector3i(n_x, n_y * 2, n_z),
+        }
+    )
+    extremum_struct.update_extremum(volume.bbox(), volume)
+
+    resolution = np.array(mi.traverse(extremum_struct)["resolution"])
+    assert np.array_equal(resolution, [n_x, n_y, n_z])
+
+
 def _make_grid_volume(values, n):
     data = np.array(values, dtype=float).reshape(n, 1, 1)
     return mi.load_dict(
@@ -209,17 +317,14 @@ def test_update_on_sigma_t_change(variant_scalar_mono_double, medium_type):
     after = [5.0, 6.0, 7.0, 8.0]
 
     volume = _make_grid_volume(before, n)
-    extremum = mi.load_dict(
-        {"type": "extremum_grid", "volume": volume, "resolution": resolution}
-    )
+    extremum = mi.load_dict({"type": "extremum_grid", "resolution": resolution})
     medium = _make_medium(medium_type, volume, extremum)
 
     # Ground truth: an extremum structure built directly from the "after"
     # data, independently of the update mechanism under test.
     ref_volume = _make_grid_volume(after, n)
-    ref_extremum = mi.load_dict(
-        {"type": "extremum_grid", "volume": ref_volume, "resolution": resolution}
-    )
+    ref_extremum = mi.load_dict({"type": "extremum_grid", "resolution": resolution})
+    ref_extremum.update_extremum(ref_volume.bbox(), ref_volume)
     expected = np.array(mi.traverse(ref_extremum)["data"])
 
     params = mi.eradiate.traverse(medium)
