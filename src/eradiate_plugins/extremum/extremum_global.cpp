@@ -12,17 +12,6 @@ NAMESPACE_BEGIN(mitsuba)
 Extremum global structure (:monosp:`extremum_global`)
 -----------------------------------------------------
 
-.. pluginparameters::
-
- * - volume
-   - |volume|
-   - Extinction coefficient volume to build extremum grid from.
-   - |exposed|
-
- * - scale
-   - |float|
-   - Scale factor for the extremum values. Default: 1.0
-
 This plugin holds the global minorant and majorant values of a volume.
 At runtime, traversal is performed via a single segment determined by the
 passed ``mint`` and ``maxt`` values.
@@ -31,38 +20,18 @@ passed ``mint`` and ``maxt`` values.
 template <typename Float, typename Spectrum>
 class ExtremumGlobal final : public ExtremumStructure<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(ExtremumStructure, m_bbox)
+    MI_IMPORT_BASE(ExtremumStructure, m_bbox, m_scale)
     MI_IMPORT_TYPES(Volume)
 
     using TrackingStateType    = TrackingState<Float, Spectrum>;
     using TrackingFunctionType = TrackingFunction<Float, Spectrum>;
 
-    ExtremumGlobal(const Properties &props) : Base(props) {
-        // Volume Parameters
-        m_volume = nullptr;
-        for (auto &prop : props.objects()) {
-            if (auto *vol = prop.try_get<Volume>()) {
-                m_volume = vol;
-                break;
-            }
-        }
+    ExtremumGlobal(const Properties &props) : Base(props) {}
 
-        if (!m_volume)
-            Throw("ExtremumGlobal requires at least one volume");
-
-        m_scale = props.get<ScalarFloat>("scale", 1.f);
-        m_bbox = m_volume->bbox();
-
-        m_majorant = m_volume->max();
-        m_minorant = m_volume->min();
+    void build(const Volume *volume) override {
+        m_minorant = volume->min();
+        m_majorant = volume->max();
     }
-
-    void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override {
-        m_bbox = m_volume->bbox();
-        m_majorant = m_volume->max();
-        m_minorant = m_volume->min();
-    }
-
 
     TrackingStateType traverse_extremum(
         const Ray3f &/*ray*/,
@@ -116,6 +85,7 @@ public:
         oss << "ExtremumGlobal[" << std::endl
             << "  minorant = " << m_minorant << "," << std::endl
             << "  majorant = " << m_majorant << "," << std::endl
+            << "  scale = " << m_scale << "," << std::endl
             << "]";
         return oss.str();
     }
@@ -123,9 +93,6 @@ public:
     MI_DECLARE_CLASS(ExtremumGlobal)
 
 private:
-    ref<Volume> m_volume;
-    ScalarFloat m_scale;
-
     ScalarFloat m_minorant;
     ScalarFloat m_majorant;
 };

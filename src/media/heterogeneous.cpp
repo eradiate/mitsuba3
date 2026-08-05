@@ -177,12 +177,12 @@ public:
 
         if (!m_extremum_structure) {
             // Create a default global extremum structure.
-            Properties props_extr("extremum_global");
-            props_extr.set("volume", (Object *) m_sigmat.get());
-            props_extr.set("scale", m_scale);
             m_extremum_structure =
-                PluginManager::instance()->create_object<ExtremumStructure>(props_extr);
+                PluginManager::instance()->create_object<ExtremumStructure>(Properties("extremum_global"));
         }
+
+        m_extremum_structure->update_extremum(
+            m_sigmat->bbox(), m_sigmat.get(), m_scale);
 // #ERADIATE_CHANGE_END
     }
 
@@ -198,9 +198,12 @@ public:
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
         m_min_density = dr::opaque<Float>(m_scale * m_sigmat->min());
 
-        // #TODO: refactor extremum interface to expose a build function for more robust updates
         if (string::contains(keys, "sigma_t"))
-            m_extremum_structure->parameters_changed(keys);
+            m_extremum_structure->update_extremum(
+                m_sigmat->bbox(), m_sigmat.get(), std::nullopt);
+
+        if (string::contains(keys, "scale"))
+            m_extremum_structure->set_scale(m_scale);
     }
 // #ERADIATE_CHANGE_END
 
