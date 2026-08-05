@@ -4949,15 +4949,9 @@ static const char *__doc_mitsuba_Medium_update_ddis_phase_function =
 R"doc(Rebuild any DDIS-related derived data when the phase function has
 changed.
 
-This method is called by the scene's `parameters_changed()` for every
-medium whose phase function is marked dirty. The default
-implementation is a no-op; subclasses that maintain a DDIS phase
-function override it.
-
-This is intentionally separate from `parameters_changed()` so that the
-scene can drive all media to completion before clearing dirty flags,
-which is required when multiple media share the same phase function
-via a scene-level reference.)doc";
+This method is to be called by media's `parameters_changed()` anytime
+its phase function is modified. The default implementation is a no-op;
+subclasses that maintain a DDIS phase function override it.)doc";
 
 static const char *__doc_mitsuba_Medium_use_emitter_sampling = R"doc(Returns whether this specific medium instance uses emitter sampling)doc";
 
@@ -6015,11 +6009,6 @@ static const char *__doc_mitsuba_PhaseFunction_class_name = R"doc()doc";
 
 static const char *__doc_mitsuba_PhaseFunction_component_count = R"doc(Number of components this phase function is comprised of.)doc";
 
-static const char *__doc_mitsuba_PhaseFunction_dirty =
-R"doc(Return whether this phase function's parameters have changed since the
-last call to set_dirty(false). Set by parameters_changed(), cleared by
-the scene after all dependent media have been updated.)doc";
-
 static const char *__doc_mitsuba_PhaseFunction_eval_pdf =
 R"doc(Evaluates the phase function model value and PDF
 
@@ -6068,10 +6057,6 @@ static const char *__doc_mitsuba_PhaseFunction_get_flags = R"doc(Return type of 
 
 static const char *__doc_mitsuba_PhaseFunction_m_components = R"doc(Flags for each component of this phase function.)doc";
 
-static const char *__doc_mitsuba_PhaseFunction_m_dirty =
-R"doc(True if the phase function's parameters have changed since the last
-scene update)doc";
-
 static const char *__doc_mitsuba_PhaseFunction_m_flags = R"doc(Type of phase function (e.g. anisotropic))doc";
 
 static const char *__doc_mitsuba_PhaseFunction_m_node_count =
@@ -6079,8 +6064,6 @@ R"doc(Number of nodes to regularly discretize the cos theta dimension in
 accumulate_envelope)doc";
 
 static const char *__doc_mitsuba_PhaseFunction_max_projected_area = R"doc(Return the maximum projected area of the microflake distribution)doc";
-
-static const char *__doc_mitsuba_PhaseFunction_parameters_changed = R"doc()doc";
 
 static const char *__doc_mitsuba_PhaseFunction_projected_area =
 R"doc(Returns the microflake projected area
@@ -6121,8 +6104,6 @@ Parameter ``sample2``:
 
 Returns:
     A sampled direction wo and its corresponding weight and PDF)doc";
-
-static const char *__doc_mitsuba_PhaseFunction_set_dirty = R"doc(Modify the phase function's dirty flag)doc";
 
 static const char *__doc_mitsuba_PhaseFunction_set_flags = R"doc(Set type of phase function)doc";
 
@@ -7823,8 +7804,6 @@ static const char *__doc_mitsuba_Scene_m_environment = R"doc()doc";
 
 static const char *__doc_mitsuba_Scene_m_integrator = R"doc()doc";
 
-static const char *__doc_mitsuba_Scene_m_media = R"doc()doc";
-
 static const char *__doc_mitsuba_Scene_m_sensors = R"doc()doc";
 
 static const char *__doc_mitsuba_Scene_m_sensors_dr = R"doc()doc";
@@ -7844,8 +7823,6 @@ static const char *__doc_mitsuba_Scene_m_silhouette_shapes = R"doc()doc";
 static const char *__doc_mitsuba_Scene_m_silhouette_shapes_dr = R"doc()doc";
 
 static const char *__doc_mitsuba_Scene_m_thread_reordering = R"doc()doc";
-
-static const char *__doc_mitsuba_Scene_media = R"doc(Return the list of media)doc";
 
 static const char *__doc_mitsuba_Scene_parameters_changed = R"doc(Update internal state following a parameter update)doc";
 
@@ -8664,6 +8641,8 @@ static const char *__doc_mitsuba_ShapeGroup_ray_test_scalar = R"doc()doc";
 static const char *__doc_mitsuba_ShapeGroup_shape_types =
 R"doc(Returns a union of ShapeType flags denoting what is present in the
 ShapeGroup)doc";
+
+static const char *__doc_mitsuba_ShapeGroup_shapes = R"doc(Read-only access to the contained shapes.)doc";
 
 static const char *__doc_mitsuba_ShapeGroup_surface_area = R"doc()doc";
 
@@ -11257,13 +11236,6 @@ static const char *__doc_mitsuba_Volume_PinGuard_volume = R"doc()doc";
 
 static const char *__doc_mitsuba_Volume_Volume = R"doc()doc";
 
-static const char *__doc_mitsuba_Volume_add_extremum_structure =
-R"doc(Register an extremum structure to the list of structures to update on
-parameter changed.
-
-Parameter ``extremum``:
-    Extremum structure to register for update.)doc";
-
 static const char *__doc_mitsuba_Volume_bbox = R"doc(Returns the bounding box of the volume)doc";
 
 static const char *__doc_mitsuba_Volume_channel_count =
@@ -11316,8 +11288,6 @@ Returns:
 static const char *__doc_mitsuba_Volume_m_bbox = R"doc(Bounding box)doc";
 
 static const char *__doc_mitsuba_Volume_m_channel_count = R"doc(Number of channels stored in the volume)doc";
-
-static const char *__doc_mitsuba_Volume_m_extremum_structures = R"doc()doc";
 
 static const char *__doc_mitsuba_Volume_m_to_local = R"doc(Used to bring points in world coordinates to local coordinates.)doc";
 
