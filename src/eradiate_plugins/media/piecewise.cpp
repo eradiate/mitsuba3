@@ -185,11 +185,8 @@ public:
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
 
         // Create a default global extremum structure.
-        Properties props_extr("extremum_global");
-        props_extr.set("volume", (Object *) m_sigmat.get());
-        props_extr.set("scale", m_scale);
         m_extremum_structure =
-            PluginManager::instance()->create_object<ExtremumStructure>(props_extr);
+            PluginManager::instance()->create_object<ExtremumStructure>(Properties("extremum_global"));
 
         precompute_optical_thickness();
 
@@ -198,6 +195,9 @@ public:
         if (m_ddis_threshold > 0.f) {
             m_ddis_phase_function = static_cast<PhaseFunction*>(create_ddis_phase_function());
         }
+
+        m_extremum_structure->update_extremum(
+            m_sigmat->bbox(), m_sigmat.get(), m_scale);
     }
 
     std::tuple<MediumInteraction3f, UnpolarizedSpectrum, UnpolarizedSpectrum>
@@ -455,9 +455,12 @@ public:
         if(string::contains(keys, "phase_function"))
             update_ddis_phase_function();
 
-        // #TODO: refactor extremum interface to expose a build function for more robust updates
         if (string::contains(keys, "sigma_t"))
-            m_extremum_structure->parameters_changed(keys);
+            m_extremum_structure->update_extremum(
+                m_sigmat->bbox(), m_sigmat.get(), std::nullopt);
+
+        if (string::contains(keys, "scale"))
+            m_extremum_structure->set_scale(m_scale);
     }
 
     void precompute_optical_thickness() {
