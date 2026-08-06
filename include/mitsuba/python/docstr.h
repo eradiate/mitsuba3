@@ -2960,12 +2960,17 @@ R"doc(Abstract base class for extremum structures
 
 ExtremumStructure provides an interface for spatial data structures
 that store local extrema (majorant/minorant) of volumetric extinction
-coefficients. This enables efficient delta tracking with locally-
-adaptive majorants.
+coefficients. This enables efficient use of tracking algorithms with
+locally-adaptive majorants and minorants.
 
 To minimize virtual function overhead, the ``traverse_extremum()``
 method encapsulates the entire traversal loop internally, requiring
-only a single virtual call per distance sample.)doc";
+only a single virtual call per distance sample.
+
+The extremum structure needs to be built using the ``update_extremum``
+function, it is **not** called automatically in the constructor. The
+caller, usually a ``Medium``, passes the volumetric data the extremum
+is derived from.)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure_2 = R"doc()doc";
 
@@ -2987,7 +2992,17 @@ static const char *__doc_mitsuba_ExtremumStructure_ExtremumStructure = R"doc(//!
 
 static const char *__doc_mitsuba_ExtremumStructure_ExtremumStructure_2 = R"doc()doc";
 
-static const char *__doc_mitsuba_ExtremumStructure_bbox = R"doc(Return the bounding box of the extremum structure)doc";
+static const char *__doc_mitsuba_ExtremumStructure_bbox = R"doc(//! @{ \name Non-virtual query methods)doc";
+
+static const char *__doc_mitsuba_ExtremumStructure_build =
+R"doc(Build the extremum structure of ``volume``.
+
+Implements the logic that constructs the extremum structure from a
+``volume``. Called by ``update_extremum`` which is itself called by
+the owning ``Medium``
+
+Parameter ``volume``:
+    Volume to compute extremum values from)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure_class_name = R"doc()doc";
 
@@ -3007,7 +3022,13 @@ Returns:
     The minorant and majorant values at the medium interaction point.
     Clamped values outside bounds.)doc";
 
-static const char *__doc_mitsuba_ExtremumStructure_m_bbox = R"doc(Bounding box of the extremum structure in world space)doc";
+static const char *__doc_mitsuba_ExtremumStructure_m_bbox = R"doc(The bbox over which the extremum structure must be valid.)doc";
+
+static const char *__doc_mitsuba_ExtremumStructure_m_scale = R"doc(Scale by which to multiply the extremum values.)doc";
+
+static const char *__doc_mitsuba_ExtremumStructure_set_bbox = R"doc(Setter for the bbox over which the structure must be valid.)doc";
+
+static const char *__doc_mitsuba_ExtremumStructure_set_scale = R"doc(Setter for the scale by which to multiply the extremum values.)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure_traverse_extremum =
 R"doc(Traverse the extremum along a ray and applies a callback at each
@@ -3050,6 +3071,24 @@ force the requirement for bindings, which are incompatible with
 function types.)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure_type = R"doc()doc";
+
+static const char *__doc_mitsuba_ExtremumStructure_update_extremum =
+R"doc(Update the bbox and scale, and rebuild the structure.
+
+The ``bbox`` parameters indicates the domain over which the extremum
+structure can be queried. It can be larger or smaller than the
+underlying volume bbox. It is the extremum's responsibility to be
+valid over this area. The building implementation is handled in
+``build``.
+
+Parameter ``bbox``:
+    The validity bbox of the extremum structure
+
+Parameter ``volume``:
+    The volume from which to derive the extremum structure
+
+Parameter ``scale``:
+    The scale by which to multiply the extremum values)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure_variant_name = R"doc()doc";
 
@@ -11102,6 +11141,12 @@ static const char *__doc_mitsuba_Volume_8 = R"doc()doc";
 
 static const char *__doc_mitsuba_Volume_9 = R"doc()doc";
 
+static const char *__doc_mitsuba_VolumeCoordFlag = R"doc(Volume's coordinate type.)doc";
+
+static const char *__doc_mitsuba_VolumeCoordFlag_Grid = R"doc()doc";
+
+static const char *__doc_mitsuba_VolumeCoordFlag_Spherical = R"doc()doc";
+
 static const char *__doc_mitsuba_VolumeGrid =
 R"doc(Class to read and write 3D volume grids
 
@@ -11221,6 +11266,18 @@ R"doc(Write an encoded form of the volume grid to a stream
 Parameter ``stream``:
     Target stream that will receive the encoded output)doc";
 
+static const char *__doc_mitsuba_VolumeParametrization = R"doc(Frame parameters of radially parameterized volumes in world space.)doc";
+
+static const char *__doc_mitsuba_VolumeParametrization_VolumeParametrization = R"doc()doc";
+
+static const char *__doc_mitsuba_VolumeParametrization_VolumeParametrization_2 = R"doc()doc";
+
+static const char *__doc_mitsuba_VolumeParametrization_flag = R"doc()doc";
+
+static const char *__doc_mitsuba_VolumeParametrization_to_world = R"doc()doc";
+
+static const char *__doc_mitsuba_VolumeParametrization_uv_range = R"doc()doc";
+
 static const char *__doc_mitsuba_Volume_PinGuard =
 R"doc(A Scoped Guard that pins the reference count of the volume.
 
@@ -11318,6 +11375,8 @@ R"doc(Compute local minorant (minimum) over a spatial region
 
 Convenience method that returns only the minorant. The default
 implementation calls `extremum()` and returns the first element.)doc";
+
+static const char *__doc_mitsuba_Volume_parametrization = R"doc()doc";
 
 static const char *__doc_mitsuba_Volume_pin = R"doc()doc";
 
@@ -14231,6 +14290,8 @@ static const char *__doc_mitsuba_warp_uniform_spherical_lune_to_square = R"doc(I
 static const char *__doc_mitsuba_warp_uniform_triangle_to_square = R"doc(Inverse of the mapping square_to_uniform_triangle)doc";
 
 static const char *__doc_mitsuba_warp_von_mises_fisher_to_square = R"doc(Inverse of the mapping von_mises_fisher_to_square)doc";
+
+static const char *__doc_mitsuba_wrap = R"doc(Applies the configured texture wrapping mode to an integer position)doc";
 
 static const char *__doc_mitsuba_xyz_to_srgb = R"doc(Convert XYZ tristimulus values to ITU-R Rec. BT.709 linear RGB)doc";
 
