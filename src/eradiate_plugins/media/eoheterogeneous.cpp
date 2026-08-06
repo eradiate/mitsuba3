@@ -116,11 +116,8 @@ public:
 
         if (!m_extremum_structure) {
             // Create a default global extremum structure.
-            Properties props_extr("extremum_global");
-            props_extr.set("volume", (Object *) m_sigmat.get());
-            props_extr.set("scale", m_scale);
             m_extremum_structure =
-                PluginManager::instance()->create_object<ExtremumStructure>(props_extr);
+                PluginManager::instance()->create_object<ExtremumStructure>(Properties("extremum_global"));
         }
 
         m_ddis_threshold = props.get<ScalarFloat>("ddis_threshold", 0.1f);
@@ -135,6 +132,10 @@ public:
             ScalarPoint3f aabb_max = props.get<ScalarPoint3f>("aabb_max");
             m_aabb = ScalarBoundingBox3f(aabb_min, aabb_max);
         }
+
+        m_extremum_structure->update_extremum(
+            dr::select(m_aabb.valid(), m_aabb, m_sigmat->bbox()),
+            m_sigmat.get(), m_scale);
     }
 
     void traverse(TraversalCallback *cb) override {
@@ -153,9 +154,15 @@ public:
         if(string::contains(keys, "phase_function"))
             update_ddis_phase_function();
 
-        // #TODO: refactor extremum interface to expose a build function for more robust updates
-        if (string::contains(keys, "sigma_t"))
-            m_extremum_structure->parameters_changed(keys);
+        if (string::contains(keys, "sigma_t")) {
+            // we assume that the AABB cannot change and so is not recomputed.
+            m_extremum_structure->update_extremum(
+                dr::select(m_aabb.valid(), m_aabb, m_sigmat->bbox()),
+                m_sigmat.get(), std::nullopt);
+        }
+
+        if (string::contains(keys, "scale"))
+            m_extremum_structure->set_scale(m_scale);
     }
 
     UnpolarizedSpectrum
@@ -188,10 +195,7 @@ public:
 
     std::tuple<Mask, Float, Float>
     intersect_aabb(const Ray3f &ray) const override {
-        if (m_aabb.valid()) {
-            return m_aabb.ray_intersect(ray);
-        }
-        return m_sigmat->bbox().ray_intersect(ray);
+        return m_aabb.ray_intersect(ray);
     }
 
     std::string to_string() const override {
