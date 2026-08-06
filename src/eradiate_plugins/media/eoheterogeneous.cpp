@@ -131,6 +131,8 @@ public:
             ScalarPoint3f aabb_min = props.get<ScalarPoint3f>("aabb_min");
             ScalarPoint3f aabb_max = props.get<ScalarPoint3f>("aabb_max");
             m_aabb = ScalarBoundingBox3f(aabb_min, aabb_max);
+        } else {
+            m_aabb = m_sigmat->bbox();
         }
 
         m_extremum_structure->update_extremum(
