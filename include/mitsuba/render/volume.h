@@ -6,6 +6,9 @@
 #include <mitsuba/render/interaction.h>
 #include <mitsuba/render/shape.h>
 #include <mitsuba/render/texture.h>
+// #ERADIATE_CHANGE_BEGIN: Local extremum Support
+#include <mitsuba/render/eradiate/volume_utils.h>
+// #ERADIATE_CHANGE_END
 
 #include <drjit/texture.h>
 
@@ -109,6 +112,12 @@ public:
      */
     virtual Float minorant(const BoundingBox3f& bbox, Mask local = true) const {
         return extremum(bbox, local).first;
+    }
+
+    virtual VolumeParametrization<ScalarFloat> parametrization() const {
+        VolumeParametrization<ScalarFloat> param;
+        param.to_world = m_to_local.inverse();
+        return param;
     }
 // #ERADIATE_CHANGE_END
 
