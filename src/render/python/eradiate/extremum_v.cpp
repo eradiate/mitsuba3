@@ -82,7 +82,13 @@ template <typename Ptr, typename Cls> void bind_extremum_structure_generic(Cls &
                 return ptr->eval_1(it, active);
             },
             "it"_a, "active"_a = true,
-            D(ExtremumStructure, eval_1));
+            D(ExtremumStructure, eval_1))
+        .def("next_segment",
+            [](Ptr ptr, const Ray3f &ray, Float t, Mask active) {
+                return ptr->next_segment(ray, t, active);
+            },
+            "ray"_a, "t"_a, "active"_a = true,
+            D(ExtremumStructure, next_segment));
 
 
     // Test utility: deterministic delta tracking driven by a fixed target
