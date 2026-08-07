@@ -15,7 +15,7 @@ NAMESPACE_BEGIN(mitsuba)
  * \brief Abstract base class for extremum structures
  *
  * ExtremumStructure provides an interface for spatial data structures that
- * store local extrema (majorant/minorant) of volumetric extinction coefficients.
+ * store local extrema (majorant/minorant) of volumetric values.
  * This enables efficient use of tracking algorithms with locally-adaptive
  * majorants and minorants.
  *
@@ -70,6 +70,22 @@ public:
      * \param volume  Volume to compute extremum values from
      */
     virtual void build(const Volume *volume) = 0;
+
+
+    /**
+     * \brief Return the segment <tt>[t, t_exit)</tt> containing distance
+     * \c t along \c ray, with the structure's local extrema.
+     *
+     * Stateless query in world-t parameterization. Conventions:
+     *
+     * - Segments are half-open <tt>[mint, maxt)</tt> and tile exactly:
+     *   feeding \c maxt back as the next \c t yields the adjacent segment.
+     * - Outside the domain, empty segments are returned — <tt>[t, enter)</tt>
+     *   or <tt>[t, +inf)</tt> with value (0, 0): outside the domain the
+     *   value is zero by construction.
+     */
+    virtual ExtremumSegment next_segment(const Ray3f &ray, Float t,
+                                         Mask active = true) const;
 
 
     /**
@@ -160,6 +176,7 @@ NAMESPACE_END(mitsuba)
 DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::ExtremumStructure)
     DRJIT_CALL_METHOD(traverse_extremum)
     DRJIT_CALL_METHOD(eval_1)
+    DRJIT_CALL_METHOD(next_segment)
 DRJIT_CALL_END()
 
 //! @}
