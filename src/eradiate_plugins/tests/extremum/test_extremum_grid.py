@@ -335,7 +335,7 @@ def test_update_on_sigma_t_change(variant_scalar_mono, medium_type):
     assert np.allclose(got, expected)
 
 
-def _make_x_volume(values, n, wrap_mode="clamp", to_world=None):
+def _make_x_volume(values, n, wrap_mode="clamp", wrap=True, to_world=None):
     # Radial/X resolution must be the grid's fastest (last) axis.
     data = np.array(values, dtype=float).reshape(1, 1, n)
     d = {
@@ -343,6 +343,7 @@ def _make_x_volume(values, n, wrap_mode="clamp", to_world=None):
         "grid": mi.VolumeGrid(data),
         "filter_type": "nearest",
         "accel": False,
+        "wrap": wrap,
         "wrap_mode": wrap_mode,
     }
     if to_world is not None:
@@ -350,12 +351,11 @@ def _make_x_volume(values, n, wrap_mode="clamp", to_world=None):
     return mi.load_dict(d)
 
 
-def _make_x_extremum(bbox, volume, n, wrap_mode="clamp"):
+def _make_x_extremum(bbox, volume, n):
     extremum = mi.load_dict(
         {
             "type": "extremum_grid",
             "resolution": mi.ScalarVector3i(n, 1, 1),
-            "wrap_mode": wrap_mode,
         }
     )
     extremum.update_extremum(bbox, volume)
@@ -392,16 +392,16 @@ def test_sample_tight_escapes(variant_scalar_mono):
 @pytest.mark.parametrize(
     "wrap_mode,expected_distance,expected_leftover",
     [
-        # repeat: cells [1,2,3,4] tile again past x=1, so the target is
-        # spent reaching the 3rd repeated cell (value 3) before landing
-        # 0.1 into the 4th (value 4).
+        # Cells [1,2,3,4] tile again past x=1, so the target is spent reaching the
+        # 3rd repeated cell (value 3) before landing 0.1 into the 4th (value 4).
         ("repeat", 1.775, 0.1),
-        # mirror: past x=1 the pattern reflects to [4,3,2,1], so the
+        # Past x=1 the pattern reflects to [4,3,2,1], so the
         # target lands directly in the first (value 4) mirrored cell.
         ("mirror", 1.45, 0.6),
-        # clamp: past x=1 the whole remainder is one constant segment at
-        # the edge value (4), so the target lands within that segment.
-        ("clamp", 1.4, 0.6),
+        # Past x=1 the whole remainder is one merged constant-majorant segment
+        # segment at the edge value (4). Leftover ot reported is the full amount
+        # needed when entering that merged segment, i.e. (4.1 - 2.5 = 1.6).
+        ("clamp", 1.4, 1.6),
     ],
 )
 def test_sample_non_tight_sampled(
@@ -411,13 +411,27 @@ def test_sample_non_tight_sampled(
     # second half is only reachable through wrap_mode-driven indexing.
     volume = _make_x_volume([1.0, 2.0, 3.0, 4.0], 4, wrap_mode=wrap_mode)
     domain = mi.BoundingBox3f([0, 0, 0], [2, 2, 2])
-    extremum = _make_x_extremum(domain, volume, 4, wrap_mode=wrap_mode)
+    extremum = _make_x_extremum(domain, volume, 4)
 
     ray = mi.Ray3f(o=[0, 0.5, 0.5], d=[1, 0, 0])
     distance, leftover_ot = extremum.sample_test(ray, 0.0, 2.0, target_ot=4.1)
 
     assert np.allclose(distance, expected_distance)
     assert np.allclose(leftover_ot, expected_leftover)
+
+
+def test_sample_non_tight_no_wrap(variant_scalar_mono):
+    # Same as above with no wrap, segment's majorant evaluates to 0. past the
+    # volume and ray escapes once the 4 cells are traversed.
+    volume = _make_x_volume([1.0, 2.0, 3.0, 4.0], 4, wrap=False)
+    domain = mi.BoundingBox3f([0, 0, 0], [2, 2, 2])
+    extremum = _make_x_extremum(domain, volume, 4)
+
+    ray = mi.Ray3f(o=[0, 0.5, 0.5], d=[1, 0, 0])
+    distance, leftover_ot = extremum.sample_test(ray, 0.0, 2.0, target_ot=3.0)
+
+    assert np.isinf(distance)
+    assert np.allclose(leftover_ot, 0.5)
 
 
 @pytest.mark.parametrize("wrap_mode", ["clamp", "repeat", "mirror"])
@@ -429,7 +443,7 @@ def test_sample_rotated_axis_aligned(variant_scalar_mono, wrap_mode):
     volume = _make_x_volume(
         [1.0, 2.0, 3.0, 4.0], 4, wrap_mode=wrap_mode, to_world=to_world
     )
-    extremum = _make_x_extremum(volume.bbox(), volume, 4, wrap_mode=wrap_mode)
+    extremum = _make_x_extremum(volume.bbox(), volume, 4)
 
     ray = mi.Ray3f(o=[-0.5, 0, 0.5], d=[0, 1, 0])
     distance, leftover_ot = extremum.sample_test(ray, 0.0, 1.0, target_ot=1.6)
@@ -461,7 +475,7 @@ def test_sample_rotated(
     volume = _make_x_volume(
         [1.0, 2.0, 3.0, 4.0], 4, wrap_mode=wrap_mode, to_world=to_world
     )
-    extremum = _make_x_extremum(volume.bbox(), volume, 4, wrap_mode=wrap_mode)
+    extremum = _make_x_extremum(volume.bbox(), volume, 4)
 
     ray = mi.Ray3f(
         o=to_world @ mi.ScalarPoint3f(-0.5, 0.5, 0.5),
@@ -471,3 +485,20 @@ def test_sample_rotated(
 
     assert np.allclose(distance, expected_distance)
     assert np.allclose(leftover_ot, expected_leftover)
+
+
+def test_sample_rotated_no_wrap(variant_scalar_mono):
+    # Same 45-degree setup as test_sample_rotated, but wrap=False: the gap
+    # contributes zero ot.
+    to_world = mi.ScalarAffineTransform4f.rotate([0, 0, 1], 45)
+    volume = _make_x_volume([1.0, 2.0, 3.0, 4.0], 4, wrap=False, to_world=to_world)
+    extremum = _make_x_extremum(volume.bbox(), volume, 4)
+
+    ray = mi.Ray3f(
+        o=to_world @ mi.ScalarPoint3f(-0.5, 0.5, 0.5),
+        d=to_world @ mi.ScalarVector3f(1, 0, 0),
+    )
+    distance, leftover_ot = extremum.sample_test(ray, 0.0, 1.5, target_ot=1.6)
+
+    assert np.allclose(distance, 1.275)
+    assert np.allclose(leftover_ot, 0.1)
