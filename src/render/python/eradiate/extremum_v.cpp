@@ -1,4 +1,5 @@
 #include <mitsuba/core/properties.h>
+#include <mitsuba/render/medium.h>
 #include <mitsuba/render/eradiate/extremum.h>
 #include <mitsuba/render/eradiate/extremum_segment.h>
 #include <mitsuba/python/python.h>
@@ -8,6 +9,7 @@
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 #include <drjit/python.h>
+
 
 MI_PY_EXPORT(ExtremumSegment) {
     MI_PY_IMPORT_TYPES()
@@ -81,6 +83,57 @@ template <typename Ptr, typename Cls> void bind_extremum_structure_generic(Cls &
             },
             "it"_a, "active"_a = true,
             D(ExtremumStructure, eval_1));
+
+
+    // Test utility: deterministic delta tracking driven by a fixed target
+    // optical thickness.
+    cls.def("sample_test",
+            [](Ptr ptr, const Ray3f &ray, Float mint, Float maxt,
+               Float target_ot, UInt32 channel, Mask active) {
+                using TrackingStateType = TrackingState<Float, Spectrum>;
+
+                TrackingStateType state = dr::zeros<TrackingStateType>();
+                state.ray       = ray;
+                state.target_ot = target_ot;
+                state.mei       = dr::zeros<MediumInteraction3f>();
+
+                state = ptr->traverse_extremum(
+                    ray, mint, maxt, channel, state,
+                    [](const ExtremumSegment &segment, TrackingStateType &state,
+                       const UInt32 &, Mask active) {
+                        Float mint = dr::select(
+                            state.mei.is_valid(),
+                            dr::maximum(segment.mint, state.mei.t),
+                            segment.mint);
+                        Float segment_ot =
+                            (segment.maxt - mint) * segment.majorant();
+                        Mask sampled = (state.target_ot < segment_ot) && active;
+
+                        Float maxt = dr::select(
+                            sampled,
+                            mint + state.target_ot /
+                                       dr::maximum(segment.majorant(),
+                                                   dr::Epsilon<Float>),
+                            segment.maxt);
+
+                        dr::masked(state.mei.t, sampled)  = maxt;
+                        dr::masked(state.mei.t, !sampled) = dr::Infinity<Float>;
+                        dr::masked(state.target_ot, !sampled && active) -=
+                            segment_ot;
+
+                        return std::pair<Mask, Mask>(/*advance=*/!sampled,
+                                                     active && !sampled);
+                    },
+                    active);
+
+                return std::make_tuple(state.mei.t, state.target_ot);
+            },
+            "ray"_a, "mint"_a, "maxt"_a, "target_ot"_a, "channel"_a = 0u,
+            "active"_a = true,
+            "Deterministic delta-tracking test utility. Traverses the extremum "
+            "structure's segments, until an interaction is sampled based on "
+            "`target_ot`. Returns (distance, leftover_ot); `distance` is "
+            "infinite if `target_ot` is not reached before `maxt`.");
 }
 
 
