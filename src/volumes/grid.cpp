@@ -591,6 +591,14 @@ public:
 
         return { min_val, max_val };
     }
+
+    virtual VolumeParametrization<ScalarFloat> parametrization() const override {
+        VolumeParametrization<ScalarFloat> param;
+        param.to_world = m_to_local.inverse();
+        param.wrap = m_wrap;
+        param.wrap_mode = m_texture.wrap_mode();
+        return param;
+    }
 // #ERADIATE_CHANGE_END
 
     ScalarVector3i resolution() const override {
