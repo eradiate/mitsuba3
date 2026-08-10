@@ -10,6 +10,7 @@
 #include <nanobind/stl/vector.h>
 #include <drjit/python.h>
 
+
 MI_PY_EXPORT(ExtremumSegment) {
     MI_PY_IMPORT_TYPES()
 
