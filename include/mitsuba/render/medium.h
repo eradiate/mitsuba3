@@ -267,7 +267,7 @@ protected:
      *
      * This method is an helper function for child classes.
      */
-    ref<PhaseFunction> create_ddis_phase_function();
+    virtual ref<PhaseFunction> create_ddis_phase_function();
 
 public:
 
