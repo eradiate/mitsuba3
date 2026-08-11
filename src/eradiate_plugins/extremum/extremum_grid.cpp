@@ -81,6 +81,68 @@ public:
         build_grid(volume, m_resolution);
     }
 
+
+    ExtremumSegment next_segment(const Ray3f &ray, Float t,
+                                 Mask active) const override {
+        auto [hit, d0, d1] = m_bbox.ray_intersect(ray);
+
+        ExtremumSegment segment(t, dr::Infinity<Float>, Vector2f(0.f));
+
+        Float eps = dr::maximum(dr::abs(t), 1.f) * math::RayEpsilon<Float>;
+        Float tq  = t + eps;
+
+        active &= hit;
+        Mask before = hit && (tq < d0);
+        Mask inside = hit && !before && (tq < d1);
+
+        dr::masked(segment.maxt, before) = d0;
+
+        // early exit
+        if (dr::any_or<false>(!inside)) {
+            return segment;
+        }
+
+        // Grid-coordinate ray in [0, res]^3 over the grid extent
+        Vector3f res(m_resolution);
+        Point3f  o = (m_to_local * ray.o) * res;
+        Vector3f d = (m_to_local * ray.d) * res;
+        Vector3i pi = dr::floor2int<Vector3i>(dr::fmadd(d, tq, o));
+
+        Mask clamped_bounds = m_wrap_mode == dr::WrapMode::Clamp;
+        // Clamped case: clip pi to right outside the [0,res] range,
+        // For dimensions outside that range, next boundary distance becomes the
+        // local box boundary.
+        dr::masked(pi, clamped_bounds) = dr::clip(pi, -1, m_resolution);
+
+        // calculate next boundary distance
+        Vector3i b_idx = dr::select(d > 0.f, pi+1, pi);
+        Vector3f ti = (Vector3f(b_idx) - o) / d;
+
+        auto inf_t = d == 0.f;
+        inf_t |= ti <= tq;
+        // b_idx out of range implies the ray is exiting the [0,res] range.
+        inf_t |= clamped_bounds && ((b_idx < 0) || (b_idx > m_resolution));
+        dr::masked(ti, inf_t) = dr::Infinity<Float>;
+
+        Float t_exit = dr::minimum(d1, dr::min(ti));
+
+        // Disable gathering if outside [0,res] range and no wrapping
+        Mask gather = active && inside && (m_wrap || !dr::any((pi < 0) || (pi >= m_resolution)));
+        Vector3i piw = wrap<Vector3i>(pi, m_resolution, m_inv_resolution, m_wrap_mode);
+        UInt32 idx = dr::fmadd(dr::fmadd(piw.z(), m_resolution.y(), piw.y()),
+                               m_resolution.x(), piw.x());
+        Vector2f value =
+            dr::gather<Vector2f>(m_extremum_grid, idx, gather);
+
+        Float maxt = dr::select(
+            inside, dr::maximum(t_exit, tq),
+            dr::select(before, d0, dr::Infinity<Float>));
+
+        return ExtremumSegment(t, maxt,
+                               dr::select(gather, m_scale*value, Vector2f(0.f)));
+    }
+
+
     TrackingStateType traverse_extremum(
         const Ray3f &ray,
         Float mint,
