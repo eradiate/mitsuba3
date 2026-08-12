@@ -502,3 +502,71 @@ def test_sample_rotated_no_wrap(variant_scalar_mono):
 
     assert np.allclose(distance, 1.275)
     assert np.allclose(leftover_ot, 0.1)
+
+
+def test_next_segment_miss(variant_scalar_mono):
+    # Ray entirely outside the domain bbox, heading away from it: the whole
+    # ray from t is reported as one empty segment.
+    volume = _make_x_volume([1.0, 2.0, 3.0, 4.0], 4)
+    extremum = _make_x_extremum(volume.bbox(), volume, 4)
+
+    ray = mi.Ray3f(o=[10, 10, 10], d=[1, 0, 0])
+    segment = extremum.next_segment(ray, 0.0)
+
+    assert np.isinf(segment.maxt)
+    assert np.allclose(segment.minorant(), 0.0)
+    assert np.allclose(segment.majorant(), 0.0)
+
+
+def test_next_segment_inside_grid(variant_scalar_mono):
+    # 4 cells of width 0.25 along x, values [1, 2, 3, 4], domain == volume
+    # bbox. Querying from inside the 2nd cell returns that cell's segment,
+    # bounded by its exit boundary at x=0.5.
+    volume = _make_x_volume([1.0, 2.0, 3.0, 4.0], 4)
+    extremum = _make_x_extremum(volume.bbox(), volume, 4)
+
+    ray = mi.Ray3f(o=[0, 0.5, 0.5], d=[1, 0, 0])
+    segment = extremum.next_segment(ray, 0.3)
+
+    assert np.allclose(segment.mint, 0.3)
+    assert np.allclose(segment.maxt, 0.5)
+    assert np.allclose(segment.minorant(), 2.0)
+    assert np.allclose(segment.majorant(), 2.0)
+
+
+@pytest.mark.parametrize("wrap", [True, False])
+@pytest.mark.parametrize(
+    "wrap_mode,expected_maxt,expected_value",
+    [
+        # The boundary cell extends to the domain's exit, at the last cell's
+        # edge value (4).
+        ("clamp", 2.0, 4.0),
+        # Cells tile again past x=1, landing in the first repeated cell (value 1).
+        ("repeat", 1.25, 1.0),
+        # Cells reflect past x=1, landing in the cell's mirrored copy (value 4).
+        ("mirror", 1.25, 4.0),
+    ],
+)
+def test_next_segment_wrap(
+    variant_scalar_mono, wrap, wrap_mode, expected_maxt, expected_value
+):
+    # Domain twice as wide as the volume's own [0, 1] bbox along x: the
+    # second half is only reachable through wrap_mode-driven indexing, and
+    # is empty entirely when wrap is disabled.
+    volume = _make_x_volume([1.0, 2.0, 3.0, 4.0], 4, wrap_mode=wrap_mode, wrap=wrap)
+    domain = mi.BoundingBox3f([0, 0, 0], [2, 2, 2])
+    extremum = _make_x_extremum(domain, volume, 4)
+
+    ray = mi.Ray3f(o=[0, 0.5, 0.5], d=[1, 0, 0])
+    segment = extremum.next_segment(ray, 1.0)
+
+    assert np.allclose(segment.mint, 1.0)
+    if wrap:
+        assert np.allclose(segment.maxt, expected_maxt)
+        assert np.allclose(segment.minorant(), expected_value)
+        assert np.allclose(segment.majorant(), expected_value)
+    else:
+        # No wrap: the extension past the volume's own bbox reads as vacuum.
+        assert np.allclose(segment.maxt, 2.0)
+        assert np.allclose(segment.minorant(), 0.0)
+        assert np.allclose(segment.majorant(), 0.0)

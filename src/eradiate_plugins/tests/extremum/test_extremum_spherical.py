@@ -215,3 +215,49 @@ def test_sample_fillmax_sampled(variant_scalar_mono):
 
     assert np.allclose(distance, 1.2)
     assert np.allclose(leftover_ot, 0.6)
+
+
+def test_next_segment_miss(variant_scalar_mono):
+    # Ray entirely outside the [-1, 1]^3 domain bbox, heading away from it:
+    # the whole ray from t is reported as one empty segment.
+    volume = _make_spherical_volume([2.0], 1, rmin=0.2, rmax=0.8)
+    extremum = _make_extremum(volume, 1)
+
+    ray = mi.Ray3f(o=[5, 5, 5], d=[1, 0, 0])
+    segment = extremum.next_segment(ray, 0.0)
+
+    assert np.isinf(segment.maxt)
+    assert np.allclose(segment.minorant(), 0.0)
+    assert np.allclose(segment.majorant(), 0.0)
+
+
+def test_next_segment_starts_inside_shell(variant_scalar_mono):
+    # 4 shells of width 0.2 from rmin=0.2 outward, values [1, 2, 3, 4].
+    # Starting at r=0.9 lands in the 4th (outermost) shell, exiting at its
+    # inner boundary r=0.8.
+    volume = _make_spherical_volume([1.0, 2.0, 3.0, 4.0], 4, rmin=0.2, rmax=1.0)
+    extremum = _make_extremum(volume, 4)
+
+    ray = mi.Ray3f(o=[0.9, 0, 0], d=[-1, 0, 0])
+    segment = extremum.next_segment(ray, 0.0)
+
+    assert np.allclose(segment.mint, 0.0)
+    assert np.allclose(segment.maxt, 0.1)
+    assert np.allclose(segment.minorant(), 4.0)
+    assert np.allclose(segment.majorant(), 4.0)
+
+
+def test_next_segment_starts_outside_rmax(variant_scalar_mono):
+    # Single shell [0.2, 0.8] (value 2.0), fillmax=0.5. Starting at r=0.95,
+    # inside the domain bbox but outside rmax, lands in the fillmax region
+    # and exits at the rmax boundary r=0.8.
+    volume = _make_spherical_volume([2.0], 1, rmin=0.2, rmax=0.8, fillmax=0.5)
+    extremum = _make_extremum(volume, 1)
+
+    ray = mi.Ray3f(o=[0.95, 0, 0], d=[-1, 0, 0])
+    segment = extremum.next_segment(ray, 0.0)
+
+    assert np.allclose(segment.mint, 0.0)
+    assert np.allclose(segment.maxt, 0.15)
+    assert np.allclose(segment.minorant(), 0.5)
+    assert np.allclose(segment.majorant(), 0.5)
