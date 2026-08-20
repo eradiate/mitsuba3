@@ -392,6 +392,10 @@ public:
 
         PathStack stack;
         CountStack counts;
+        for (size_t i = 0; i < LS_STACK_SIZE; ++i) {
+            stack[i]  = dr::zeros<PathState>();
+            counts[i] = UInt32(0);
+        }
         Int32 stack_counter = Int32(-1);
 
         LoopState ls {
@@ -428,8 +432,8 @@ public:
             UInt32& path_flag    = ls.current.path_flag;
             UInt32& local_depth  = ls.current.local_depth;
 
-            MediumInteraction3f mei;
-            SurfaceInteraction3f si;
+            MediumInteraction3f mei = dr::zeros<MediumInteraction3f>();
+            SurfaceInteraction3f si = dr::zeros<SurfaceInteraction3f>();
 
             Mask is_mother = has_flag(path_flag, PathTypeFlag::Mother);
             Mask is_clone = has_flag(path_flag, PathTypeFlag::Clone);
