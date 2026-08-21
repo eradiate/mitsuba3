@@ -117,7 +117,7 @@ html_theme_options = {
     "light_logo": "_static/eradiate-mitsuba-logo-typo_simple-black.svg",
     "dark_logo": "_static/eradiate-mitsuba-logo-typo_simple-white.svg",
     "accent_color": "teal",
-    "github_url": "https://github.com/eradiate/eradiate-mitsuba",
+    "github_url": "https://github.com/eradiate/mitsuba3",
     "navigation_with_keys": True,
     "nav_links_align": "center",
     "nav_links": [
