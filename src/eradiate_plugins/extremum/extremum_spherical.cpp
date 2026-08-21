@@ -20,35 +20,10 @@ Extremum spherical structure (:monosp:`extremum_spherical`)
 -----------------------------------------------------------
 
 .. pluginparameters::
-
- * - volume
-   - |volume|
-   - Spherical-coordinates volume to build extremum from
-   - |exposed|
-
- * - to_world
-   - |transform|
-   - Specifies an optional 4×4 transformation matrix that will be applied to
-     volume coordinates.
-
- * - rmin
-   - |float|
-   - Inner shell radius. It should preferably match the underlying volume.
-     Default: 0
-
- * - rmax
-   - |float|
-   - Outer shell radius. It should preferably match the underlying volume.
-     Default: 1
-
  * - resolution
    - |vector|
    - Grid resolution as :math:`(r, \theta, \phi)`. Grids with variations on only
      the radial resolution have optimized traversal. Default: [1,1,1]
-
- * - scale
-   - |float|
-   - Scale factor for extinction coefficients. Default: 1.0
 
 This plugin creates a spherical extremum structure storing local extremum values
 for efficient delta tracking in spherical media. The grid is constructed by
@@ -63,7 +38,7 @@ radially-varying media such as planetary atmospheres.
 template <typename Float, typename Spectrum>
 class ExtremumSpherical final : public ExtremumStructure<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(ExtremumStructure, m_bbox)
+    MI_IMPORT_BASE(ExtremumStructure, m_bbox, m_scale)
     MI_IMPORT_TYPES(Volume)
 
     using TrackingStateType    = TrackingState<Float, Spectrum>;
@@ -83,12 +58,7 @@ public:
         }
 
         // Mark all properties as queried so they don't warn in expand()
-        props.mark_queried("volume");
-        props.mark_queried("to_world");
-        props.mark_queried("rmin");
-        props.mark_queried("rmax");
         props.mark_queried("resolution");
-        props.mark_queried("scale");
     }
 
     template <SphericalTraversalType TT>
@@ -109,6 +79,10 @@ public:
         return { result };
     }
 
+    void build(const Volume *) override {
+        NotImplementedError("build");
+    }
+
     // Stub overrides — never called, expand() replaces this object
     TrackingStateType traverse_extremum(const Ray3f &, Float, Float, UInt32,
                     TrackingStateType, TrackingFunctionType*, Mask) const override {
@@ -118,7 +92,6 @@ public:
     std::tuple<Float, Float> eval_1(const Interaction3f &,
                                     Mask) const override {
         NotImplementedError("eval_1");
-        return { 0.f, 0.f };
     }
 
     MI_DECLARE_CLASS(ExtremumSpherical)
@@ -136,7 +109,7 @@ protected:
 template <typename Float, typename Spectrum, SphericalTraversalType TraversalType>
 class ExtremumSphericalImpl final : public ExtremumStructure<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(ExtremumStructure, m_bbox)
+    MI_IMPORT_BASE(ExtremumStructure, m_bbox, m_scale)
     MI_IMPORT_TYPES(Volume)
 
     using TrackingStateType    = TrackingState<Float, Spectrum>;
@@ -144,31 +117,21 @@ public:
     using FloatStorage         = DynamicBuffer<Float>;
 
     ExtremumSphericalImpl(const Properties &props) : Base(props) {
-        // Get volume
-        ref<Volume> volume = nullptr;
-        for (auto &prop : props.objects()) {
-            if (auto *vol = prop.try_get<Volume>()) {
-                volume = vol;
-                break;
-            }
-        }
-
-        if (!volume)
-            Throw("ExtremumSpherical requires a volume");
-
-        m_volume = volume;
-        m_bbox = m_volume->bbox();
-
-        ScalarAffineTransform4f to_world = props.get<ScalarAffineTransform4f>(
-            "to_world", ScalarAffineTransform4f());
-        m_center   = to_world.translation();
-        m_to_local = to_world.inverse();
-
-        m_rmin = props.get<ScalarFloat>("rmin", 0.f);
-        m_rmax = props.get<ScalarFloat>("rmax", 1.f);
         m_resolution =
             props.get<ScalarVector3i>("resolution", ScalarVector3i(1, 1, 1));
-        m_scale = props.get<ScalarFloat>("scale", 1.0f);
+    }
+
+    void build(const Volume *volume) override {
+
+        VolumeParametrization<ScalarFloat> volume_param = volume->parametrization();
+
+        if (volume_param.flag != VolumeCoordFlag::Spherical)
+            Throw("ExtremumSpherical only compatible with volumes that have a spherical parametrization.");
+
+        m_center   = volume_param.to_world.translation();
+        m_to_local = volume_param.to_world.inverse();
+        m_rmin     = volume_param.uv_range.min[0];
+        m_rmax     = volume_param.uv_range.max[0];
 
         if (m_rmin >= m_rmax)
             Throw("rmin must be less than rmax!");
@@ -176,11 +139,7 @@ public:
         m_dr = (m_rmax - m_rmin) / m_resolution.x();
         m_idr = dr::rcp(m_dr);
 
-        build_grid(m_volume.get());
-    }
-
-    void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override {
-        build_grid(m_volume.get());
+        build_grid(volume);
     }
 
     TrackingStateType traverse_extremum(
@@ -218,7 +177,7 @@ public:
         Float fillval = -1.f;
         dr::masked(fillval, r < m_rmin) = m_fillmin;
         dr::masked(fillval, r > m_rmax) = m_fillmax;
-        Mask fill = fillval > 0.f;
+        Mask fill = fillval >= 0.f;
         Vector2f extremum = dr::zeros<Vector2f>();
 
         if constexpr (TraversalType == SphericalTraversalType::RadialOnly) {
@@ -237,7 +196,7 @@ public:
                 fill, Vector2f(fillval, fillval), extremum
         );
 
-        return { extremum.x(), extremum.y() };
+        return { m_scale * extremum.x(), m_scale * extremum.y() };
     }
 
     void traverse(TraversalCallback *cb) override {
@@ -260,6 +219,7 @@ public:
             << "  rmax = "       << m_rmax << std::endl
             << "  fillmin = "    << m_fillmin << "," << std::endl
             << "  fillmax = "    << m_fillmax << std::endl
+            << "  scale = " << m_scale << "," << std::endl
             << "]";
         return oss.str();
     }
@@ -309,7 +269,7 @@ private:
                         auto [min, maj] = volume->extremum(cell_bounds);
 
                         dr::scatter(m_extremum_grid,
-                                    m_scale * Vector2f(min, maj) * safety_factor,
+                                    Vector2f(min, maj) * safety_factor,
                                     UInt32(idx));
                     }
                 }
@@ -330,8 +290,8 @@ private:
 
             auto [min, maj] = volume->extremum(cell_bounds);
 
-            dr::scatter(m_extremum_grid, m_scale * min * safety_factor.x(), idx * 2);
-            dr::scatter(m_extremum_grid, m_scale * maj * safety_factor.y(), idx * 2 + 1);
+            dr::scatter(m_extremum_grid, min * safety_factor.x(), idx * 2);
+            dr::scatter(m_extremum_grid, maj * safety_factor.y(), idx * 2 + 1);
             dr::sync_thread();
         }
 
@@ -339,10 +299,10 @@ private:
         Interaction3f it = dr::zeros<Interaction3f>();
 
         it.p          = m_center;
-        Float fillmin = volume->eval_1(it, true) * m_scale;
+        Float fillmin = volume->eval_1(it, true);
 
         it.p          = m_center + m_rmax + ScalarVector3f(0.f, 0.f, 1.f);
-        Float fillmax = volume->eval_1(it, true) * m_scale;
+        Float fillmax = volume->eval_1(it, true);
 
         if constexpr (dr::is_jit_v<Float>) {
             m_fillmin = fillmin[0];
@@ -510,7 +470,7 @@ private:
                 // Look up extremum values for this shell
                 Vector2f extremum = dr::gather<Vector2f>(
                     m_extremum_grid, ls.layer_idx, ls.active && !fill);
-                extremum = dr::select(!fill, extremum, fill_value);
+                extremum = m_scale * dr::select(!fill, extremum, fill_value);
 
                 dr::masked(ls.segment, update) = ExtremumSegment(
                     ls.current_t, t_next, extremum
@@ -545,9 +505,6 @@ private:
     ScalarPoint3f m_center;
     ScalarFloat m_dr, m_idr;
 
-    ref<Volume> m_volume;
-
-    ScalarFloat m_scale;
     ScalarAffineTransform4f m_to_local;
 };
 

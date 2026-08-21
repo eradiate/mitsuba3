@@ -1351,10 +1351,13 @@ void transform_merge_equivalent(const ParserConfig &/*config*/, ParserState &sta
         for (size_t i = 0; i < state.size(); ++i) {
             size_t repr = canonical[i];
 
+// #ERADIATE_CHANGE_BEGIN: Extremum Structures acquire per-medium state at build time, don't merge
             // Skip merging for emitters and shapes
             if (state[repr].type == ObjectType::Emitter ||
-                state[repr].type == ObjectType::Shape)
+                state[repr].type == ObjectType::Shape ||
+                state[repr].type == ObjectType::ExtremumStructure)
                 continue;
+// #ERADIATE_CHANGE_END
 
             // Try to find an equivalent node
             auto [it, inserted] = dedup_map.insert({repr, repr});

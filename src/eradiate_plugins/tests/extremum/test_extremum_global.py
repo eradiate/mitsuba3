@@ -17,11 +17,22 @@ def _make_grid_volume(values, n):
 
 def test_build(variant_scalar_mono_double):
     volume = _make_grid_volume([1.0, 2.0, 3.0, 4.0], 4)
-    extremum = mi.load_dict({"type": "extremum_global", "volume": volume})
+    extremum = mi.load_dict({"type": "extremum_global"})
+    extremum.update_extremum(volume.bbox(), volume)
 
     it = mi.Interaction3f()
     it.p = mi.Point3f(0.0, 0.0, 0.0)
     assert np.allclose(extremum.eval_1(it), (1.0, 4.0))
+
+
+def test_set_scale(variant_scalar_mono_double):
+    volume = _make_grid_volume([1.0, 2.0, 3.0, 4.0], 4)
+    extremum = mi.load_dict({"type": "extremum_global"})
+    extremum.update_extremum(volume.bbox(), volume, 2.0)
+
+    it = mi.Interaction3f()
+    it.p = mi.Point3f(0.0, 0.0, 0.0)
+    assert np.allclose(extremum.eval_1(it), (2.0, 8.0))
 
 
 @pytest.mark.parametrize(
@@ -51,3 +62,25 @@ def test_update_on_sigma_t_change(variant_scalar_mono_double, medium_type):
 
     got = np.array(medium.extremum_structure().eval_1(it))
     assert np.allclose(got, expected)
+
+
+@pytest.mark.parametrize(
+    "medium_type", ["heterogeneous", "eoheterogeneous", "piecewise", "homogeneous"]
+)
+def test_update_on_scale_change(variant_scalar_mono_double, medium_type):
+    # A scale-only update must go through `set_scale()` without building
+    # the extremum structure from `sigma_t`.
+    volume = _make_grid_volume([1.0, 2.0, 3.0, 4.0], 4)
+    medium = mi.load_dict(
+        {"type": medium_type, "sigma_t": volume, "albedo": 0.5, "scale": 1.0}
+    )
+
+    it = mi.Interaction3f()
+    it.p = mi.Point3f(0.0, 0.0, 0.0)
+
+    params = mi.eradiate.traverse(medium)
+    params["scale"] = mi.Float(2.0)
+    params.update()
+
+    got = np.array(medium.extremum_structure().eval_1(it))
+    assert np.allclose(got, (2.0, 8.0))
