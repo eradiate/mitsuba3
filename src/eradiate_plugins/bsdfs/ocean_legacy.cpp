@@ -454,7 +454,7 @@ public:
         Point2f uv;
         Float t;
 
-        uv.x() = (dr::acos(cos_theta) * (dr::InvPi<Float> * 2.f));
+        uv.x() = (dr::acos(dr::clip(cos_theta, -0.999999999f, 0.999999999f)) * (dr::InvPi<Float> * 2.f));
         uv.y() =
             (dr::atan2(v.y(), v.x()) - m_wind_direction) * dr::InvTwoPi<Float>;
         uv.y() = uv.y() - (1.f * dr::floor(uv.y())); // equivalent to uv.y % 1.f
