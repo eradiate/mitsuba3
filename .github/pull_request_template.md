@@ -20,5 +20,6 @@ Fixes # (issue)
 - [ ] I have commented my code
 - [ ] I have made corresponding changes to the documentation
 - [ ] I have added tests that prove my fix is effective or that my feature works
+- [ ] I have updated the changelog (CHANGELOG.md) with an entry that briefly describes the changes I made
 - [ ] I cleaned the commit history and removed any "Merge" commits
-- [ ] I give permission that the Mitsuba 3 project may redistribute my contributions under the terms of its [license](https://github.com/mitsuba-renderer/mitsuba/blob/master/LICENSE)
+- [ ] I give permission that the Eradiate project may redistribute my contributions under the terms of its [license](https://github.com/eradiate/mitsuba3/blob/master/LICENSE)
