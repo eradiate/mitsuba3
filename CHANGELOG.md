@@ -50,6 +50,10 @@ strive to document breaking API changes in the release notes below.
 - Create a new custom scene traversal function which traverses all parents of
   a node, not just the first one. Combine it with Eradiate's traversal function
   (PR [#37](https://github.com/eradiate/mitsuba3/pull/37)).
+- Reduce divergence with upstream `microfacet.h` by remove the angle parameter
+  and correlated computations. This can simply be achieved by rotating the input
+  and output vectors. Optimize the LUT generation in `ocean_legacy`.
+  (PR [#47](https://github.com/eradiate/mitsuba3/pull/47)).
 
 ## v0.5.0 (9th June 2026)
 

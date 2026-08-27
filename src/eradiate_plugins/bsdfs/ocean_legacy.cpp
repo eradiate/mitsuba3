@@ -58,6 +58,7 @@ NAMESPACE_BEGIN(mitsuba)
  * - shadowing
    - |bool|
    - Indicates whether evaluation accounts for the shadowing-masking term.
+     Disabling it mirrors 6SV.
      (Default: :monosp:`true`).
    - |exposed|
 
@@ -129,29 +130,45 @@ parameters:
 
 /**
  * @brief Evaluate the transmittance of the radiance over all
- * provided angles. For each angle, computes the quadrature of
- * the tranmittance.
+ * provided angles.
+ *
+ * For each (theta, phi) entry, estimates the directional-hemispherical
+ * reflectance of the interface via importance sampling (mirroring
+ * eval_reflectance() in microfacet.h): a Beckmann distribution matched to
+ * the Cox-Munk mean-square slopes is used as the sampling proposal,
+ * reweighted per sample by the Gram-Charlier coefficient. Depending on
+ * ``shadowing`` equals true or false, sample and evaluate using the VNDF or NDF
+ * respectively. The latter is closer to the base implementation in 6S but has
+ * values that blow up at grazing incidence.
+ * The transmittance is then 1 - reflectance.
+ *
  * @param theta Incident zenith angle.
- * @param phi Incident azimuth angle.
+ * @param phi Incident azimuth angle, relative to the wind direction.
  * @param n_real Real part of the index of refraction.
  * @param n_imag Imaginary part of the index of refraction.
  * @param wind_speed Speed of wind at mast height [m/s]
  * @param upwelling Flag for computing upwelling transmittance.
  * Will compute theta according to snells law and invert the
  * index of refraction.
+ * @param shadowing Whether to include shadowing-masking (Smith separable
+ * G1(wo,m)) in the reflectance estimate.
  */
-template <typename Float>
+template <typename Float, typename Spectrum>
 Float eval_ocean_transmittance(Float theta, Float phi,
                                dr::scalar_t<Float> n_real,
                                dr::scalar_t<Float> n_imag,
-                               dr::scalar_t<Float> wind_speed, bool upwelling) {
+                               dr::scalar_t<Float> wind_speed, bool upwelling,
+                               bool shadowing) {
     MI_IMPORT_CORE_TYPES()
 
-    using FloatP    = dr::Packet<dr::scalar_t<Float>>;
-    using Vector3fP = Vector<FloatP, 3>;
+    using FloatP      = dr::Packet<dr::scalar_t<Float>>;
+    using Vector3fP   = Vector<FloatP, 3>;
+    using Normal3fP   = Normal<FloatP, 3>;
+    using MicrofacetDistributionP = MicrofacetDistribution<FloatP, Spectrum>;
 
-    // number of quadrature points
-    int res = 64;
+    // number of importance samples (low-discrepancy grid over the [0,1]^2
+    // VNDF sample space)
+    int res = 16;
 
     if (upwelling){
         theta = dr::asin(dr::sin(theta) / n_real);
@@ -165,14 +182,11 @@ Float eval_ocean_transmittance(Float theta, Float phi,
 
     auto [nodes_x, nodes_y]     = dr::meshgrid(nodes, nodes);
     auto [weights_x, weights_y] = dr::meshgrid(weights, weights);
-
-    // nodes_x   -> [0,π/2], nodes_y   -> [0,2π],
-    // weights_x -> [0,π/4], weights_y -> [0, π].
-    nodes_x = dr::fmadd(nodes_x, 0.25f * dr::Pi<FloatX>, 0.25f * dr::Pi<FloatX>);
-    nodes_y = dr::fmadd(nodes_y, dr::Pi<FloatX>, dr::Pi<FloatX>);
-    weights_x                     = 0.25f * dr::Pi<FloatX> * weights_x;
-    weights_y                     = dr::Pi<FloatX> * weights_y;
-    auto [s_zeniths, c_zeniths]   = dr::sincos(nodes_x);
+    // Map nodes from [-1,1] to the [0,1]^2 sample space,
+    // weights rescaled to the 0.25 Jacobian factor.
+    nodes_x = dr::fmadd(nodes_x, 0.5f, 0.5f);
+    nodes_y = dr::fmadd(nodes_y, 0.5f, 0.5f);
+    weights_x *= 0.25f;
 
     size_t packet_count = dr::width(theta) / FloatP::Size;
     Assert(dr::width(theta) % FloatP::Size == 0);
@@ -182,47 +196,31 @@ Float eval_ocean_transmittance(Float theta, Float phi,
     sigma_c                 = dr::sqrt(sigma_c);
     sigma_u                 = dr::sqrt(sigma_u);
 
-    // cycle through each packet.
+    MicrofacetDistributionP distr(MicrofacetType::Beckmann,
+                                  dr::SqrtTwo<ScalarFloat> * sigma_u,
+                                  dr::SqrtTwo<ScalarFloat> * sigma_c, shadowing);
+
     for (size_t i = 0; i < packet_count; ++i) {
         FloatP theta_i = dr::load<FloatP>(theta.data() + i * FloatP::Size),
                phi_i   = dr::load<FloatP>(phi.data() + i * FloatP::Size);
 
-        // Assume that wi is aligned with the x axis.
-        Vector3fP wi = dr::sphdir(theta_i, FloatP(0.));
+        // wi expressed directly in the wind-aligned frame: phi_i is, by
+        // the azimuth relative to the wind direction
+        Vector3fP wi = dr::sphdir(theta_i, phi_i);
+
+        // no-shadowing branch: floored to avoid dividing by ~0 at grazing incidence.
+        FloatP cos_theta_i_safe = dr::maximum(wi.z(), 1e-6f);
 
         FloatP result_p = 0.f;
-        FloatP td = 0.f, summ = 0.f;
 
-        // compute the quadrature for each packet.
+        // compute the importance-sampled reflectance estimate for each packet.
         for (size_t j = 0; j < dr::width(nodes_x); ++j) {
+            ScalarVector2f node = { nodes_x[j], nodes_y[j] };
+            ScalarFloat weight  = weights_x[j] * weights_y[j];
 
-            ScalarFloat theta_o   = nodes_x[j];
-            ScalarFloat phi_o     = nodes_y[j];
-            ScalarFloat s_zenith_o = s_zeniths[j];
-            ScalarFloat c_zenith_o = c_zeniths[j];
+            Normal3fP m  = std::get<0>(distr.sample(wi, node));
+            Vector3fP wo = reflect(wi, m);
 
-            ScalarFloat weight_x = weights_x[j];
-            ScalarFloat weight_y = weights_y[j];
-
-            ScalarFloat geometry       = c_zenith_o * s_zenith_o;
-            ScalarFloat geometryWeight = geometry * weight_y * weight_x;
-
-            Vector3fP wo = dr::sphdir(FloatP(theta_o), FloatP(phi_o));
-
-            FloatP cos_theta_i = dr::select(wi.z() < 1e-6f, 1e-6f, wi.z()),
-                   cos_theta_o = dr::select(wo.z() < 1e-6f, 1e-6f, wo.z());
-            const Vector3fP m  = dr::normalize(wi + wo);
-
-            // Normal Probability term.
-            // NOTE: here we make the wind direction vary with phi_i instead of
-            // wi. This means that when retrieving values from this table, we
-            // need to make sure to use the azimuth relative to the wind
-            // direction.
-            FloatP D = cox_munk_anisotropic_distrib<FloatP>(phi_i, wind_speed,
-                                                      sigma_u, sigma_c, m);
-            D /= dr::pow(m.z(), 4.f);
-
-            // Fresnel term.
             FloatP cos_chi =
                        dr::clip(dr::dot(wo, m), -0.999999999f, 0.999999999f),
                    sin_chi = dr::clip(dr::sqrt(1.f - cos_chi * cos_chi),
@@ -230,18 +228,25 @@ Float eval_ocean_transmittance(Float theta, Float phi,
             FloatP F = fresnel_sunglint_legacy<FloatP>(n_real, n_imag, cos_chi,
                                                        sin_chi);
 
-            // Put together everything except shadowing term.
-            FloatP glint =
-                D * F * dr::Pi<FloatP> / (4.f * cos_theta_i * cos_theta_o);
-            glint =
-                dr::select(cos_theta_i > 0.f && cos_theta_o > 0.f, glint, 1.f);
+            // Reweight the (isotropic-core) VNDF proposal to the true
+            // anisotropic Cox-Munk/Gram-Charlier distribution.
+            FloatP cm_coef = cox_munk_gram_charlier_coef<FloatP>(wind_speed, sigma_u,
+                                                            sigma_c, m);
 
-            td += glint * geometryWeight;
-            summ += geometryWeight;
+            FloatP smith;
+            if (shadowing) {
+                smith = distr.smith_g1(wo, m) * F * cm_coef;
+            } else {
+                smith = F * cm_coef * cos_chi / (cos_theta_i_safe * m.z());
+            }
+            dr::masked(smith, cos_chi <= 0.f || wo.z() <= 0.f) = 0.f;
+
+            result_p += smith * weight;
         }
 
-        dr::masked(td, td >= summ) = summ;
-        result_p = 1.f - (td / summ);
+        // Guard against importance-sampling noise pushing the reflectance
+        // estimate above 1.
+        result_p = 1.f - dr::minimum(result_p, 1.f);
 
         dr::store(result.data() + i * FloatP::Size, result_p);
     }
@@ -332,6 +337,8 @@ public:
         m_r_omega = r_omega<Float, Spectrum, ScalarFloat>(
             m_ocean_props, m_wavelength, m_pigmentation);
 
+        std::tie(m_s_wind, m_c_wind) = dr::sincos(m_wind_direction);
+
         {
             // Pre-compute textures for the upwelling and downwelling
             // transmittances of radiance in the water body.
@@ -345,10 +352,12 @@ public:
                                          MI_OCEAN_TRANSMITTANCE_RES));
             auto [zeniths_x, azimuths_y] = dr::meshgrid(zeniths, azimuths);
 
-            FloatX downwelling = eval_ocean_transmittance(
-                zeniths_x, azimuths_y, m_n_real, m_n_imag, m_wind_speed, false);
-            FloatX upwelling = eval_ocean_transmittance(
-                zeniths_x, azimuths_y, m_n_real, m_n_imag, m_wind_speed, true);
+            FloatX downwelling = eval_ocean_transmittance<FloatX, Spectrum>(
+                zeniths_x, azimuths_y, m_n_real, m_n_imag, m_wind_speed, false,
+                m_shadowing);
+            FloatX upwelling = eval_ocean_transmittance<FloatX, Spectrum>(
+                zeniths_x, azimuths_y, m_n_real, m_n_imag, m_wind_speed, true,
+                m_shadowing);
 
             size_t shape[3] = { MI_OCEAN_TRANSMITTANCE_RES,
                                 MI_OCEAN_TRANSMITTANCE_RES, 1 };
@@ -417,17 +426,21 @@ public:
         MicrofacetDistribution distr(MicrofacetType::Beckmann,
                                      dr::SqrtTwo<Float> * Float(m_sigma_u),
                                      dr::SqrtTwo<Float> * Float(m_sigma_c),
-                                     true, Float(m_wind_direction));
+                                     true);
 
-        const Vector3f m = dr::normalize(wi + wo);
+        Vector3f m = dr::normalize(wi + wo);
+        // rotate to the axis aligned frame
+        Vector3f m_rot  = rotate_wind_direction<false>(m);
 
-        Float D = distr.eval(m);
-        D *= cox_munk_gram_charlier_coef<Float>(m_wind_direction, m_wind_speed,
-                                          m_sigma_u, m_sigma_c, m);
+        Float D = distr.eval(m_rot);
+        D *= cox_munk_gram_charlier_coef<Float>(m_wind_speed,
+                                          m_sigma_u, m_sigma_c, m_rot);
         Float result = D / (4.f * cos_theta_i * cos_theta_o);
 
         if (m_shadowing) {
-            Float G = distr.G_height_correlated(wi, wo, m);
+            Vector3f wi_rot = rotate_wind_direction<false>(wi);
+            Vector3f wo_rot  = rotate_wind_direction<false>(wo);
+            Float G = distr.G_height_correlated(wi_rot, wo_rot, m_rot);
             result *= G;
         }
 
@@ -545,9 +558,12 @@ public:
         if (dr::any_or<true>(sample_specular)) {
             MicrofacetDistribution distr(
                 MicrofacetType::Beckmann, dr::SqrtTwo<Float> * m_sigma_u,
-                dr::SqrtTwo<Float> * m_sigma_c, true, Float(m_wind_direction));
+                dr::SqrtTwo<Float> * m_sigma_c, true);
 
-            auto [H, weight] = distr.sample(si.wi, sample2);
+            Vector3f wi_rot = rotate_wind_direction<false>(si.wi);
+            auto [H, weight] = distr.sample(wi_rot, sample2);
+            H = rotate_wind_direction<true>(H);
+
             Vector3f wo      = reflect(si.wi, H);
 
             dr::masked(bs.wo, sample_specular) = wo;
@@ -706,15 +722,32 @@ public:
 
         MicrofacetDistribution distr(
             MicrofacetType::Beckmann, dr::SqrtTwo<Float> * m_sigma_u,
-            dr::SqrtTwo<Float> * m_sigma_c, true, Float(m_wind_direction));
+            dr::SqrtTwo<Float> * m_sigma_c, true);
+
+        Vector3f H_rot = rotate_wind_direction<false>(H);
+        Vector3f wi_rot = rotate_wind_direction<false>(si.wi);
 
         prob_specular *=
-            distr.eval(H) * distr.smith_g1(si.wi, H) / (4.f * cos_theta_i);
+            distr.eval(H_rot) * distr.smith_g1(wi_rot, H_rot) / (4.f * cos_theta_i);
 
         Float result = prob_diffuse + prob_specular;
 
         return dr::select(active, result, 0.f);
     }
+
+    template<bool ccw>
+    Vector3f rotate_wind_direction(Vector3f w) const {
+        constexpr ScalarFloat sign = ccw ? 1 : -1;
+
+        Float c_a = m_c_wind;
+        Float s_a = sign * m_s_wind;
+
+        return Vector3f(
+            c_a*w.x() - s_a*w.y(),
+            s_a*w.x() + c_a*w.y(),
+            w.z());
+    }
+
 
     std::string to_string() const override {
         std::ostringstream oss;
@@ -745,6 +778,8 @@ private:
     bool m_accel;
 
     // On update fields
+    ScalarFloat m_c_wind;
+    ScalarFloat m_s_wind;
     ScalarFloat m_n_real;
     ScalarFloat m_n_imag;
     ScalarFloat m_sigma_c = 1.f;

@@ -584,63 +584,17 @@ Float cox_munk_msslope_squared(const Float& wind_speed) {
 }
 
 /**
- * @brief Evaluates the anisotropic distribution of Cox and Munk (1954), with
- * the Gram Charlier series expansion.
- *
- * @param wind_direction direction in radians, east right convention.
- * @param wind_speed wind_speed speed of wind at sea surface (mast height, 10 m)
- * [m/s].
- * @param sigma_u Upwind root mean slope distribution.
- * @param sigma_c Crosswind root mean slope distribution.
- * @param m Half vector.
- *
- */
-template <typename Float>
-Float cox_munk_anisotropic_distrib(const Float &wind_direction,
-                             const Float &wind_speed, const Float &sigma_u,
-                             const Float &sigma_c, const Vector<Float, 3> &m) {
-
-    using Vector3f    = Vector<Float, 3>;
-    using ScalarFloat = dr::scalar_t<Float>;
-
-    // Distribution constants
-    static constexpr ScalarFloat c_40 = 0.40f;
-    static constexpr ScalarFloat c_22 = 0.12f;
-    static constexpr ScalarFloat c_04 = 0.23f;
-
-    // Distribution variables
-    Float c_21 = 0.01f - 0.0086f * wind_speed;
-    Float c_03 = 0.04f - 0.033f * wind_speed;
-
-    auto [s_phi, c_phi] = dr::sincos(wind_direction);
-
-    Vector3f m_p = Vector3f(c_phi * m.x() + s_phi * m.y(),
-                            -s_phi * m.x() + c_phi * m.y(), m.z());
-    m_p          = dr::normalize(m_p);
-
-    const Float xn  = m_p.x() * dr::rcp(sigma_u * m_p.z());
-    const Float xe  = m_p.y() * dr::rcp(sigma_c * m_p.z());
-    const Float xe2 = xe * xe;
-    const Float xn2 = xn * xn;
-
-    Float coef =
-        1.f - (c_21 / 2.f) * (xe2 - 1.f) * xn - (c_03 / 6.f) * (xn2 - 3.f) * xn;
-    coef = coef + (c_40 / 24.f) * (xe2 * xe2 - 6.f * xe2 + 3.f);
-    coef = coef + (c_04 / 24.f) * (xn2 * xn2 - 6.f * xn2 + 3.f);
-    coef = coef + (c_22 / 4.f) * (xe2 - 1.f) * (xn2 - 1.f);
-
-    Float prob = coef * dr::InvTwoPi<Float> * dr::rcp(sigma_u * sigma_c) *
-                 dr::exp(-(xe2 + xn2) * 0.5f);
-    return dr::maximum(prob, 0.f);
-}
-
-/**
  * Evaluates the gram charlier coefficient for the Cox and Munk (1954) only.
+ *
+ * @param wind_speed Speed of wind at sea surface (mast height, 10 m)
+ * [m/s].
+ * @param sigma_u    Upwind root mean slope distribution.
+ * @param sigma_c    Crosswind root mean slope distribution.
+ * \param m          The half vector rotated to the wind direction frame.
  */
 template <typename Float>
-Float cox_munk_gram_charlier_coef(const Float &wind_direction,
-                            const Float &wind_speed, const Float &sigma_u,
-                            const Float &sigma_c, const Vector<Float, 3> &m) {
+Float cox_munk_gram_charlier_coef(const Float &wind_speed, const Float &sigma_u,
+                                  const Float &sigma_c, const Vector<Float, 3> &m) {
 
     using Vector3f    = Vector<Float, 3>;
     using ScalarFloat = dr::scalar_t<Float>;
@@ -654,14 +608,8 @@ Float cox_munk_gram_charlier_coef(const Float &wind_direction,
     Float c_21 = 0.01f - 0.0086f * wind_speed;
     Float c_03 = 0.04f - 0.033f * wind_speed;
 
-    auto [s_phi, c_phi] = dr::sincos(wind_direction);
-
-    Vector3f m_p = Vector3f(c_phi * m.x() + s_phi * m.y(),
-                            -s_phi * m.x() + c_phi * m.y(), m.z());
-    m_p          = dr::normalize(m_p);
-
-    const Float xn = m_p.x() / (sigma_u * m_p.z());
-    const Float xe = m_p.y() / (sigma_c * m_p.z());
+    const Float xn = m.x() / (sigma_u * m.z());
+    const Float xe = m.y() / (sigma_c * m.z());
 
     const Float xe2 = xe * xe;
     const Float xn2 = xn * xn;
@@ -716,7 +664,7 @@ ScalarFloat r_omega(const OceanProperties<Float, Spectrum> ocean_props,
 
     // Iterative computation of the reflectance
     ScalarFloat u       = 0.75f;
-    ScalarFloat r_omega = 0.33f * backscatter_coeff / u / attn_coeff;
+    ScalarFloat r_omega = 0.33f * backscatter_coeff / (u * attn_coeff);
 
     bool converged = false;
     while (!converged) {
