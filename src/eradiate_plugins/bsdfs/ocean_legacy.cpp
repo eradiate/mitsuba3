@@ -174,6 +174,14 @@ Float eval_ocean_transmittance(Float theta, Float phi,
     weights_x                     = 0.25f * dr::Pi<FloatX> * weights_x;
     weights_y                     = dr::Pi<FloatX> * weights_y;
     auto [s_zeniths, c_zeniths]   = dr::sincos(nodes_x);
+    auto [s_azimuths, c_azimuths] = dr::sincos(nodes_y);
+
+    // precompute output angle dependent variables.
+    FloatX wo_x            = s_zeniths * c_azimuths;
+    FloatX wo_y            = s_zeniths * s_azimuths;
+    FloatX wo_z            = c_zeniths;
+    FloatX cos_theta_o_arr = dr::select(wo_z < 1e-6f, FloatX(1e-6f), wo_z);
+    FloatX geometry_weight_arr = c_zeniths * s_zeniths * weights_x * weights_y;
 
     size_t packet_count = dr::width(theta) / FloatP::Size;
     Assert(dr::width(theta) % FloatP::Size == 0);
@@ -198,21 +206,12 @@ Float eval_ocean_transmittance(Float theta, Float phi,
         // compute the quadrature for each packet.
         for (size_t j = 0; j < dr::width(nodes_x); ++j) {
 
-            ScalarFloat theta_o   = nodes_x[j];
-            ScalarFloat phi_o     = nodes_y[j];
-            ScalarFloat s_zenith_o = s_zeniths[j];
-            ScalarFloat c_zenith_o = c_zeniths[j];
+            ScalarFloat geometryWeight = geometry_weight_arr[j];
 
-            ScalarFloat weight_x = weights_x[j];
-            ScalarFloat weight_y = weights_y[j];
-
-            ScalarFloat geometry       = c_zenith_o * s_zenith_o;
-            ScalarFloat geometryWeight = geometry * weight_y * weight_x;
-
-            Vector3fP wo = dr::sphdir(FloatP(theta_o), FloatP(phi_o));
+            Vector3fP wo = Vector3fP(FloatP(wo_x[j]), FloatP(wo_y[j]), FloatP(wo_z[j]));
 
             FloatP cos_theta_i = dr::select(wi.z() < 1e-6f, 1e-6f, wi.z()),
-                   cos_theta_o = dr::select(wo.z() < 1e-6f, 1e-6f, wo.z());
+                   cos_theta_o = FloatP(cos_theta_o_arr[j]);
             Vector3fP m  = dr::normalize(wi + wo);
 
             // Normal Probability term.
@@ -220,12 +219,12 @@ Float eval_ocean_transmittance(Float theta, Float phi,
             // wi. This means that when retrieving values from this table, we
             // need to make sure to use the azimuth relative to the wind
             // direction.
-            m = Vector3fP(c_phi_i*m.x() + s_phi_i*m.y(),
-                          -s_phi_i*m.x() + c_phi_i*m.y(),
-                          m.z());
+            Vector3fP m_rot(c_phi_i*m.x() + s_phi_i*m.y(),
+                            -s_phi_i*m.x() + c_phi_i*m.y(),
+                            m.z());
             FloatP D = cox_munk_anisotropic_distrib<FloatP>(wind_speed, sigma_u,
-                                                            sigma_c, m);
-            D /= dr::pow(m.z(), 4.f);
+                                                            sigma_c, m_rot);
+            D /= dr::square(dr::square(m.z()));
 
             // Fresnel term.
             FloatP cos_chi =
