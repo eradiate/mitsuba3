@@ -592,13 +592,14 @@ Float cox_munk_msslope_squared(const Float& wind_speed) {
  * [m/s].
  * @param sigma_u Upwind root mean slope distribution.
  * @param sigma_c Crosswind root mean slope distribution.
- * @param m Half vector.
+ * @param m       The half vector rotated to the wind direction frame.
  *
  */
 template <typename Float>
-Float cox_munk_anisotropic_distrib(const Float &wind_direction,
-                             const Float &wind_speed, const Float &sigma_u,
-                             const Float &sigma_c, const Vector<Float, 3> &m) {
+Float cox_munk_anisotropic_distrib(const Float &wind_speed,
+                                   const Float &sigma_u,
+                                   const Float &sigma_c,
+                                   const Vector<Float, 3> &m) {
 
     using Vector3f    = Vector<Float, 3>;
     using ScalarFloat = dr::scalar_t<Float>;
@@ -612,14 +613,8 @@ Float cox_munk_anisotropic_distrib(const Float &wind_direction,
     Float c_21 = 0.01f - 0.0086f * wind_speed;
     Float c_03 = 0.04f - 0.033f * wind_speed;
 
-    auto [s_phi, c_phi] = dr::sincos(wind_direction);
-
-    Vector3f m_p = Vector3f(c_phi * m.x() + s_phi * m.y(),
-                            -s_phi * m.x() + c_phi * m.y(), m.z());
-    m_p          = dr::normalize(m_p);
-
-    const Float xn  = m_p.x() * dr::rcp(sigma_u * m_p.z());
-    const Float xe  = m_p.y() * dr::rcp(sigma_c * m_p.z());
+    const Float xn  = m.x() * dr::rcp(sigma_u * m.z());
+    const Float xe  = m.y() * dr::rcp(sigma_c * m.z());
     const Float xe2 = xe * xe;
     const Float xn2 = xn * xn;
 
@@ -636,11 +631,16 @@ Float cox_munk_anisotropic_distrib(const Float &wind_direction,
 
 /**
  * Evaluates the gram charlier coefficient for the Cox and Munk (1954) only.
+ *
+ * @param wind_speed Speed of wind at sea surface (mast height, 10 m)
+ * [m/s].
+ * @param sigma_u    Upwind root mean slope distribution.
+ * @param sigma_c    Crosswind root mean slope distribution.
+ * \param m          The half vector rotated to the wind direction frame.
  */
 template <typename Float>
-Float cox_munk_gram_charlier_coef(const Float &wind_direction,
-                            const Float &wind_speed, const Float &sigma_u,
-                            const Float &sigma_c, const Vector<Float, 3> &m) {
+Float cox_munk_gram_charlier_coef(const Float &wind_speed, const Float &sigma_u,
+                                  const Float &sigma_c, const Vector<Float, 3> &m) {
 
     using Vector3f    = Vector<Float, 3>;
     using ScalarFloat = dr::scalar_t<Float>;
@@ -654,14 +654,8 @@ Float cox_munk_gram_charlier_coef(const Float &wind_direction,
     Float c_21 = 0.01f - 0.0086f * wind_speed;
     Float c_03 = 0.04f - 0.033f * wind_speed;
 
-    auto [s_phi, c_phi] = dr::sincos(wind_direction);
-
-    Vector3f m_p = Vector3f(c_phi * m.x() + s_phi * m.y(),
-                            -s_phi * m.x() + c_phi * m.y(), m.z());
-    m_p          = dr::normalize(m_p);
-
-    const Float xn = m_p.x() / (sigma_u * m_p.z());
-    const Float xe = m_p.y() / (sigma_c * m_p.z());
+    const Float xn = m.x() / (sigma_u * m.z());
+    const Float xe = m.y() / (sigma_c * m.z());
 
     const Float xe2 = xe * xe;
     const Float xn2 = xn * xn;
@@ -716,7 +710,7 @@ ScalarFloat r_omega(const OceanProperties<Float, Spectrum> ocean_props,
 
     // Iterative computation of the reflectance
     ScalarFloat u       = 0.75f;
-    ScalarFloat r_omega = 0.33f * backscatter_coeff / u / attn_coeff;
+    ScalarFloat r_omega = 0.33f * backscatter_coeff / (u * attn_coeff);
 
     bool converged = false;
     while (!converged) {
