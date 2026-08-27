@@ -239,7 +239,7 @@ public:
      * @param sigma Root Mean square slope.
      */
     Float lambda(const Vector3f &v, const Float sigma) const {
-        Float sigma_tan = sigma * dr::sqrt(1.f - v.z() * v.z()) / v.z();
+        Float sigma_tan = sigma * dr::safe_sqrt(1.f - v.z() * v.z()) / v.z();
         Float result =
             0.5f * (dr::sqrt(2.f / dr::Pi<Float>) * sigma_tan *
                         dr::exp(-dr::rcp(2.f * sigma_tan * sigma_tan)) -
