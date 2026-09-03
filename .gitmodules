@@ -45,3 +45,6 @@
 [submodule "ext/nanobind"]
 	path = ext/nanobind
 	url = https://github.com/wjakob/nanobind.git
+[submodule "resources/data_eradiate"]
+	path = resources/data_eradiate
+	url = git@github.com:eradiate/eradiate-mitsuba-data.git
