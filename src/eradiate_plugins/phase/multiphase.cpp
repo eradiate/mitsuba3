@@ -264,7 +264,7 @@ public:
 
         for (size_t i = 0; i < m_nested_phases.size(); ++i) {
 
-            //Ensure zero weighted phases are never called
+            // Ensure zero weighted phases are never called
             Mask mask_i = active && (weight_values[i] > dr::Epsilon<Float>);
             if (!dr::any_or<true>(mask_i)) continue;
             
