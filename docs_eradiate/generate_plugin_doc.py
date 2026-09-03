@@ -48,6 +48,7 @@ PHASE_ORDERING = [
 ]
 
 SENSOR_ORDERING = [
+    "fisheye",
     "hdistant",
     "mdistant",
     "mpdistant",
