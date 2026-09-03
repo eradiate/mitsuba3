@@ -16,12 +16,21 @@ strive to document breaking API changes in the release notes below.
   the underlying `sigma_t` volume bbox. In turns allows to exploit the wrap
   mechanism of the volume and implement periodic boundaries
   (PR [#32](https://github.com/eradiate/mitsuba3/pull/32)).
+<<<<<<< HEAD
 - **`particlephase` phase function**: A polarized phase function
   tabulated on an irregular grid of effective radius and effective variance,
   each grid entry carrying its own irregular `cos(theta)` discretization. At
   a query point, one of the 4 bracketing entries is picked, weighted by its
   bilinear blend weight, and sampled directly.
   (PR [#35](https://github.com/eradiate/mitsuba3/pull/35)).
+=======
+- **`fisheye` sensor**: new circular fisheye camera. A film sample is mapped
+  to its distance from the optical centre in image-circle radii, and the selected
+  radial projection model turns that normalised radius into an angle `theta` 
+  from the optical axis. Supports using real calibration data for faithful emulation
+  of real lens.
+  (PR [#49](https://github.com/eradiate/mitsuba3/pull/49)).
+>>>>>>> dc9ded8a (Tests for fisheye plugin)
 
 ### Improvements
 
