@@ -29,6 +29,9 @@ strive to document breaking API changes in the release notes below.
   with a weight equal to zero at the interaction point. Handle the case where
   all phase weights are zero at the interaction point. Use the blendphase
   parameter format convention.
+- **`ocean_legacy` and `ocean_grasp` bsdf**: Add bound checks to avoid nan
+  values due to floating point precision errors.
+  (PR [#45](https://github.com/eradiate/mitsuba3/pull/45)).
 
 ### Improvements
 
