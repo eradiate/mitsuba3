@@ -147,12 +147,14 @@ public:
         m_has_spectral_extinction = props.get<bool>("has_spectral_extinction", true);
 
         // Create a default global extremum structure
-        Properties props_extr("extremum_global");
-        props_extr.set("volume", (Object *) m_sigmat.get());
-        props_extr.set("scale", m_scale);
         m_extremum_structure =
-            PluginManager::instance()->create_object<ExtremumStructure>(props_extr);
-// #ERADIATE_CHANGE_END
+            PluginManager::instance()->create_object<ExtremumStructure>(Properties("extremum_global"));
+
+        m_extremum_structure->update_extremum(
+            ScalarBoundingBox3f(-dr::Infinity<ScalarFloat>,
+                                dr::Infinity<ScalarFloat>),
+            m_sigmat.get(), m_scale);
+        // #ERADIATE_CHANGE_END
     }
 
     void traverse(TraversalCallback *cb) override {
@@ -164,9 +166,14 @@ public:
 
 // #ERADIATE_CHANGE_BEGIN:
     void parameters_changed(const std::vector<std::string> &keys = {}) override {
-        // #TODO: refactor extremum interface to expose a build function for more robust updates
         if (string::contains(keys, "sigma_t"))
-            m_extremum_structure->parameters_changed(keys);
+            m_extremum_structure->update_extremum(
+                ScalarBoundingBox3f(-dr::Infinity<ScalarFloat>,
+                                    dr::Infinity<ScalarFloat>),
+                m_sigmat.get(), std::nullopt);
+
+        if (string::contains(keys, "scale"))
+            m_extremum_structure->set_scale(m_scale);
     }
 // #ERADIATE_CHANGE_END
 
