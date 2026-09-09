@@ -216,6 +216,13 @@ public:
         return { true, 0.f, dr::Infinity<Float> };
     }
 
+// #ERADIATE_CHANGE_BEGIN: Overlapping media
+    virtual Mask
+    in_aabb(const Point3f &/*pos*/) const override {
+        return true;
+    }
+// #ERADIATE_CHANGE_END
+
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "HomogeneousMedium[" << std::endl

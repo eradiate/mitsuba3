@@ -229,3 +229,64 @@ def test_ddis_phase_function_update(
         assert dr.allclose(got, expected), (
             f"DDIS phase function of medium '{name}' was not updated"
         )
+
+
+def test_ddis_phase_function_overlap_matches_multiphase(variant_scalar_mono_double):
+    # `overlap`'s DDIS envelope is built by merging each component's own
+    # phase-function envelope. An overlap medium's aggregated DDIS
+    # envelope must match a single ordinary medium whose phase function is a
+    # `multiphase` combining the same per-component phase functions..
+    phase0 = mi.load_dict({"type": "hg", "g": 0.3})
+    phase1 = mi.load_dict({"type": "isotropic"})
+    phase2 = mi.load_dict({"type": "hg", "g": -0.6})
+
+    overlap = mi.load_dict(
+        {
+            "type": "overlap",
+            "comp_a": {
+                "type": "piecewise",
+                "sigma_t": 0.5,
+                "albedo": 0.8,
+                "phase": phase0,
+            },
+            "comp_b": {
+                "type": "piecewise",
+                "sigma_t": 0.3,
+                "albedo": 0.6,
+                "phase": phase1,
+            },
+            "comp_c": {
+                "type": "piecewise",
+                "sigma_t": 0.7,
+                "albedo": 0.9,
+                "phase": phase2,
+            },
+        }
+    )
+    multiphase_ref = mi.load_dict(
+        {
+            "type": "piecewise",
+            "sigma_t": 0.5,
+            "albedo": 0.8,
+            "phase": {
+                "type": "multiphase",
+                "phase0": phase0,
+                "weight0": 1.0,
+                "phase1": phase1,
+                "weight1": 2.5,
+                "phase2": phase2,
+                "weight2": 0.4,
+            },
+        }
+    )
+
+    overlap_params = mi.eradiate.traverse(overlap)
+    ref_params = mi.eradiate.traverse(multiphase_ref)
+
+    got_nodes = overlap_params["ddis_phase_function.nodes"]
+    got_values = overlap_params["ddis_phase_function.values"]
+    expected_nodes = ref_params["ddis_phase_function.nodes"]
+    expected_values = ref_params["ddis_phase_function.values"]
+
+    assert dr.allclose(got_nodes, expected_nodes)
+    assert dr.allclose(got_values, expected_values)

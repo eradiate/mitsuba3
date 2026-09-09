@@ -139,7 +139,74 @@ public:
         m_dr = (m_rmax - m_rmin) / m_resolution.x();
         m_idr = dr::rcp(m_dr);
 
+        // Assumes uniform scale, as required for a spherical parametrization.
+        m_r_scale = dr::norm(volume_param.to_world * ScalarVector3f(1.f, 0.f, 0.f));
+
         build_grid(volume);
+    }
+
+    ExtremumSegment next_segment(const Ray3f &ray, Float t,
+                                 Mask active) const override {
+        auto [hit, d0, d1] = m_bbox.ray_intersect(ray);
+
+        ExtremumSegment segment(t, dr::Infinity<Float>, Vector2f(0.f));
+
+        // Forward nudge: select the radial layer at p(t + eps), but measure
+        // exit distances from exact p(t)
+        Float eps = dr::maximum(dr::abs(t), 1.f) * math::RayEpsilon<Float>;
+        Float tq  = t + eps;
+
+        active &= hit;
+        Mask before = hit && (tq < d0);
+        Mask inside = hit && !before && (tq < d1);
+        dr::masked(segment.maxt, before) = d0;
+
+        // early exit
+        if (dr::any_or<false>(!inside)) {
+            return segment;
+        }
+
+        Point3f  o = m_to_local * ray.o;
+        Vector3f d = m_to_local * ray.d;
+
+        Float r = dr::norm(o + d * tq);
+        Int32 layer = dr::clip(dr::floor2int<Int32>((r - m_rmin) * m_idr),
+                               -1, m_resolution.x());
+        Mask below = layer < 0, above = layer >= m_resolution.x();
+
+        // Nearest crossing (> tq) of the two shells bounding the current
+        // radial region; the domain exit caps the segment
+        Float a      = dr::squared_norm(d);
+        Float b_half = dr::dot(o, d);
+        Float c0     = dr::squared_norm(o);
+        Float inv_a  = dr::rcp(a);
+
+        Float t_exit = d1;
+        auto consider = [&](const Float &r_test, const Mask &valid)
+            DRJIT_INLINE_LAMBDA {
+            Float disc = dr::fmsub(b_half, b_half, a * (c0 - dr::square(r_test)));
+            Mask v = valid && (disc >= 0.f);
+            Float sq = dr::sqrt(dr::maximum(disc, 0.f));
+            Float t0 = (-b_half - sq) * inv_a;
+            Float t1 = (-b_half + sq) * inv_a;
+            dr::masked(t_exit, v && (t0 > tq)) = dr::minimum(t0, t_exit);
+            dr::masked(t_exit, v && (t1 > tq)) = dr::minimum(t1, t_exit);
+        };
+        consider(m_rmin + Float(layer) * m_dr, !below);      // inner shell
+        consider(m_rmin + Float(layer + 1) * m_dr, !above);  // outer shell
+
+        UInt32 idx = UInt32(dr::clip(layer, 0, m_resolution.x() - 1));
+        Vector2f value = dr::gather<Vector2f>(
+            m_extremum_grid,idx, active && inside && !below && !above);
+        dr::masked(value, below) = Vector2f(m_fillmin);
+        dr::masked(value, above) = Vector2f(m_fillmax);
+
+        Float maxt = dr::select(
+            inside, dr::maximum(t_exit, tq),
+            dr::select(before, d0, dr::Infinity<Float>));
+
+        return ExtremumSegment(t, maxt,
+                               dr::select(inside, m_scale*value, Vector2f(0.f)));
     }
 
     TrackingStateType traverse_extremum(
@@ -301,7 +368,7 @@ private:
         it.p          = m_center;
         Float fillmin = volume->eval_1(it, true);
 
-        it.p          = m_center + m_rmax + ScalarVector3f(0.f, 0.f, 1.f);
+        it.p          = m_center + ScalarVector3f(0.f, 0.f, m_rmax * m_r_scale + 1.f);
         Float fillmax = volume->eval_1(it, true);
 
         if constexpr (dr::is_jit_v<Float>) {
@@ -355,19 +422,15 @@ private:
     ) const {
         using StateD = std::decay_t<StateT>;
 
-        Ray3f local_ray(m_to_local * ray.o, // Normalize origin
-                        m_to_local * ray.d, // Normalize direction
-                        ray.time, ray.wavelengths);
-
         ExtremumSegment segment  = dr::zeros<ExtremumSegment>();
         Mask reached    = false;
         Float current_t = mint;
 
-        // ray-sphere intersection info
-        Vector3f o      = local_ray.o - m_center;
+        Point3f  o = m_to_local * ray.o;
+        Vector3f d = m_to_local * ray.d;
         Float o_squared = dr::squared_norm(o);
-        Float a         = dr::squared_norm(local_ray.d);
-        Float b_half    = dr::dot(o, local_ray.d);
+        Float a         = dr::squared_norm(d);
+        Float b_half    = dr::dot(o, d);
 
         // Intersection value precomputation
         Float disc_base = b_half * b_half - a * o_squared;
@@ -375,15 +438,14 @@ private:
 
         // Find the current/next intersection (use this to calculate the
         // midpoint too)
-        Point3f pos = local_ray(mint + dr::Epsilon<Float> * 10.f);
-        Vector3f oc = pos - m_center;
-        Float r     = dr::norm(oc);
+        Point3f p = o + d * (mint + dr::Epsilon<Float> * 10.f);
+        Float r   = dr::norm(p);
 
         // Calculate the initial layer index from which we will step through
         // layers.
         Int32 layer_idx = dr::clip(dr::floor2int<Int32>((r - m_rmin) * m_idr),
                                    -1, m_resolution.x());
-        Mask passed_midpoint = dr::dot((m_center - pos), local_ray.d) < 0;
+        Mask passed_midpoint = dr::dot(-p, d) < 0;
         Int32 shell_padding  = dr::select(passed_midpoint, 1, 0);
         Int32 step           = dr::select(passed_midpoint, 1, -1);
 
@@ -504,6 +566,7 @@ private:
     ScalarFloat m_fillmin, m_fillmax;
     ScalarPoint3f m_center;
     ScalarFloat m_dr, m_idr;
+    ScalarFloat m_r_scale;
 
     ScalarAffineTransform4f m_to_local;
 };

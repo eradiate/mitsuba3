@@ -491,6 +491,7 @@ public:
             Mask not_spectral = false;
             Float ddis_threshold = -1.f;
             split_weight_rr = 1.f;
+            UInt32 medium_component = 0;
 
             if (dr::any_or<true>(active_medium)) {
                 is_spectral &= medium->has_spectral_extinction();
@@ -527,6 +528,7 @@ public:
                     target_ot,
                     medium->use_rrt(),
                     medium->has_spectral_extinction(),
+                    /*sampled_medium_component=*/0,
                     /*throughput=*/UnpolarizedSpectrum(1.f),
                 };
 
@@ -580,10 +582,16 @@ public:
                         mei.p = state.ray(maxt);
 
                         // Retrieve scattering coefficients at position.
-                        UnpolarizedSpectrum sigma_s, sigma_n, sigma_t;
-                        std::tie(sigma_s, std::ignore, sigma_t) =
-                            medium->get_scattering_coefficients(mei, sampled);
-                        sigma_n = segment.majorant() - sigma_t;
+                        auto medium_sample = medium->sample_scattering_properties(
+                            mei,
+                            segment.majorant(),
+                            rng.template next_float<Float>(sampled),
+                            sampled
+                        );
+
+                        UnpolarizedSpectrum &sigma_s = medium_sample.sigma_s;
+                        UnpolarizedSpectrum &sigma_n = medium_sample.sigma_n;
+                        UnpolarizedSpectrum &sigma_t = medium_sample.sigma_t;
 
                         // Sample event type
                         Float null_scatter_prob =
@@ -613,6 +621,11 @@ public:
                                     sigma_s / sigma_t;
                             }
 
+                            // set phase function sampled previously to reduce the
+                            // number of lookups to the underlying data volumes.
+                            dr::masked(state.sampled_medium_component, real_scatter) =
+                                medium_sample.sampled_component;
+
                             // disable the loop once we encounter a real
                             // scattering interaction
                             active &= !real_scatter;
@@ -633,6 +646,8 @@ public:
                 // Update throughput by the transmittance and pdf weight
                 dr::masked(throughput, active_medium) *= state.throughput;
                 dr::masked(mei, active_medium) = state.mei;
+                dr::masked(medium_component, active_medium) =
+                    state.sampled_medium_component;
 
                 escaped_medium |= active_medium && !mei.is_valid();
                 active_medium &= mei.is_valid();
@@ -651,7 +666,7 @@ public:
             if (dr::any_or<true>(act_medium_scatter)) {
 
                 PhaseFunctionContext phase_ctx(sampler);
-                auto phase = mei.medium->phase_function();
+                auto phase = mei.medium->phase_function(medium_component, act_medium_scatter);
                 auto ddis_phase = mei.medium->ddis_phase_function();
 
                 // --------------------- NLE setup ---------------------
@@ -1143,6 +1158,7 @@ public:
                     target_ot,
                     medium->use_rrt(),
                     medium->has_spectral_extinction(),
+                    /*sample_medium_component=*/0,
                     /*throughput=*/UnpolarizedSpectrum(1.f),
                 };
 
