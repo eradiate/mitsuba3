@@ -22,6 +22,12 @@ strive to document breaking API changes in the release notes below.
   a query point, one of the 4 bracketing entries is picked, weighted by its
   bilinear blend weight, and sampled directly.
   (PR [#35](https://github.com/eradiate/mitsuba3/pull/35)).
+- **`fisheye` sensor**: new circular fisheye camera. A film sample is mapped
+  to its distance from the optical centre in image-circle radii, and the selected
+  radial projection model turns that normalized radius into an angle `theta`
+  from the optical axis. Supports using real calibration data for faithful
+  emulation of real lenses.
+  (PR [#49](https://github.com/eradiate/mitsuba3/pull/49)).
 
 ### Bug fixes
 
