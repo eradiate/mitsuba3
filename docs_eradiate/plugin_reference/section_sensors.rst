@@ -3,9 +3,11 @@
 Sensors
 =======
 
-The Eradiate kernel provides a suite of distant measurement sensors designed for
+The Eradiate kernel provides a suite of measurement sensors designed for
 top-of-atmosphere and surface-level radiometric measurements.
 
+- ``fisheye`` — circular fisheye camera mapping the angle from the optical axis
+  to a radius in the image circle, with a selectable projection model.
 - ``hdistant`` — hemispherical distant sensor collecting radiance over a
   hemisphere, mapping zenith and azimuth sampling coordinates to film coordinates.
 - ``mdistant`` — multi-directional distant sensor recording radiance at a
