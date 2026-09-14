@@ -955,11 +955,12 @@ public:
 
                     // DDIS is active if the emitter is in the same lobe as the ray,
                     // and that the BSDF is neither Null or Delta.
+                    perform_ddis &= dr::dot(-ray.d, -ddis_mei.wi) > 0.f
+                                    && !has_flag(bs.sampled_type, BSDFFlags::Null)
+                                    && !has_flag(bs.sampled_type, BSDFFlags::Delta);
+
                     Float eps = sampler->next_1d(perform_ddis);
                     Mask active_ddis = (eps < ddis_threshold) && perform_ddis;
-                    active_ddis &= dr::dot(-ray.d, -ddis_mei.wi) > 0.f;
-                    active_ddis &= !has_flag(bs.sampled_type, BSDFFlags::Null)
-                                && !has_flag(bs.sampled_type, BSDFFlags::Delta);
 
                     // Sample from the ddis phase function
                     if (dr::any_or<true>(active_ddis)) {
