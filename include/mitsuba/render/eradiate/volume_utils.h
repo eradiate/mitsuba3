@@ -26,20 +26,37 @@ struct VolumeParametrization {
     using BoundingBox3f = BoundingBox<Point3f>;
     using AffineTransform4f = Transform<Point<Float, 4>, true>;
 
+    /// The volume transform
     AffineTransform4f to_world;
-    BoundingBox3f uv_range; // e.g. dim 0 -> [rmin, rmax] in spherical coords.
-    VolumeCoordFlag flag; // defaults to Grid.
+
+    /// The local space range spanned by the volume e.g. dim 0 -> [rmin, rmax] in spherical coords.
+    BoundingBox3f uv_range;
+
+    /// The volume coordinate flag, default to grid.
+    VolumeCoordFlag flag;
+
+    /// Specifies if the volume wraps.
+    bool wrap;
+
+    /// The wrapping behaviour when exiting the volume boundaries.
+    dr::WrapMode wrap_mode;
 
     VolumeParametrization():
         to_world(AffineTransform4f()),
         uv_range(BoundingBox3f(Point3f(0.f), Point3f(1.f))),
-        flag(VolumeCoordFlag::Grid) {}
+        flag(VolumeCoordFlag::Grid),
+        wrap(false),
+        wrap_mode(dr::WrapMode::Clamp) {}
 
     VolumeParametrization(
-        AffineTransform4f to_world, BoundingBox3f uv_range, VolumeCoordFlag flag):
+        AffineTransform4f to_world, BoundingBox3f uv_range,
+        VolumeCoordFlag flag, bool wrap = false,
+        dr::WrapMode wrap_mode = dr::WrapMode::Clamp):
         to_world(to_world),
         uv_range(uv_range),
-        flag(flag) {}
+        flag(flag),
+        wrap(wrap),
+        wrap_mode(wrap_mode) {}
 };
 
 /**
