@@ -200,6 +200,11 @@ public:
         return m_aabb.ray_intersect(ray);
     }
 
+    virtual Mask
+    in_aabb(const Point3f &pos) const override {
+        return m_aabb.contains(pos);
+    }
+
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "EOHeterogeneousMedium[" << std::endl

@@ -126,7 +126,27 @@ Medium<Float, Spectrum>::transmittance_eval_analytical(const Ray3f &/*ray*/,
 }
 // #ERADIATE_CHANGE_END
 
-// #ERADIATE_CHANGE_BEGIN: Extremum structure accessor
+// #ERADIATE_CHANGE_BEGIN: Extremum accessor && Overlapping Media
+MI_VARIANT
+typename Medium<Float, Spectrum>::PhaseFunctionPtr
+Medium<Float, Spectrum>::phase_function(const UInt32 &/*component*/,
+                                        Mask /*active = true*/) const {
+    return m_phase_function.get();
+}
+
+MI_VARIANT
+typename Medium<Float, Spectrum>::MediumSample
+Medium<Float, Spectrum>::sample_scattering_properties(
+    const MediumInteraction3f &mei, UnpolarizedSpectrum majorant,
+    Float /*sample*/, Mask active) const {
+    MediumSample ctx = dr::zeros<MediumSample>();
+    std::tie(ctx.sigma_s, ctx.sigma_n, ctx.sigma_t) =
+        get_scattering_coefficients(mei, active);
+    ctx.sigma_n = majorant - ctx.sigma_t;
+    ctx.sampled_component = 0;
+    return ctx;
+}
+
 MI_VARIANT
 std::tuple<typename Medium<Float, Spectrum>::MediumInteraction3f, Float, Float>
 Medium<Float, Spectrum>::prepare_medium_traversal(const Ray3f& ray, Mask active) const {

@@ -2959,9 +2959,9 @@ static const char *__doc_mitsuba_ExtremumStructure =
 R"doc(Abstract base class for extremum structures
 
 ExtremumStructure provides an interface for spatial data structures
-that store local extrema (majorant/minorant) of volumetric extinction
-coefficients. This enables efficient use of tracking algorithms with
-locally-adaptive majorants and minorants.
+that store local extrema (majorant/minorant) of volumetric values.
+This enables efficient use of tracking algorithms with locally-
+adaptive majorants and minorants.
 
 To minimize virtual function overhead, the ``traverse_extremum()``
 method encapsulates the entire traversal loop internally, requiring
@@ -3025,6 +3025,18 @@ Returns:
 static const char *__doc_mitsuba_ExtremumStructure_m_bbox = R"doc(The bbox over which the extremum structure must be valid.)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure_m_scale = R"doc(Scale by which to multiply the extremum values.)doc";
+
+static const char *__doc_mitsuba_ExtremumStructure_next_segment =
+R"doc(Return the segment ``[t, t_exit)`` containing distance ``t`` along
+``ray``, with the structure's local extrema.
+
+Stateless query in world-t parameterization. Conventions:
+
+- Segments are half-open ``[mint, maxt)`` and tile exactly: feeding
+``maxt`` back as the next ``t`` yields the adjacent segment. - Outside
+the domain, empty segments are returned — ``[t, enter)`` or ``[t,
++inf)`` with value (0, 0): outside the domain the value is zero by
+construction.)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure_set_bbox = R"doc(Setter for the bbox over which the structure must be valid.)doc";
 
@@ -4823,6 +4835,38 @@ static const char *__doc_mitsuba_MediumInteraction_zero =
 R"doc(This callback method is invoked by dr::zeros<>, and takes care of
 fields that deviate from the standard zero-initialization convention.)doc";
 
+static const char *__doc_mitsuba_MediumSample =
+R"doc(Data structure for medium scattering property point queries.
+
+Holds the scattering properties at a point query, as well as the
+sampled medium component.)doc";
+
+static const char *__doc_mitsuba_MediumSample_MediumSample = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample_MediumSample_2 = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample_MediumSample_3 = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample_fields = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample_fields_2 = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample_labels = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample_name = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample_operator_assign = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample_operator_assign_2 = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample_sampled_component = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample_sigma_n = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample_sigma_s = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample_sigma_t = R"doc()doc";
+
 static const char *__doc_mitsuba_Medium_Medium = R"doc()doc";
 
 static const char *__doc_mitsuba_Medium_Medium_2 = R"doc()doc";
@@ -4842,6 +4886,8 @@ static const char *__doc_mitsuba_Medium_ddis_threshold = R"doc()doc";
 
 static const char *__doc_mitsuba_Medium_extremum_structure = R"doc(Returns the extremum structure for local extremum acceleration.)doc";
 
+static const char *__doc_mitsuba_Medium_extremum_structure_2 = R"doc(Returns the extremum structure for local extremum acceleration.)doc";
+
 static const char *__doc_mitsuba_Medium_get_majorant = R"doc(Returns the medium's majorant used for delta tracking)doc";
 
 static const char *__doc_mitsuba_Medium_get_minorant = R"doc(Returns the medium's minorant used for residual ratio tracking)doc";
@@ -4853,6 +4899,8 @@ at a given MediumInteraction mi)doc";
 static const char *__doc_mitsuba_Medium_has_extremum_structure = R"doc(Check if medium uses extremum structure)doc";
 
 static const char *__doc_mitsuba_Medium_has_spectral_extinction = R"doc(Returns whether this medium has a spectrally varying extinction)doc";
+
+static const char *__doc_mitsuba_Medium_in_aabb = R"doc(Checks if a point is contained by the medium's bounding box)doc";
 
 static const char *__doc_mitsuba_Medium_intersect_aabb = R"doc(Intersects a ray with the medium's bounding box)doc";
 
@@ -4877,6 +4925,8 @@ static const char *__doc_mitsuba_Medium_m_use_rrt = R"doc()doc";
 static const char *__doc_mitsuba_Medium_phase_function = R"doc(Return the phase function of this medium)doc";
 
 static const char *__doc_mitsuba_Medium_phase_function_2 = R"doc(Return the phase function of this medium, non const)doc";
+
+static const char *__doc_mitsuba_Medium_phase_function_3 = R"doc(Return the phase function given a component.)doc";
 
 static const char *__doc_mitsuba_Medium_prepare_medium_traversal =
 R"doc(Intersects ray with the medium bbox and creates a medium interaction.
@@ -4941,6 +4991,28 @@ Returns:
     the medium boudning box and before the bouding iteraction it. The
     transmittance and PDF are both computed for all channels even if
     the sampling operation is performed on one channel.)doc";
+
+static const char *__doc_mitsuba_Medium_sample_scattering_properties =
+R"doc(Calculate scattering coefficients and sample a component.
+
+This function combines the evaluation of scattering properties and
+sampling of a medium component. Useful for multi-component media which
+perform gathers from its constituents for both actions. By default,
+call ``get_scattering_coefficients`` and return component 0.
+
+Parameter ``mei``:
+    Interaction point of query
+
+Parameter ``majorant``:
+    Majorant value at query point
+
+Parameter ``sample``:
+    A uniformly distributed random sample
+
+Returns:
+    The method returns a MediumSample. By default its scattering
+    coefficient will be gathered from ``get_scattering_coefficients``
+    and the component will be equal to 0.)doc";
 
 static const char *__doc_mitsuba_Medium_to_string = R"doc(Return a human-readable representation of the Medium)doc";
 
@@ -11272,11 +11344,17 @@ static const char *__doc_mitsuba_VolumeParametrization_VolumeParametrization = R
 
 static const char *__doc_mitsuba_VolumeParametrization_VolumeParametrization_2 = R"doc()doc";
 
-static const char *__doc_mitsuba_VolumeParametrization_flag = R"doc()doc";
+static const char *__doc_mitsuba_VolumeParametrization_flag = R"doc(The volume coordinate flag, default to grid.)doc";
 
-static const char *__doc_mitsuba_VolumeParametrization_to_world = R"doc()doc";
+static const char *__doc_mitsuba_VolumeParametrization_to_world = R"doc(The volume transform)doc";
 
-static const char *__doc_mitsuba_VolumeParametrization_uv_range = R"doc()doc";
+static const char *__doc_mitsuba_VolumeParametrization_uv_range =
+R"doc(The local space range spanned by the volume e.g. dim 0 -> [rmin, rmax]
+in spherical coords.)doc";
+
+static const char *__doc_mitsuba_VolumeParametrization_wrap = R"doc(Specifies if the volume wraps.)doc";
+
+static const char *__doc_mitsuba_VolumeParametrization_wrap_mode = R"doc(The wrapping behaviour when exiting the volume boundaries.)doc";
 
 static const char *__doc_mitsuba_Volume_PinGuard =
 R"doc(A Scoped Guard that pins the reference count of the volume.

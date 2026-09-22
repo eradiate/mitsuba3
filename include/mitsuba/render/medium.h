@@ -8,10 +8,36 @@
 
 NAMESPACE_BEGIN(mitsuba)
 
+// #ERADIATE_CHANGE_BEGIN: Overlapping media
+/**
+ * \brief Data structure for medium scattering property point queries.
+ *
+ * Holds the scattering properties at a point query, as well as the sampled
+ * medium component.
+ */
+template <typename Float, typename Spectrum>
+struct MI_EXPORT_LIB MediumSample {
+    using UnpolarizedSpectrum = unpolarized_spectrum_t<Spectrum>;
+    using UInt32 = dr::uint32_array_t<Float>;
+
+    UnpolarizedSpectrum sigma_s;
+    UnpolarizedSpectrum sigma_n;
+    UnpolarizedSpectrum sigma_t;
+    UInt32 sampled_component;
+
+    DRJIT_STRUCT(MediumSample, sigma_s, sigma_n, sigma_t, sampled_component)
+};
+// #ERADIATE_CHANGE_END
+
 template <typename Float, typename Spectrum>
 class MI_EXPORT_LIB Medium : public JitObject<Medium<Float, Spectrum>> {
 public:
-    MI_IMPORT_TYPES(PhaseFunction, Sampler, Scene, Texture, ExtremumStructure);
+// #ERADIATE_CHANGE_BEGIN: Extremum support && Overlapping Media
+    MI_IMPORT_TYPES(PhaseFunction, Sampler, Scene, Texture, ExtremumStructure,
+    PhaseFunctionPtr);
+
+    using MediumSample = MediumSample<Float, Spectrum>;
+// #ERADIATE_CHANGE_END
 
     /// Destructor
     ~Medium();
@@ -36,6 +62,32 @@ public:
                        UnpolarizedSpectrum>
     get_scattering_coefficients(const MediumInteraction3f &mi,
                                 Mask active = true) const = 0;
+
+    // #ERADIATE_CHANGE_BEGIN: Overlapping media
+    /// Checks if a point is contained by the medium's bounding box
+    virtual Mask in_aabb(const Point3f &pos) const = 0;
+
+    /**
+     * \brief Calculate scattering coefficients and sample a component.
+     *
+     * This function combines the evaluation of scattering properties and
+     * sampling of a medium component. Useful for multi-component media which
+     * perform gathers from its constituents for both actions. By default,
+     * call ``get_scattering_coefficients`` and return component 0.
+     *
+     * \param mei       Interaction point of query
+     * \param majorant  Majorant value at query point
+     * \param sample    A uniformly distributed random sample
+     *
+     * \return          The method returns a MediumSample.
+     *                  By default its scattering coefficient will be gathered
+     *                  from ``get_scattering_coefficients`` and the component
+     *                  will be equal to 0.
+     */
+    virtual MediumSample sample_scattering_properties(
+            const MediumInteraction3f &mei, UnpolarizedSpectrum majorant,
+            Float sample, Mask active) const;
+    // #ERADIATE_CHANGE_END
 
     /**
      * \brief Sample a free-flight distance in the medium.
@@ -127,11 +179,15 @@ public:
     MI_INLINE const PhaseFunction *phase_function() const {
         return m_phase_function.get();
     }
-// #ERADIATE_CHANGE_BEGIN: DDIS
+// #ERADIATE_CHANGE_BEGIN: DDIS && Overlapping media
     /// Return the phase function of this medium, non const
     MI_INLINE PhaseFunction *phase_function() {
         return m_phase_function.get();
     }
+
+    /// Return the phase function given a component.
+    virtual PhaseFunctionPtr phase_function(const UInt32 &component,
+                                            Mask active) const;
 // #ERADIATE_CHANGE_END
 
     /// Returns whether this specific medium instance uses emitter sampling
@@ -163,6 +219,11 @@ public:
 
     /// Returns the extremum structure for local extremum acceleration.
     MI_INLINE const ExtremumStructure *extremum_structure() const {
+        return m_extremum_structure.get();
+    }
+
+    /// Returns the extremum structure for local extremum acceleration.
+    MI_INLINE ExtremumStructure *extremum_structure() {
         return m_extremum_structure.get();
     }
 
@@ -206,7 +267,7 @@ protected:
      *
      * This method is an helper function for child classes.
      */
-    ref<PhaseFunction> create_ddis_phase_function();
+    virtual ref<PhaseFunction> create_ddis_phase_function();
 
 public:
 
@@ -257,15 +318,21 @@ DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::Medium)
     DRJIT_CALL_METHOD(intersect_aabb)
     DRJIT_CALL_METHOD(sample_interaction)
     DRJIT_CALL_METHOD(transmittance_eval_pdf)
-// #ERADIATE_CHANGE_BEGIN: Add function that calculates the transmittance and pdf
+    DRJIT_CALL_METHOD(get_scattering_coefficients)
+// #ERADIATE_CHANGE_BEGIN
+    // Piecewise
     DRJIT_CALL_METHOD(sample_interaction_analytical)
     DRJIT_CALL_METHOD(transmittance_eval_analytical)
-// #ERADIATE_CHANGE_END
-    DRJIT_CALL_METHOD(get_scattering_coefficients)
-// #ERADIATE_CHANGE_BEGIN: Extremum Support && Residual Ratio Tracking && DDIS
+    // Overlapping Media
+    DRJIT_CALL_METHOD(phase_function)
+    DRJIT_CALL_METHOD(in_aabb)
+    DRJIT_CALL_METHOD(sample_scattering_properties)
+    // DDIS
     DRJIT_CALL_GETTER(ddis_phase_function)
     DRJIT_CALL_GETTER(ddis_threshold)
+    // RRT
     DRJIT_CALL_GETTER(use_rrt)
+    // Extremum Support
     DRJIT_CALL_GETTER(extremum_structure)
     DRJIT_CALL_METHOD(prepare_medium_traversal)
 // #ERADIATE_CHANGE_END

@@ -33,6 +33,36 @@ public:
         m_majorant = volume->max();
     }
 
+    ExtremumSegment next_segment(const Ray3f &ray, Float t,
+                                 Mask active) const override {
+        auto [hit, d0, d1] = m_bbox.ray_intersect(ray);
+
+        ExtremumSegment segment(t, dr::Infinity<Float>, Vector2f(0.f));
+
+        Float eps = dr::maximum(dr::abs(t), 1.f) * math::RayEpsilon<Float>;
+        Float tq  = t + eps;
+
+        active &= hit;
+        Mask before = hit && (tq < d0);
+        Mask inside = hit && !before && (tq < d1);
+
+        dr::masked(segment.maxt, before) = d0;
+
+        // early exit
+        if (dr::any_or<false>(!inside)) {
+            return segment;
+        }
+
+        Float maxt = dr::select(
+            inside, dr::maximum(d1, tq),
+            dr::select(before, d0, dr::Infinity<Float>));
+
+        Vector2f value = dr::select(
+            inside, m_scale*Vector2f(m_minorant, m_majorant), Vector2f(0.f));
+
+        return ExtremumSegment(t, maxt, value);
+    }
+
     TrackingStateType traverse_extremum(
         const Ray3f &/*ray*/,
         Float mint,

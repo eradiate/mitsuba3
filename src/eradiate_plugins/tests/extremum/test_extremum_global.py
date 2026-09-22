@@ -112,3 +112,46 @@ def test_sample_test_escapes(variant_scalar_mono):
     # target_ot > segment_ot: ray exits the medium before sampling.
     assert np.isinf(distance)
     assert np.allclose(leftover_ot, 3.0)
+
+
+def test_next_segment_miss(variant_scalar_mono):
+    # Ray entirely outside the [0, 1]^3 domain bbox, heading away from it:
+    # the whole ray from t is reported as one empty segment.
+    volume = _make_grid_volume([1.0, 2.0, 3.0, 4.0], 4)
+    extremum = mi.load_dict({"type": "extremum_global"})
+    extremum.update_extremum(volume.bbox(), volume)
+
+    ray = mi.Ray3f(o=[10, 10, 10], d=[1, 0, 0])
+    segment = extremum.next_segment(ray, 0.0)
+
+    assert np.isinf(segment.maxt)
+    assert np.allclose(segment.minorant(), 0.0)
+    assert np.allclose(segment.majorant(), 0.0)
+
+
+def test_next_segment_through_bbox(variant_scalar_mono):
+    # Ray crossing the [0, 1]^3 domain bbox along x: three tiled segments,
+    # before/inside/after, with the global (minorant, majorant) inside.
+    volume = _make_grid_volume([1.0, 2.0, 3.0, 4.0], 4)
+    extremum = mi.load_dict({"type": "extremum_global"})
+    extremum.update_extremum(volume.bbox(), volume)
+
+    ray = mi.Ray3f(o=[-1, 0.5, 0.5], d=[1, 0, 0])
+
+    before = extremum.next_segment(ray, 0.0)
+    assert np.allclose(before.mint, 0.0)
+    assert np.allclose(before.maxt, 1.0)
+    assert np.allclose(before.minorant(), 0.0)
+    assert np.allclose(before.majorant(), 0.0)
+
+    inside = extremum.next_segment(ray, before.maxt)
+    assert np.allclose(inside.mint, before.maxt)
+    assert np.allclose(inside.maxt, 2.0)
+    assert np.allclose(inside.minorant(), 1.0)
+    assert np.allclose(inside.majorant(), 4.0)
+
+    after = extremum.next_segment(ray, inside.maxt)
+    assert np.allclose(after.mint, inside.maxt)
+    assert np.isinf(after.maxt)
+    assert np.allclose(after.minorant(), 0.0)
+    assert np.allclose(after.majorant(), 0.0)
