@@ -154,7 +154,6 @@ public:
 
     ScalarVector3i resolution() const override { return m_volume->resolution(); };
 
-// #ERADIATE_CHANGE_BEGIN: Spatial extremum queries for grid volumes
     std::pair<Float, Float>
     extremum(BoundingBox3f bbox, Mask local) const override {
 
@@ -186,9 +185,16 @@ public:
         return { min, maj };
     }
 
-    typename Base::PinGuard pin() const override { return m_volume->pin(); };
+    VolumeParametrization<ScalarFloat> parametrization() const override {
+        return VolumeParametrization<ScalarFloat>(
+            m_to_local.inverse(),
+            ScalarBoundingBox3f(
+                ScalarPoint3f(m_rmin, 0.f, 0.f),
+                ScalarPoint3f(m_rmax, 1.f, 1.f)),
+            VolumeCoordFlag::Spherical);
+    }
 
-// #ERADIATE_CHANGE_END
+    typename Base::PinGuard pin() const override { return m_volume->pin(); };
 
     void traverse(TraversalCallback *cb) override {
         cb->put("volume", m_volume.get(), ParamFlags::NonDifferentiable);
