@@ -264,14 +264,10 @@ public:
      * Structures contribute zero outside their domain. Segments are half-open
      * and tile exactly: <tt>segment.maxt</tt> is the new <tt>state.mint</tt>.
      *
-     * For callers holding a host pointer; \ref dda_next is the by-value
-     * variant that a Dr.Jit vcall can reach.
+     * \c ray is the one \c state was set up with. Unused for now.
      */
-    ExtremumSegment dda_step(DDAStateList &state, Mask active = true) const;
-
-    /// By-value \ref dda_step, returning the segment and the advanced state.
-    std::pair<ExtremumSegment, DDAStateList>
-    dda_next(const DDAStateList &state, Mask active = true) const;
+    ExtremumSegment dda_step(DDAStateList &state, const Ray3f &ray,
+                             Mask active = true) const;
 
     /**
      * \brief Run \c func over the segments of a DDA traversal until it
@@ -281,14 +277,12 @@ public:
      * its segment (<tt>advance == false</tt>) keeps both the segment and its
      * traversal state until the next call.
      *
-     * \param dda
-     *      Traversal state from \ref dda_init.
      * \param state
      *      Tracking state handed to \c func, returned once tracking ends.
      */
     template <typename TrackState>
-    TrackState dda_track(const DDAStateList &dda, const TrackState &state,
-                         const UInt32 &channel,
+    TrackState dda_track(const Ray3f &ray, Float mint, Float maxt,
+                         const TrackState &state, const UInt32 &channel,
                          TrackingFunction<Float, Spectrum, TrackState> *func,
                          Mask active = true) const {
         struct LoopState {
@@ -301,6 +295,7 @@ public:
             DRJIT_STRUCT(LoopState, dda, segment, state, advance, active)
         };
 
+        DDAStateList dda = dda_init(ray, mint, maxt, active);
         active &= dda.mint < dda.maxt;
         LoopState ls = { dda, dr::zeros<ExtremumSegment>(), state, active,
                          active };
@@ -308,10 +303,10 @@ public:
         dr::tie(ls) = dr::while_loop(
             dr::make_tuple(ls),
             [](const LoopState &ls) { return ls.active; },
-            [this, channel, func](LoopState &ls) {
+            [this, &ray, channel, func](LoopState &ls) {
                 if (dr::any_or<true>(ls.advance))
                     dr::masked(ls.segment, ls.advance) =
-                        dda_step(ls.dda, ls.advance);
+                        dda_step(ls.dda, ray, ls.advance);
 
                 std::tie(ls.advance, ls.active) =
                     func(ls.segment, ls.state, channel, ls.active);
@@ -424,8 +419,6 @@ DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::Medium)
     // Extremum Support
     DRJIT_CALL_GETTER(extremum_structure)
     DRJIT_CALL_METHOD(prepare_medium_traversal)
-    DRJIT_CALL_METHOD(dda_init)
-    DRJIT_CALL_METHOD(dda_next)
     DRJIT_CALL_METHOD(dda_track)
 // #ERADIATE_CHANGE_END
 DRJIT_CALL_END()

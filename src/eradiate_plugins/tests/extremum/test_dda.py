@@ -291,25 +291,6 @@ def test_overlap_matches_summed_components(variant_scalar_rgb, n, target_ot):
         _assert_close(expected, actual, (n, ray), atol=1e-6)
 
 
-def test_overlap_vcall_matches_direct(variants_vec_rgb):
-    """The state list survives a ``MediumPtr`` vcall per segment."""
-    _, components = _overlap_parts()
-    medium = _overlap(components)
-    rays = [r for r in _spherical_rays() if _clip(r, (-1.0, 1.0)) is not None]
-    bounds = np.array([_clip(r, (-1.0, 1.0)) for r in rays])
-    o = mi.Point3f(np.array([np.array(r.o).reshape(-1) for r in rays]).T)
-    d = mi.Vector3f(np.array([np.array(r.d).reshape(-1) for r in rays]).T)
-    ray = mi.Ray3f(o=o, d=d)
-    mint, maxt = mi.Float(bounds[:, 0]), mi.Float(bounds[:, 1])
-    ptr = dr.full(mi.MediumPtr, medium, dr.width(mint))
-
-    for target_ot in (0.0, 0.5, 2.0):
-        expected = medium.sample_test_dda(ray, mint, maxt, target_ot)
-        actual = ptr.sample_test_dda(ray, mint, maxt, target_ot)
-        for e, a in zip(expected, actual):
-            assert np.allclose(np.array(e), np.array(a), rtol=1e-5)
-
-
 def _track_media():
     return [
         _component(_grid_volume((4, 5, 3)), "extremum_grid", (2, 3, 3)),

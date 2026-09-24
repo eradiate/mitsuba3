@@ -71,24 +71,4 @@ struct DDAStateList {
     DRJIT_STRUCT(DDAStateList, entries, values, mint, maxt)
 };
 
-/**
- * \brief <tt>dr::masked(dst, mask) = src</tt> for a \ref DDAStateList.
- *
- * A struct-level masked assignment does not reach through the \c std::array
- * members: it would advance \c mint while leaving every entry where it was.
- * A plain assignment is no alternative either: lanes masked off in a Dr.Jit
- * vcall come back zeroed rather than unchanged.
- */
-template <typename Float, typename Spectrum>
-void masked_assign(DDAStateList<Float, Spectrum> &dst,
-                   const DDAStateList<Float, Spectrum> &src,
-                   dr::mask_t<Float> mask) {
-    for (size_t i = 0; i < MAX_DDA_OVERLAP; ++i) {
-        dr::masked(dst.entries[i], mask) = src.entries[i];
-        dr::masked(dst.values[i], mask)  = src.values[i];
-    }
-    dr::masked(dst.mint, mask) = src.mint;
-    dr::masked(dst.maxt, mask) = src.maxt;
-}
-
 NAMESPACE_END(mitsuba)

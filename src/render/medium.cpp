@@ -188,7 +188,8 @@ Medium<Float, Spectrum>::dda_init(const Ray3f &ray, Float mint, Float maxt,
 
 MI_VARIANT
 typename Medium<Float, Spectrum>::ExtremumSegment
-Medium<Float, Spectrum>::dda_step(DDAStateList &state, Mask active) const {
+Medium<Float, Spectrum>::dda_step(DDAStateList &state, const Ray3f & /*ray*/,
+                                  Mask active) const {
     Float cursor   = state.mint;
     Float maxt     = state.maxt;
     Float seg_maxt = maxt;
@@ -219,15 +220,6 @@ Medium<Float, Spectrum>::dda_step(DDAStateList &state, Mask active) const {
     dr::masked(state.mint, active) = next_mint;
 
     return ExtremumSegment(cursor, next_mint, value);
-}
-
-MI_VARIANT
-std::pair<typename Medium<Float, Spectrum>::ExtremumSegment,
-          typename Medium<Float, Spectrum>::DDAStateList>
-Medium<Float, Spectrum>::dda_next(const DDAStateList &state,
-                                  Mask active) const {
-    DDAStateList next = state;
-    return { dda_step(next, active), next };
 }
 // #ERADIATE_CHANGE_END
 
