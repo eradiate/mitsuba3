@@ -355,19 +355,18 @@ private:
     ) const {
         using StateD = std::decay_t<StateT>;
 
-        Ray3f local_ray(m_to_local * ray.o, // Normalize origin
-                        m_to_local * ray.d, // Normalize direction
-                        ray.time, ray.wavelengths);
-
         ExtremumSegment segment  = dr::zeros<ExtremumSegment>();
         Mask reached    = false;
         Float current_t = mint;
 
-        // ray-sphere intersection info
-        Vector3f o      = local_ray.o - m_center;
+        // ray-sphere intersection info. Only norms and dot products relative
+        // to m_center are needed here, which are rotation-invariant, so the
+        // ray is kept in world space throughout (translation via m_center is
+        // sufficient; no need to transform into the volume's local frame).
+        Vector3f o      = ray.o - m_center;
         Float o_squared = dr::squared_norm(o);
-        Float a         = dr::squared_norm(local_ray.d);
-        Float b_half    = dr::dot(o, local_ray.d);
+        Float a         = dr::squared_norm(ray.d);
+        Float b_half    = dr::dot(o, ray.d);
 
         // Intersection value precomputation
         Float disc_base = b_half * b_half - a * o_squared;
@@ -375,7 +374,7 @@ private:
 
         // Find the current/next intersection (use this to calculate the
         // midpoint too)
-        Point3f pos = local_ray(mint + dr::Epsilon<Float> * 10.f);
+        Point3f pos = ray(mint + dr::Epsilon<Float> * 10.f);
         Vector3f oc = pos - m_center;
         Float r     = dr::norm(oc);
 
@@ -383,7 +382,7 @@ private:
         // layers.
         Int32 layer_idx = dr::clip(dr::floor2int<Int32>((r - m_rmin) * m_idr),
                                    -1, m_resolution.x());
-        Mask passed_midpoint = dr::dot((m_center - pos), local_ray.d) < 0;
+        Mask passed_midpoint = dr::dot((m_center - pos), ray.d) < 0;
         Int32 shell_padding  = dr::select(passed_midpoint, 1, 0);
         Int32 step           = dr::select(passed_midpoint, 1, -1);
 
