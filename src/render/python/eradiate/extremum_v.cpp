@@ -86,6 +86,10 @@ public:
         NB_OVERRIDE_PURE(dda_next, state, active);
     }
 
+    ScalarAffineTransform4f dda_to_local() const override {
+        NB_OVERRIDE_PURE(dda_to_local);
+    }
+
     std::string to_string() const override {
         NB_OVERRIDE(to_string);
     }

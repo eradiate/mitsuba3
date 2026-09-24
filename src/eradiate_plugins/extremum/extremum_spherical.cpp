@@ -105,6 +105,10 @@ public:
         NotImplementedError("dda_next");
     }
 
+    ScalarAffineTransform4f dda_to_local() const override {
+        NotImplementedError("dda_to_local");
+    }
+
     MI_DECLARE_CLASS(ExtremumSpherical)
 
 protected:
@@ -196,6 +200,10 @@ public:
         }
 
         return state;
+    }
+
+    ScalarAffineTransform4f dda_to_local() const override {
+        return m_to_local;
     }
 
     std::pair<ExtremumSegment, DDAState>

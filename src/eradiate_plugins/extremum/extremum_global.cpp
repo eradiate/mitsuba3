@@ -58,6 +58,10 @@ public:
                  next };
     }
 
+    ScalarAffineTransform4f dda_to_local() const override {
+        return ScalarAffineTransform4f();
+    }
+
     TrackingStateType traverse_extremum(
         const Ray3f &/*ray*/,
         Float mint,

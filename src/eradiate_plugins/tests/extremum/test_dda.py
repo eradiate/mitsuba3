@@ -348,3 +348,185 @@ def test_dda_track_vcall_matches_traverse_extremum(variants_vec_rgb, ratio):
         actual = ptr.track_test(ray, seed, ratio, use_dda=True)
         for e, a in zip(expected, actual):
             assert np.allclose(np.array(e), np.array(a), rtol=1e-5, atol=1e-6)
+
+
+def _repeat_cases():
+    """``(name, inner, lattice, aabb)``: tiles that abut and tiles with gaps,
+    over an infinite and a finite tiled region."""
+    grid = _extremum(_grid_volume((4, 5, 3)), "extremum_grid", (2, 3, 3))
+    radial = _extremum(_spherical_volume((4, 4, 4)), "extremum_spherical", (4, 1, 1))
+    glob = _extremum(_grid_volume((4, 4, 4)), "extremum_global", None)
+    return [
+        ("grid", grid, None, None),
+        ("grid_gaps", grid, (1.5, 1.25, 1.0), None),
+        ("grid_aabb", grid, (1.5, 1.0, 2.0), ((-1.2, -0.3, -2.0), (2.7, 3.1, 1.6))),
+        ("radial_gaps", radial, (2.5, 3.0, 2.0), None),
+        ("global_gaps", glob, (1.25, 1.5, 1.75), None),
+    ]
+
+
+def _repeat(inner, lattice, aabb):
+    d = {"type": "extremum_repeat", "inner": inner}
+    if lattice is not None:
+        d["lattice"] = mi.ScalarVector3f(*lattice)
+    if aabb is not None:
+        d["aabb_min"] = mi.ScalarPoint3f(*aabb[0])
+        d["aabb_max"] = mi.ScalarPoint3f(*aabb[1])
+    return mi.load_dict(d)
+
+
+def _repeat_rays(tile_min, extents):
+    """Long rays crossing several cells, axis-aligned ones through a tile and
+    through a gap."""
+    rng = np.random.default_rng(4)
+    tile_min, extents = np.array(tile_min), np.array(extents)
+    out = []
+    for _ in range(8):
+        o = tile_min + extents * (rng.random(3) * 3.0 - 1.0)
+        d = rng.random(3) * 2.0 - 1.0
+        out.append((o, d / np.linalg.norm(d)))
+    for axis in range(3):
+        d = np.zeros(3)
+        d[axis] = 1.0 if axis != 1 else -1.0
+        out.append((tile_min + extents * np.array([0.3, 0.6, 0.4]), d))
+        out.append((tile_min + extents * np.array([1.1, 1.05, 1.02]), d))
+    return [
+        mi.Ray3f(o=mi.Point3f(*map(float, o)), d=mi.Vector3f(*map(float, d)))
+        for o, d in out
+    ]
+
+
+def _walk_repeat(inner, ray, mint, maxt, lattice):
+    """Oracle: split ``[mint, maxt]`` at the world lattice planes, walk the
+    inner structure over each cell on the ray shifted into the tile, and fill
+    each stretch of a cell outside the tile with one zero segment."""
+    tile = inner.bbox()
+    origin = np.array(tile.min).reshape(-1)
+    lattice = np.array(lattice).reshape(-1)
+    o = np.array(ray.o).reshape(-1).astype(np.float64)
+    d = np.array(ray.d).reshape(-1).astype(np.float64)
+
+    ts = {mint, maxt}
+    for i in range(3):
+        if d[i] == 0.0:
+            continue
+        n0, n1 = sorted(
+            (o[i] + d[i] * t - origin[i]) / lattice[i] for t in (mint, maxt)
+        )
+        for n in range(int(np.ceil(n0)), int(np.floor(n1)) + 1):
+            t = (origin[i] + n * lattice[i] - o[i]) / d[i]
+            if mint < t < maxt:
+                ts.add(float(t))
+
+    out = []
+    bounds = sorted(ts)
+    for lo, hi in zip(bounds[:-1], bounds[1:]):
+        cell = np.floor((o + d * 0.5 * (lo + hi) - origin) / lattice)
+        shifted = mi.Ray3f(o=mi.Point3f(*map(float, o - cell * lattice)), d=ray.d)
+        cursor = lo
+        for segment in _walk_dda(inner, shifted, lo, hi):
+            if segment[0] > cursor:
+                out.append((cursor, segment[0], 0.0, 0.0))
+            out.append(segment)
+            cursor = segment[1]
+        if cursor < hi:
+            out.append((cursor, hi, 0.0, 0.0))
+    return out
+
+
+def _repeat_walks():
+    for name, inner, lattice, aabb in _repeat_cases():
+        tile = inner.bbox()
+        extents = np.array(tile.extents()).reshape(-1)
+        lattice = extents if lattice is None else np.array(lattice)
+        repeat = _repeat(inner, lattice, aabb)
+        rays = _repeat_rays(np.array(tile.min).reshape(-1), extents)
+        yield name, inner, lattice, repeat, rays, 6.0 * float(extents.max())
+
+
+def _solid(segments, eps=1e-5):
+    """Drop the float-noise slivers both routes leave at cell boundaries."""
+    return [s for s in segments if s[1] - s[0] > eps]
+
+
+def test_repeat_segments_tile(variant_scalar_rgb):
+    for name, _, _, repeat, rays, t_max in _repeat_walks():
+        for ray in rays:
+            state = repeat.dda_init(ray, 0.0, t_max)
+            mint, maxt = _f(state.mint), _f(state.maxt)
+            segments = _walk_dda(repeat, ray, 0.0, t_max)
+            if mint >= maxt:
+                assert not segments, (name, ray)
+                continue
+            assert segments[0][0] == mint, (name, ray)
+            assert segments[-1][1] == maxt, (name, ray)
+            for before, after in zip(segments[:-1], segments[1:]):
+                assert before[1] == after[0], (name, ray)
+
+
+def test_repeat_matches_shifted_inner(variant_scalar_rgb):
+    gaps = {}
+    for name, inner, lattice, repeat, rays, t_max in _repeat_walks():
+        for ray in rays:
+            state = repeat.dda_init(ray, 0.0, t_max)
+            mint, maxt = _f(state.mint), _f(state.maxt)
+            if mint >= maxt:
+                continue
+            expected = _solid(_walk_repeat(inner, ray, mint, maxt, lattice))
+            actual = _solid(_walk_dda(repeat, ray, mint, maxt))
+            assert len(expected) == len(actual), (name, ray)
+            assert np.allclose(expected, actual, rtol=1e-5, atol=1e-5), (name, ray)
+            gaps[name] = gaps.get(name, False) or any(s[3] == 0.0 for s in actual)
+    assert gaps == {
+        "grid": False,
+        "grid_gaps": True,
+        "grid_aabb": True,
+        "radial_gaps": True,
+        "global_gaps": True,
+    }
+
+
+def test_repeat_wide_matches_scalar(variants_vec_backends_once_rgb):
+    """All rays of a case in one wide walk, lanes crossing cells and gaps out
+    of step, against the same walks one ray at a time in ``scalar_rgb``."""
+    variant = mi.variant()
+    mi.set_variant("scalar_rgb")
+    expected = {
+        name: [_solid(_walk_dda(repeat, ray, 0.0, t_max)) for ray in rays]
+        for name, _, _, repeat, rays, t_max in _repeat_walks()
+    }
+    mi.set_variant(variant)
+
+    for name, _, _, repeat, rays, t_max in _repeat_walks():
+        o = np.array([np.array(r.o).reshape(-1) for r in rays]).T
+        d = np.array([np.array(r.d).reshape(-1) for r in rays]).T
+        ray = mi.Ray3f(o=mi.Point3f(o), d=mi.Vector3f(d))
+        state = repeat.dda_init(ray, 0.0, t_max)
+        actual = [[] for _ in rays]
+        for _ in range(MAX_STEPS):
+            active = state.mint < state.maxt
+            if not dr.any(active):
+                break
+            segment, state = repeat.dda_next(state, active)
+            dr.eval(segment, state)
+            columns = [
+                np.array(x)
+                for x in (
+                    segment.mint,
+                    segment.maxt,
+                    segment.minorant(),
+                    segment.majorant(),
+                )
+            ]
+            for lane in np.nonzero(np.array(active))[0]:
+                actual[lane].append(tuple(float(c[lane]) for c in columns))
+        else:
+            pytest.fail("dda traversal did not terminate")
+
+        for e, a in zip(expected[name], actual):
+            for before, after in zip(a[:-1], a[1:]):
+                assert before[1] == after[0], name
+            a = _solid(a)
+            assert len(e) == len(a), name
+            if e:
+                assert np.allclose(e, a, rtol=1e-5, atol=1e-5), name

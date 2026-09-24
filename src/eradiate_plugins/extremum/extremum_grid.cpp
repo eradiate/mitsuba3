@@ -136,6 +136,11 @@ public:
         return { ExtremumSegment(state.mint, t_next, value), next };
     }
 
+    ScalarAffineTransform4f dda_to_local() const override {
+        return ScalarAffineTransform4f::scale(ScalarVector3f(m_resolution)) *
+               m_to_local;
+    }
+
     TrackingStateType traverse_extremum(
         const Ray3f &ray,
         Float mint,
