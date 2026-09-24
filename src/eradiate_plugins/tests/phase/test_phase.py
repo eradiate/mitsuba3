@@ -134,11 +134,11 @@ def test_accumulate_envelope_multiphase(variant_scalar_rgb, hg, tabphase_irregul
         {
             "type": "multiphase",
             "phase0": iso,
-            "weight0": 1.0,
+            "weight_0": 1.0,
             "phase1": hg,
-            "weight1": 1.0,
+            "weight_1": 1.0,
             "phase2": tabphase_irregular,
-            "weight2": 1.0,
+            "weight_2": 1.0,
         }
     )
 
@@ -184,9 +184,9 @@ def _ddis_phase_tree(combo, shared):
         return {
             "type": "multiphase",
             "phase0": shared,
-            "weight0": 1.0,
+            "weight_0": 1.0,
             "phase1": {"type": "isotropic"},
-            "weight1": 1.0,
+            "weight_1": 1.0,
         }
     raise ValueError(combo)
 
@@ -271,11 +271,11 @@ def test_ddis_phase_function_overlap_matches_multiphase(variant_scalar_mono_doub
             "phase": {
                 "type": "multiphase",
                 "phase0": phase0,
-                "weight0": 1.0,
+                "weight_0": 1.0,
                 "phase1": phase1,
-                "weight1": 2.5,
+                "weight_1": 2.5,
                 "phase2": phase2,
-                "weight2": 0.4,
+                "weight_2": 0.4,
             },
         }
     )

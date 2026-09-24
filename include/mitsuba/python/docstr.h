@@ -4850,6 +4850,8 @@ static const char *__doc_mitsuba_Medium_get_scattering_coefficients =
 R"doc(Returns the medium coefficients Sigma_s, Sigma_n and Sigma_t evaluated
 at a given MediumInteraction mi)doc";
 
+static const char *__doc_mitsuba_Medium_in_aabb = R"doc(Checks if a point is contained by the medium's bounding box)doc";
+
 static const char *__doc_mitsuba_Medium_has_extremum_structure = R"doc(Check if medium uses extremum structure)doc";
 
 static const char *__doc_mitsuba_Medium_has_spectral_extinction = R"doc(Returns whether this medium has a spectrally varying extinction)doc";
@@ -4941,6 +4943,28 @@ Returns:
     the medium boudning box and before the bouding iteraction it. The
     transmittance and PDF are both computed for all channels even if
     the sampling operation is performed on one channel.)doc";
+
+static const char *__doc_mitsuba_Medium_sample_scattering_properties =
+R"doc(Calculate scattering coefficients and sample a component.
+
+This function combines the evaluation of scattering properties and
+sampling of a medium component. Useful for multi-component media which
+perform gathers from its constituents for both actions. By default,
+call ``get_scattering_coefficients`` and return component 0.
+
+Parameter ``mei``:
+    Interaction point of query
+
+Parameter ``majorant``:
+    Majorant value at query point
+
+Parameter ``sample``:
+    A uniformly distributed random sample
+
+Returns:
+    The method returns a MediumSample. By default its scattering
+    coefficient will be gathered from ``get_scattering_coefficients``
+    and the component will be equal to 0.)doc";
 
 static const char *__doc_mitsuba_Medium_to_string = R"doc(Return a human-readable representation of the Medium)doc";
 
