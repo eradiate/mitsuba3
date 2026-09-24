@@ -33,6 +33,31 @@ public:
         m_majorant = volume->max();
     }
 
+    DDAState dda_init(const Ray3f &ray, Float mint, Float maxt,
+                      Mask active) const override {
+        auto [hit, d0, d1] = m_bbox.ray_intersect(ray);
+
+        DDAState state = dr::zeros<DDAState>();
+        state.o    = ray.o;
+        state.d    = ray.d;
+        state.mint = dr::select(hit, dr::maximum(mint, d0), mint);
+        state.maxt = dr::select(hit && active, dr::minimum(maxt, d1),
+                                state.mint);
+        return state;
+    }
+
+    std::pair<ExtremumSegment, DDAState>
+    dda_next(const DDAState &state, Mask active) const override {
+        Float maxt = dr::select(active, state.maxt, state.mint);
+
+        DDAState next = state;
+        next.mint = maxt;
+
+        return { ExtremumSegment(state.mint, maxt, m_scale * m_minorant,
+                                 m_scale * m_majorant),
+                 next };
+    }
+
     TrackingStateType traverse_extremum(
         const Ray3f &/*ray*/,
         Float mint,

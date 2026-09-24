@@ -7,8 +7,6 @@
 
 NAMESPACE_BEGIN(mitsuba)
 
-static constexpr size_t MAX_OVERLAPPING_VOLUMES = 16;
-
 /**
  * \brief Volume's coordinate type.
  */

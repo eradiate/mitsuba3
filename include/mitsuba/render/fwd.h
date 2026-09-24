@@ -49,6 +49,10 @@ template <typename Float, typename Shape>    struct PreliminaryIntersection;
 template <typename Float, typename Spectrum> class ExtremumStructure;
 
 template <typename Float, typename Spectrum> struct ExtremumSegment;
+
+template <typename Float, typename Spectrum> struct DDAState;
+
+template <typename Float, typename Spectrum> struct DDAStateList;
 // #ERADIATE_CHANGE_END
 
 template <typename Float_, typename Spectrum_> struct RenderAliases {
@@ -118,6 +122,10 @@ template <typename Float_, typename Spectrum_> struct RenderAliases {
     using ExtremumStructurePtr   = dr::replace_scalar_t<Float, const ExtremumStructure *>;
     
     using ExtremumSegment        = mitsuba::ExtremumSegment<Float, Spectrum>;
+
+    using DDAState               = mitsuba::DDAState<Float, Spectrum>;
+
+    using DDAStateList           = mitsuba::DDAStateList<Float, Spectrum>;
 // #ERADIATE_CHANGE_END
 
 };
@@ -170,6 +178,8 @@ template <typename Float_, typename Spectrum_> struct RenderAliases {
     using SilhouetteSample3f        = typename RenderAliases::SilhouetteSample3f;                  \
 /* #ERADIATE_CHANGE_BEGIN: Local extremum support */                                               \
     using ExtremumSegment           = typename RenderAliases::ExtremumSegment;                     \
+    using DDAState                  = typename RenderAliases::DDAState;                            \
+    using DDAStateList              = typename RenderAliases::DDAStateList;                        \
 /* #ERADIATE_CHANGE_END */                                                                         \
     DRJIT_MAP(MI_IMPORT_TYPES_MACRO, __VA_ARGS__)
 

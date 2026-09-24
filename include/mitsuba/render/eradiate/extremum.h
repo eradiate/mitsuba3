@@ -4,6 +4,7 @@
 #include <mitsuba/render/interaction.h>
 #include <mitsuba/render/volume.h>
 #include <mitsuba/render/eradiate/extremum_segment.h>
+#include <mitsuba/render/eradiate/dda.h>
 #include <mitsuba/render/eradiate/tracking.h>
 #include <drjit/call.h>
 
@@ -70,6 +71,32 @@ public:
      * \param volume  Volume to compute extremum values from
      */
     virtual void build(const Volume *volume) = 0;
+
+    /**
+     * \brief Set up a stateful DDA traversal along \c ray.
+     *
+     * Transforms the ray to structure-local coordinates, locates the entry
+     * cell and clips <tt>[mint, maxt]</tt> to the structure's domain. Called
+     * once per ray; the returned state is then advanced with ``dda_next``
+     * until <tt>state.mint >= state.maxt</tt>.
+     *
+     * Host-only: reached through a \c Medium, never through a Dr.Jit vcall.
+     */
+    virtual DDAState dda_init(const Ray3f &ray, Float mint, Float maxt,
+                              Mask active = true) const = 0;
+
+    /**
+     * \brief Return the segment starting at <tt>state.mint</tt>, together
+     * with the state advanced past it.
+     *
+     * Segments are half-open and tile exactly: <tt>segment.mint ==
+     * state.mint</tt> and <tt>segment.maxt == next_state.mint</tt>, exact in
+     * \c t.
+     *
+     * Host-only, like ``dda_init``.
+     */
+    virtual std::pair<ExtremumSegment, DDAState>
+    dda_next(const DDAState &state, Mask active = true) const = 0;
 
 
     /**

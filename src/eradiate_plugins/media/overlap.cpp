@@ -5,7 +5,6 @@
 #include <mitsuba/core/plugin.h>
 #include <mitsuba/render/eradiate/extremum.h>
 #include <mitsuba/render/eradiate/phase_utils.h>
-#include <mitsuba/render/eradiate/volume_utils.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -50,15 +49,15 @@ of the components' coefficients, and the phase function at a scattering
 event is sampled among the components proportionally to their scattering
 coefficient.
 
-The components' extremum structures are aggregated into an
-:ref:`extremum_overlap <extremum-extremum_overlap>` structure, so no
-combined majorant structure needs to be built.
+No combined majorant structure is built: the medium traverses its
+components' extremum structures side by side and sums their segments. At
+most four components are supported.
 */
 template <typename Float, typename Spectrum>
 class OverlappingMedium final : public Medium<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
-                    m_phase_function, m_extremum_structure,
+                    m_phase_function, m_extrema,
                     m_ddis_phase_function, m_ddis_threshold,
                     create_ddis_phase_function
                 )
@@ -84,8 +83,8 @@ public:
         if(m_components.empty())
             Throw("Must have at least one medium component.");
 
-        if (m_components.size() > MAX_OVERLAPPING_VOLUMES)
-            Throw("overlapping medium: too many components (%zu > %zu)", m_components.size(), MAX_OVERLAPPING_VOLUMES);
+        if (m_components.size() > MAX_DDA_OVERLAP)
+            Throw("overlapping medium: too many components (%zu > %zu)", m_components.size(), MAX_DDA_OVERLAP);
 
         std::vector<const PhaseFunction *> phase_functions;
         phase_functions.reserve(m_components.size());
@@ -98,20 +97,15 @@ public:
 
         m_phase_function = m_components[0]->phase_function();
 
-        // Aggregate the components' built structures; the aggregate is
-        // assembled rather than built.
-        Properties props_overlap("extremum_overlap");
-        for (size_t i = 0; i < m_components.size(); ++i) {
-            ExtremumStructure *structure = m_components[i]->extremum_structure();
+        ScalarBoundingBox3f domain;
+        for (auto &component : m_components) {
+            ExtremumStructure *structure = component->extremum_structure();
             if (!structure)
                 Throw("overlapping medium: component %s has no extremum structure",
-                      m_components[i]->to_string());
-            props_overlap.set("structure_" + std::to_string(i),
-                              (Object *) structure);
+                      component->to_string());
+            m_extrema.push_back(structure);
+            domain.expand(structure->bbox());
         }
-        m_extremum_structure =
-            PluginManager::instance()->create_object<ExtremumStructure>(
-                props_overlap);
 
         m_ddis_threshold = props.get<ScalarFloat>("ddis_threshold", 0.1f);
 
@@ -125,7 +119,7 @@ public:
             ScalarPoint3f aabb_max = props.get<ScalarPoint3f>("aabb_max");
             m_aabb = ScalarBoundingBox3f(aabb_min, aabb_max);
         } else {
-            m_aabb = m_extremum_structure->bbox();
+            m_aabb = domain;
         }
     }
 
@@ -194,7 +188,7 @@ public:
         // Sample a component proportionally to its scattering coefficient
         // at the interaction poin
         MediumSample ms = dr::zeros<MediumSample>();
-        std::array<Float, MAX_OVERLAPPING_VOLUMES> cdf;
+        std::array<Float, MAX_DDA_OVERLAP> cdf;
         UnpolarizedSpectrum summed_sigmas = 0.f;
         UnpolarizedSpectrum summed_sigmat = 0.f;
 

@@ -173,6 +173,64 @@ Medium<Float, Spectrum>::prepare_medium_traversal(const Ray3f& ray, Mask active)
 }
 // #ERADIATE_CHANGE_END
 
+// #ERADIATE_CHANGE_BEGIN: DDA support
+MI_VARIANT
+typename Medium<Float, Spectrum>::DDAStateList
+Medium<Float, Spectrum>::dda_init(const Ray3f &ray, Float mint, Float maxt,
+                                  Mask active) const {
+    DDAStateList state = dr::zeros<DDAStateList>();
+    state.mint = mint;
+    state.maxt = maxt;
+    for (size_t i = 0; i < m_extrema.size(); ++i)
+        state.entries[i] = m_extrema[i]->dda_init(ray, mint, maxt, active);
+    return state;
+}
+
+MI_VARIANT
+typename Medium<Float, Spectrum>::ExtremumSegment
+Medium<Float, Spectrum>::dda_step(DDAStateList &state, Mask active) const {
+    Float cursor   = state.mint;
+    Float maxt     = state.maxt;
+    Float seg_maxt = maxt;
+    Vector2f value(0.f);
+
+    for (size_t i = 0; i < m_extrema.size(); ++i) {
+        DDAState &entry = state.entries[i];
+
+        Mask stale   = cursor >= entry.mint;
+        Mask more    = entry.mint < entry.maxt;
+        Mask refresh = stale && more && active;
+
+        if (dr::any_or<true>(refresh)) {
+            auto [segment, advanced] = m_extrema[i]->dda_next(entry, refresh);
+            dr::masked(state.values[i], refresh) = segment.value;
+            dr::masked(entry, refresh)           = advanced;
+        }
+
+        Mask spent = stale && !more && active;
+        dr::masked(state.values[i], spent) = 0.f;
+        value += state.values[i];
+
+        Float boundary = dr::select(entry.mint < entry.maxt, entry.mint, maxt);
+        seg_maxt = dr::minimum(seg_maxt, boundary);
+    }
+
+    Float next_mint = dr::maximum(seg_maxt, cursor);
+    dr::masked(state.mint, active) = next_mint;
+
+    return ExtremumSegment(cursor, next_mint, value);
+}
+
+MI_VARIANT
+std::pair<typename Medium<Float, Spectrum>::ExtremumSegment,
+          typename Medium<Float, Spectrum>::DDAStateList>
+Medium<Float, Spectrum>::dda_next(const DDAStateList &state,
+                                  Mask active) const {
+    DDAStateList next = state;
+    return { dda_step(next, active), next };
+}
+// #ERADIATE_CHANGE_END
+
 // #ERADIATE_CHANGE_BEGIN: DDIS
 MI_VARIANT
 ref<typename Medium<Float, Spectrum>::PhaseFunction>

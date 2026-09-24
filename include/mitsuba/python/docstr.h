@@ -2003,6 +2003,34 @@ static const char *__doc_mitsuba_ContinuousDistribution_traverse_1_cb_rw = R"doc
 
 static const char *__doc_mitsuba_ContinuousDistribution_update = R"doc(Update the internal state. Must be invoked when changing the pdf.)doc";
 
+static const char *__doc_mitsuba_DDAState =
+R"doc(Traversal state carried between successive ``dda_next`` calls of an
+``ExtremumStructure``.
+
+Holds what a structure cannot cheaply recover per segment: the
+structure-local ray and the current cell. The cursor ``mint`` is the
+entry distance of the next segment; traversal is over once ``mint >=
+maxt``.
+
+The ray is kept as a bare origin and direction rather than a
+``Ray3f``, and anything derivable from them in a few instructions is
+recomputed by ``dda_next`` rather than carried, so that the struct
+stays small and plugin-agnostic.)doc";
+
+static const char *__doc_mitsuba_DDAState_d =
+R"doc(Ray direction in structure-local coordinates. Never renormalised, so
+the world ray's ``t`` parameterization carries over unchanged.)doc";
+
+static const char *__doc_mitsuba_DDAState_maxt = R"doc(End of the traversal range.)doc";
+
+static const char *__doc_mitsuba_DDAState_mint = R"doc(Cursor: entry distance of the next segment. Exact in ``t``.)doc";
+
+static const char *__doc_mitsuba_DDAState_o = R"doc(Ray origin in structure-local coordinates.)doc";
+
+static const char *__doc_mitsuba_DDAState_pi =
+R"doc(Current cell index. Sentinel values (-1, resolution) mark the
+exterior.)doc";
+
 static const char *__doc_mitsuba_DateTimeRecord = R"doc()doc";
 
 static const char *__doc_mitsuba_DateTimeRecord_DateTimeRecord = R"doc()doc";
@@ -3005,6 +3033,25 @@ Parameter ``volume``:
     Volume to compute extremum values from)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure_class_name = R"doc()doc";
+
+static const char *__doc_mitsuba_ExtremumStructure_dda_init =
+R"doc(Set up a stateful DDA traversal along ``ray``.
+
+Transforms the ray to structure-local coordinates, locates the entry
+cell and clips ``[mint, maxt]`` to the structure's domain. Called once
+per ray; the returned state is then advanced with ``dda_next`` until
+``state.mint >= state.maxt``.
+
+Host-only: reached through a ``Medium``, never through a Dr.Jit vcall.)doc";
+
+static const char *__doc_mitsuba_ExtremumStructure_dda_next =
+R"doc(Return the segment starting at ``state.mint``, together with the state
+advanced past it.
+
+Segments are half-open and tile exactly: ``segment.mint ==
+state.mint`` and ``segment.maxt == next_state.mint``, exact in ``t``.
+
+Host-only, like ``dda_init``.)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure_eval_1 =
 R"doc(Evaluate the minorant and majorant at a medium interaction point.

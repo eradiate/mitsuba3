@@ -2,9 +2,11 @@
 #include <mitsuba/render/medium.h>
 #include <mitsuba/render/eradiate/extremum.h>
 #include <mitsuba/render/eradiate/extremum_segment.h>
+#include <mitsuba/render/eradiate/dda.h>
 #include <mitsuba/python/python.h>
 #include <nanobind/trampoline.h>
 #include <nanobind/stl/optional.h>
+#include <nanobind/stl/pair.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
@@ -37,6 +39,21 @@ MI_PY_EXPORT(ExtremumSegment) {
     MI_PY_DRJIT_STRUCT(es, ExtremumSegment, mint, maxt, value);
 }
 
+MI_PY_EXPORT(DDAState) {
+    MI_PY_IMPORT_TYPES()
+
+    auto ds = nb::class_<DDAState>(m, "DDAState", D(DDAState))
+        .def(nb::init<>())
+        .def(nb::init<const DDAState &>(), "other"_a, "Copy constructor")
+        .def_field(DDAState, o,    D(DDAState, o))
+        .def_field(DDAState, d,    D(DDAState, d))
+        .def_field(DDAState, pi,   D(DDAState, pi))
+        .def_field(DDAState, mint, D(DDAState, mint))
+        .def_field(DDAState, maxt, D(DDAState, maxt));
+
+    MI_PY_DRJIT_STRUCT(ds, DDAState, o, d, pi, mint, maxt);
+}
+
 /// Trampoline for derived types implemented in Python
 // Note that `traverse_extremum` does not appear in this list. This is because
 // it accepts a concrete function pointer as parameter, the binding of which
@@ -44,7 +61,7 @@ MI_PY_EXPORT(ExtremumSegment) {
 MI_VARIANT class PyExtremumStructure : public ExtremumStructure<Float, Spectrum> {
 public:
     MI_IMPORT_TYPES(ExtremumStructure, Volume)
-    NB_TRAMPOLINE(ExtremumStructure, 5);
+    NB_TRAMPOLINE(ExtremumStructure, 7);
 
     PyExtremumStructure(const Properties &props) : ExtremumStructure(props) {}
 
@@ -57,6 +74,16 @@ public:
         Mask active
     ) const override {
         NB_OVERRIDE_PURE(eval_1, it, active);
+    }
+
+    DDAState dda_init(const Ray3f &ray, Float mint, Float maxt,
+                      Mask active) const override {
+        NB_OVERRIDE_PURE(dda_init, ray, mint, maxt, active);
+    }
+
+    std::pair<ExtremumSegment, DDAState>
+    dda_next(const DDAState &state, Mask active) const override {
+        NB_OVERRIDE_PURE(dda_next, state, active);
     }
 
     std::string to_string() const override {
@@ -154,7 +181,13 @@ MI_PY_EXPORT(ExtremumStructure) {
              D(ExtremumStructure, update_extremum))
         .def("build", &ExtremumStructure::build,
              "volume"_a, D(ExtremumStructure, build))
-        .def("bbox", &ExtremumStructure::bbox, D(ExtremumStructure, bbox));
+        .def("bbox", &ExtremumStructure::bbox, D(ExtremumStructure, bbox))
+        .def("dda_init", &ExtremumStructure::dda_init,
+             "ray"_a, "mint"_a, "maxt"_a, "active"_a = true,
+             D(ExtremumStructure, dda_init))
+        .def("dda_next", &ExtremumStructure::dda_next,
+             "state"_a, "active"_a = true,
+             D(ExtremumStructure, dda_next));
 
     drjit::bind_traverse(extremum);
 

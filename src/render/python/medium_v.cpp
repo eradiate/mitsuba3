@@ -13,6 +13,9 @@
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 #include <drjit/python.h>
+// #ERADIATE_CHANGE_BEGIN: DDA support
+#include <drjit/while_loop.h>
+// #ERADIATE_CHANGE_END
 
 /// Trampoline for derived types implemented in Python
 MI_VARIANT class PyMedium : public Medium<Float, Spectrum> {
@@ -130,6 +133,53 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
                 return ptr->get_scattering_coefficients(mi, active); },
             "mi"_a, "active"_a=true,
             D(Medium, get_scattering_coefficients));
+// #ERADIATE_CHANGE_BEGIN: DDA support
+    cls.def("sample_test_dda",
+            [](Ptr ptr, const Ray3f &ray, Float mint, Float maxt,
+               Float target_ot, Mask active) {
+                struct LoopState {
+                    DDAStateList dda;
+                    Float t;
+                    Float target_ot;
+                    Mask active;
+
+                    DRJIT_STRUCT(LoopState, dda, t, target_ot, active)
+                };
+
+                DDAStateList dda = ptr->dda_init(ray, mint, maxt, active);
+                LoopState ls = { dda, dr::Infinity<Float>, target_ot,
+                                 active && (dda.mint < dda.maxt) };
+
+                dr::tie(ls) = dr::while_loop(
+                    dr::make_tuple(ls),
+                    [](const LoopState &ls) { return ls.active; },
+                    [ptr](LoopState &ls) {
+                        auto [segment, next] = ptr->dda_next(ls.dda, ls.active);
+                        masked_assign(ls.dda, next, ls.active);
+
+                        Float segment_ot = (segment.maxt - segment.mint) *
+                                           segment.majorant();
+                        Mask sampled = (ls.target_ot < segment_ot) && ls.active;
+
+                        dr::masked(ls.t, sampled) =
+                            segment.mint +
+                            ls.target_ot / dr::maximum(segment.majorant(),
+                                                       dr::Epsilon<Float>);
+                        dr::masked(ls.target_ot, !sampled && ls.active) -=
+                            segment_ot;
+
+                        ls.active &= !sampled && (ls.dda.mint < ls.dda.maxt);
+                    },
+                    "sample_test_dda");
+
+                return std::make_tuple(ls.t, ls.target_ot);
+            },
+            "ray"_a, "mint"_a, "maxt"_a, "target_ot"_a, "active"_a = true,
+            "Test utility: walk the medium's DDA route, accumulating the "
+            "majorant optical thickness until `target_ot` is reached. Returns "
+            "(distance, leftover_ot); `distance` is infinite if `target_ot` "
+            "is not reached before `maxt`.");
+// #ERADIATE_CHANGE_END
 }
 
 MI_PY_EXPORT(Medium) {

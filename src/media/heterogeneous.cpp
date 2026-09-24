@@ -151,8 +151,10 @@ and both parameters are allowed to be spectrally varying.
 template <typename Float, typename Spectrum>
 class HeterogeneousMedium final : public Medium<Float, Spectrum> {
 public:
+// #ERADIATE_CHANGE_BEGIN: DDA support
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
-                    m_phase_function, m_extremum_structure)
+                    m_phase_function, m_extremum_structure, m_extrema)
+// #ERADIATE_CHANGE_END
     MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, ExtremumStructure, ExtremumStructurePtr)
 
     HeterogeneousMedium(const Properties &props) : Base(props) {
@@ -180,6 +182,7 @@ public:
             m_extremum_structure =
                 PluginManager::instance()->create_object<ExtremumStructure>(Properties("extremum_global"));
         }
+        m_extrema = { m_extremum_structure };
 
         m_extremum_structure->update_extremum(
             m_sigmat->bbox(), m_sigmat.get(), m_scale);

@@ -135,7 +135,7 @@ template <typename Float, typename Spectrum>
 class HomogeneousMedium final : public Medium<Float, Spectrum> {
 public:
 // #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
-    MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction, m_phase_function, m_extremum_structure)
+    MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction, m_phase_function, m_extremum_structure, m_extrema)
     MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, ExtremumStructure)
 
     HomogeneousMedium(const Properties &props) : Base(props) {
@@ -149,6 +149,7 @@ public:
         // Create a default global extremum structure
         m_extremum_structure =
             PluginManager::instance()->create_object<ExtremumStructure>(Properties("extremum_global"));
+        m_extrema = { m_extremum_structure };
 
         m_extremum_structure->update_extremum(
             ScalarBoundingBox3f(-dr::Infinity<ScalarFloat>,

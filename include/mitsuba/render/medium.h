@@ -4,6 +4,10 @@
 #include <mitsuba/core/spectrum.h>
 #include <mitsuba/core/traits.h>
 #include <mitsuba/render/fwd.h>
+// #ERADIATE_CHANGE_BEGIN: DDA support
+#include <mitsuba/render/eradiate/dda.h>
+#include <mitsuba/render/eradiate/extremum_segment.h>
+// #ERADIATE_CHANGE_END
 #include <drjit/call.h>
 
 NAMESPACE_BEGIN(mitsuba)
@@ -237,6 +241,37 @@ public:
     }
 // #ERADIATE_CHANGE_END
 
+// #ERADIATE_CHANGE_BEGIN: DDA support
+    /**
+     * \brief Set up a DDA traversal of the medium's extremum structures along
+     * \c ray.
+     *
+     * One \ref DDAState per structure: a plain medium has one, a medium
+     * assembled from overlapping components one per component, up to
+     * \ref MAX_DDA_OVERLAP.
+     */
+    DDAStateList dda_init(const Ray3f &ray, Float mint, Float maxt,
+                          Mask active = true) const;
+
+    /**
+     * \brief Return the segment starting at <tt>state.mint</tt> and advance
+     * \c state past it.
+     *
+     * The segment runs to the earliest boundary any structure has ahead, and
+     * its bounds are the sums of the structures' bounds over that span.
+     * Structures contribute zero outside their domain. Segments are half-open
+     * and tile exactly: <tt>segment.maxt</tt> is the new <tt>state.mint</tt>.
+     *
+     * For callers holding a host pointer; \ref dda_next is the by-value
+     * variant that a Dr.Jit vcall can reach.
+     */
+    ExtremumSegment dda_step(DDAStateList &state, Mask active = true) const;
+
+    /// By-value \ref dda_step, returning the segment and the advanced state.
+    std::pair<ExtremumSegment, DDAStateList>
+    dda_next(const DDAStateList &state, Mask active = true) const;
+// #ERADIATE_CHANGE_END
+
 // #ERADIATE_CHANGE_BEGIN: DDIS
     /**
      * \brief Return the ddis phase function of this medium. Can be null for
@@ -290,6 +325,8 @@ protected:
     bool m_has_spectral_extinction;
 // #ERADIATE_CHANGE_BEGIN: Extremum structure support
     ref<ExtremumStructure> m_extremum_structure;
+    /// Extremum structures traversed by the DDA route, one per component.
+    std::vector<ref<ExtremumStructure>> m_extrema;
     bool m_use_rrt;
 // #ERADIATE_CHANGE_END
 
@@ -335,6 +372,8 @@ DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::Medium)
     // Extremum Support
     DRJIT_CALL_GETTER(extremum_structure)
     DRJIT_CALL_METHOD(prepare_medium_traversal)
+    DRJIT_CALL_METHOD(dda_init)
+    DRJIT_CALL_METHOD(dda_next)
 // #ERADIATE_CHANGE_END
 DRJIT_CALL_END()
 

@@ -81,6 +81,61 @@ public:
         build_grid(volume, m_resolution);
     }
 
+    DDAState dda_init(const Ray3f &ray, Float mint, Float maxt,
+                      Mask active) const override {
+        auto [hit, d0, d1] = m_bbox.ray_intersect(ray);
+
+        DDAState state;
+        Vector3f res(m_resolution);
+        state.o = (m_to_local * ray.o) * res;
+        state.d = (m_to_local * ray.d) * res;
+
+        state.mint = dr::select(hit, dr::maximum(mint, d0), mint);
+        state.maxt = dr::select(hit && active, dr::minimum(maxt, d1),
+                                state.mint);
+
+        Vector3i pi = dr::floor2int<Vector3i>(
+            dr::fmadd(state.d, state.mint, state.o));
+
+        Mask clamped_bounds = !m_wrap || m_wrap_mode == dr::WrapMode::Clamp;
+        dr::masked(pi, clamped_bounds) = dr::clip(pi, -1, m_resolution);
+        state.pi = pi;
+
+        return state;
+    }
+
+    std::pair<ExtremumSegment, DDAState>
+    dda_next(const DDAState &state, Mask active) const override {
+        Vector3i step =
+            dr::select(state.d >= 0.f, Vector3i(1), Vector3i(-1));
+        Vector3i b_idx = state.pi + dr::maximum(step, 0);
+        Vector3f ti    = (Vector3f(b_idx) - state.o) / state.d;
+
+        Mask clamped_bounds = !m_wrap || m_wrap_mode == dr::WrapMode::Clamp;
+        auto no_cross = state.d == 0.f;
+        no_cross |= clamped_bounds && ((b_idx < 0) || (b_idx > m_resolution));
+        dr::masked(ti, no_cross) = dr::Infinity<Float>;
+
+        Float t_next = dr::minimum(dr::min(ti), state.maxt);
+        dr::masked(t_next, !active) = state.maxt;
+
+        Mask inside = m_wrap || !dr::any((state.pi < 0) ||
+                                         (state.pi >= m_resolution));
+        Vector3i piw = wrap<Vector3i>(state.pi, m_resolution, m_inv_resolution,
+                                      m_wrap_mode);
+        UInt32 idx   = dr::fmadd(dr::fmadd(piw.z(), m_resolution.y(), piw.y()),
+                                 m_resolution.x(), piw.x());
+        Vector2f value = m_scale * dr::gather<Vector2f>(m_extremum_grid, idx,
+                                                        active && inside);
+
+        DDAState next = state;
+        next.pi   = state.pi +
+                    dr::select(!no_cross && (ti <= t_next), step, 0);
+        next.mint = t_next;
+
+        return { ExtremumSegment(state.mint, t_next, value), next };
+    }
+
     TrackingStateType traverse_extremum(
         const Ray3f &ray,
         Float mint,

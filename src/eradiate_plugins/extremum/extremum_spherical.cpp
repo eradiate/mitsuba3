@@ -96,6 +96,15 @@ public:
         NotImplementedError("eval_1");
     }
 
+    DDAState dda_init(const Ray3f &, Float, Float, Mask) const override {
+        NotImplementedError("dda_init");
+    }
+
+    std::pair<ExtremumSegment, DDAState> dda_next(const DDAState &,
+                                                  Mask) const override {
+        NotImplementedError("dda_next");
+    }
+
     MI_DECLARE_CLASS(ExtremumSpherical)
 
 protected:
@@ -148,9 +157,131 @@ public:
         m_idr = dr::rcp(m_dr);
         m_dtheta = dr::Pi<ScalarFloat> / m_resolution.y();
         m_dphi   = dr::TwoPi<ScalarFloat> / m_resolution.z();
+        m_eps =
+            ScalarVector3f(m_resolution) * math::RayEpsilon<ScalarFloat>;
 
         build_grid(volume);
         build_angle_tables();
+    }
+
+    DDAState dda_init(const Ray3f &ray, Float mint, Float maxt,
+                      Mask active) const override {
+        auto [hit, d0, d1] = m_bbox.ray_intersect(ray);
+
+        DDAState state;
+        state.o = m_to_local * ray.o;
+        state.d = m_to_local * ray.d;
+
+        state.mint = dr::select(hit, dr::maximum(mint, d0), mint);
+        state.maxt =
+            dr::select(hit && active, dr::minimum(maxt, d1), state.mint);
+
+        const Point3f  &o = state.o;
+        const Vector3f &d = state.d;
+        RayCoeffs rc = ray_coeffs(o, d);
+
+        Point3f p = dr::fmadd(d, state.mint, o);
+        Float   r = dr::norm(p);
+
+        state.pi = dr::zeros<Vector3i>();
+        state.pi.x() = radial_idx(
+            r, idx_bias(m_eps.x(), dr::fmadd(state.mint, rc.a, rc.b)));
+
+        if constexpr (TraversalType == SphericalTraversalType::Full3D) {
+            Mask on_axis = on_axis_ray(o, d);
+            state.pi.y() = theta_idx(
+                p, r, on_axis,
+                idx_bias(m_eps.y(), -dr::fmadd(state.mint, rc.n1, rc.n0)));
+            state.pi.z() = phi_idx(p, idx_bias(m_eps.z(), rc.phi_dot));
+        }
+
+        return state;
+    }
+
+    std::pair<ExtremumSegment, DDAState>
+    dda_next(const DDAState &state, Mask active) const override {
+        const Point3f  &o = state.o;
+        const Vector3f &d = state.d;
+        RayCoeffs rc = ray_coeffs(o, d);
+
+        Vector3f t_turn     = -dr::Infinity<Float>;
+        Vector3i step_after = dr::zeros<Vector3i>();
+
+        t_turn.x()     = -rc.b * rc.inv_a;
+        step_after.x() = 1;
+
+        Mask on_axis = false;
+
+        if constexpr (TraversalType == SphericalTraversalType::Full3D) {
+            on_axis = on_axis_ray(o, d);
+
+            Mask no_turn = rc.n1 == 0.f;
+            t_turn.y() =
+                dr::select(no_turn, -dr::Infinity<Float>, -rc.n0 / rc.n1);
+            dr::masked(t_turn.y(), on_axis) = -o.z() * dr::rcp(d.z());
+
+            step_after.y() =
+                dr::select(dr::select(no_turn, rc.n0, rc.n1) < 0.f, 1, -1);
+            step_after.z() = dr::select(rc.phi_dot > 0.f, 1, -1);
+        }
+
+        Vector3f dt = dr::Infinity<Float>;
+        const Float threshold = state.mint + dr::Epsilon<Float> * 2.f;
+
+        Vector3i step =
+            dr::select(state.mint < t_turn, -step_after, step_after);
+        Vector3i test_idx =
+            state.pi + dr::select(step > 0, Vector3i(1), Vector3i(0));
+
+        dt.x() = sphere_crossing(
+            rc, shell_radius(dr::clip(test_idx.x(), 0, m_resolution.x())),
+            threshold);
+
+        if constexpr (TraversalType == SphericalTraversalType::Full3D) {
+            dr::masked(dt.y(), !on_axis) =
+                cone_crossing(rc, o, d, cos_theta(test_idx.y()), threshold);
+            dt.z() = plane_crossing(o, d, phi_normal(test_idx.z()), threshold,
+                                    !on_axis);
+        }
+
+        Vector3f t_turn_fwd =
+            dr::select(t_turn > threshold, t_turn, dr::Infinity<Float>);
+
+        Float t_next =
+            dr::minimum(dr::min(dr::minimum(dt, t_turn_fwd)), state.maxt);
+        dr::masked(t_next, !active) = state.maxt;
+
+        UInt32 idx = UInt32(dr::clip(state.pi.x(), 0, m_resolution.x() - 1));
+        if constexpr (TraversalType == SphericalTraversalType::Full3D)
+            idx += UInt32(state.pi.y() * m_resolution.x() +
+                          state.pi.z() * (m_resolution.x() * m_resolution.y()));
+
+        Vector2f extremum = dr::gather<Vector2f>(m_extremum_grid, idx, active);
+        dr::masked(extremum, state.pi.x() < 0) = Vector2f(m_fillmin);
+        dr::masked(extremum, state.pi.x() >= m_resolution.x()) =
+            Vector2f(m_fillmax);
+
+        DDAState next = state;
+        next.mint = t_next;
+
+        const Float next_threshold = t_next + dr::Epsilon<Float> * 2.f;
+
+        auto crossed =
+            (dt <= next_threshold) && !(t_turn_fwd <= next_threshold);
+        dr::masked(next.pi, crossed && active) += step;
+
+        if constexpr (TraversalType == SphericalTraversalType::Full3D) {
+            next.pi.y() = dr::clip(next.pi.y(), 0, m_resolution.y() - 1);
+
+            dr::masked(next.pi.y(), on_axis) = dr::select(
+                dr::fmadd(t_next, d.z(), o.z()) > 0.f, 0, m_resolution.y() - 1);
+
+            dr::masked(next.pi.z(), next.pi.z() < 0) = m_resolution.z() - 1;
+            dr::masked(next.pi.z(), next.pi.z() >= m_resolution.z()) = 0;
+        }
+
+        return { ExtremumSegment(state.mint, t_next, m_scale * extremum),
+                 next };
     }
 
     /** \brief Spherical-grid traversal algorithm.
@@ -204,7 +335,7 @@ public:
 
         RayCoeffs rc = ray_coeffs(o, d);
 
-        Point3f p = l_ray(mint + dr::Epsilon<Float> * 10.f);
+        Point3f p = l_ray(mint);
         Float   r = dr::norm(p);
 
         // Each coordinate direction of travel reverses past its turning point.
@@ -214,34 +345,35 @@ public:
         CoordI step_after = dr::zeros<CoordI>();
         CoordF t_turn     = -dr::Infinity<Float>;
 
-        pi.x()         = radial_idx(r);
         t_turn.x()     = -rc.b * rc.inv_a;  // closest approach to the origin
         step_after.x() = 1;
+        pi.x()         =
+            radial_idx(r, idx_bias(m_eps.x(), dr::fmadd(mint, rc.a, rc.b)));
 
         Mask on_axis = false;
 
         if constexpr (TraversalType == SphericalTraversalType::Full3D) {
             on_axis = on_axis_ray(o, d);
-            pi.y()  = theta_idx(p, r, on_axis);
-            pi.z()  = phi_idx(p);
+            pi.y()  = theta_idx(p, r, on_axis, idx_bias(m_eps.y(), -dr::fmadd(mint, rc.n1, rc.n0)));
+            pi.z()  = phi_idx(p, idx_bias(m_eps.z(), rc.phi_dot));
 
             // d/dt cos(theta(t)) has shape n0+n1*t/r(t) with r(t) positive.
             // the turning point is therefore -n0/n1 and the index grows when
             // n1 is negative. n1 == 0 has a turning point on the xy plane, and
             // step is monotonic with sign n0.
-            Float n0 = dr::fmsub(d.z(), rc.o_sqr, o.z() * rc.b);
-            Float n1 = dr::fmsub(rc.b, d.z(), rc.a * o.z());
-            Mask  no_turn = n1 == 0.f;
+            Mask no_turn = rc.n1 == 0.f;
 
-            t_turn.y()     = dr::select(no_turn, -dr::Infinity<Float>, -n0 / n1);
+            t_turn.y() =
+                dr::select(no_turn, -dr::Infinity<Float>, -rc.n0 / rc.n1);
+
             // ray on axis: turn distance is distance to origin
             dr::masked(t_turn.y(), on_axis) = -o.z() * dr::rcp(d.z());
 
             step_after.y() =
-                dr::select(dr::select(no_turn, n0, n1) < 0.f, 1, -1);
+                dr::select(dr::select(no_turn, rc.n0, rc.n1) < 0.f, 1, -1);
 
             // Direction determined by clockwise direction, no turns.
-            step_after.z() = dr::select(dr::cross(o, d).z() > 0.f, 1, -1);
+            step_after.z() = dr::select(rc.phi_dot > 0.f, 1, -1);
         }
 
         struct LoopState {
@@ -520,6 +652,8 @@ private:
         Float disc_base;
         /// Cone terms: d_z^2, o_z^2, d_z o_z, and k = |d_z o - o_z d|^2
         Float dz2, oz2, dzoz, k;
+        /// d/dt cos(theta) has the sign of n0 + n1 t; d/dt phi that of phi_dot
+        Float n0, n1, phi_dot;
     };
 
     static RayCoeffs ray_coeffs(const Point3f &o, const Vector3f &d) {
@@ -528,16 +662,26 @@ private:
         rc.b         = dr::dot(o, d);
         rc.o_sqr     = dr::squared_norm(o);
         rc.inv_a     = dr::rcp(rc.a);
-        rc.disc_base = dr::fmsub(rc.b, rc.b, rc.a * rc.o_sqr);
+
+        Vector3f c   = dr::cross(o, d);
+        rc.disc_base = -dr::squared_norm(c);
 
         if constexpr (TraversalType == SphericalTraversalType::Full3D) {
             rc.dz2       = dr::square(d.z());
             rc.oz2       = dr::square(o.z());
             rc.dzoz      = d.z() * o.z();
-            rc.k         = dr::fmadd(rc.dz2, rc.o_sqr,
-                                    dr::fmsub(rc.a, rc.oz2, 2.f * rc.b * rc.dzoz));
+            rc.k         = dr::squared_norm(Vector2f(c.x(), c.y()));
+            rc.n0        = dr::fmsub(d.z(), rc.o_sqr, o.z() * rc.b);
+            rc.n1        = dr::fmsub(rc.b, d.z(), rc.a * o.z());
+            rc.phi_dot   = c.z();
         }
         return rc;
+    }
+
+    /// Signed tolerance sending a query that sits on a cell boundary into the
+    /// cell it is heading into. `rate` is the derivative of the cell coordinate.
+    static Float idx_bias(ScalarFloat tol, Float rate) {
+        return dr::select(rate < 0.f, Float(-tol), Float(tol));
     }
 
     static Float forward(Float t, Mask valid, Float threshold) {
@@ -615,27 +759,32 @@ private:
 
     /// Whether the local ray runs along the vertical axis
     Mask on_axis_ray(const Point3f &o, const Vector3f &d) const {
-        return dr::squared_norm(Vector2f(o.x(), o.y())) < m_axis_eps
-            && dr::squared_norm(Vector2f(d.x(), d.y())) < m_axis_eps;
+        const ScalarFloat tol = math::RayEpsilon<ScalarFloat>;
+        return dr::squared_norm(Vector2f(o.x(), o.y())) <= tol * dr::squared_norm(o)
+            && dr::squared_norm(Vector2f(d.x(), d.y())) <= tol * dr::squared_norm(d);
     }
 
     /// Shell index for radius `r`. Using -1 and resolution.x() as sentinels
-    /// for the fillmin and fillmax exterior regions.
-    Int32 radial_idx(Float r) const {
-        return dr::clip(dr::floor2int<Int32>((r - m_rmin) * m_idr), -1, m_resolution.x());
+    /// for the fillmin and fillmax exterior regions. `bias` shifts the cell
+    /// coordinate, see \ref m_eps.
+    Int32 radial_idx(Float r, Float bias = 0.f) const {
+        return dr::clip(
+            dr::floor2int<Int32>(dr::fmadd(r - m_rmin, m_idr, bias)),
+            -1, m_resolution.x());
     }
 
     /// Zenithal cell index w.r.t vertical axis. for position `p` at radius
     /// `r`. `on_axis` re-derives the pole cell from the sign of z instead.
-    Int32 theta_idx(const Point3f &p, Float r, Mask on_axis) const {
+    Int32 theta_idx(const Point3f &p, Float r, Mask on_axis, Float bias = 0.f) const {
         Int32 result( 0 );
 
         Float theta =
             dr::acos(p.z() * dr::rcp(dr::maximum(r, dr::Smallest<Float>) ) )
             * dr::InvPi<Float>;
         dr::masked(result, !on_axis) =
-            dr::clip( dr::floor2int<Int32>(theta*Float(m_resolution.y() ) ),
-                      0, m_resolution.y() - 1);
+            dr::clip(
+                dr::floor2int<Int32>( dr::fmadd(theta, Float(m_resolution.y()), bias) ),
+                0, m_resolution.y() - 1);
 
         if (unlikely(dr::any_or<true>(on_axis)))
             dr::masked(result, on_axis)  =
@@ -645,9 +794,13 @@ private:
     }
 
     /// Azimuth cell index for position `p`, wrapped into [0, resolution.z()).
-    Int32 phi_idx(const Point3f &p) const {
-        return dr::clip( (dr::atan2(p.y(), p.x()) * dr::InvTwoPi<Float> + 0.5f)
-                * Float(m_resolution.z()), 0, m_resolution.z() - 1);
+    Int32 phi_idx(const Point3f &p, Float bias = 0.f) const {
+        Int32 i = dr::floor2int<Int32>(
+            dr::fmadd(dr::atan2(p.y(), p.x()) * dr::InvTwoPi<Float> + 0.5f,
+                      Float(m_resolution.z()), bias));
+        dr::masked(i, i < 0) += m_resolution.z();
+        dr::masked(i, i >= m_resolution.z()) -= m_resolution.z();
+        return i;
     }
 
 private:
@@ -660,9 +813,8 @@ private:
     ScalarFloat m_dr, m_idr;
     ScalarFloat m_dtheta, m_dphi;
 
-    /// Whether the local ray runs along vertical polar axis, within a tolerance
-    /// defined by \ref m_axis_eps
-    const ScalarFloat m_axis_eps = ScalarFloat(1e-6);
+    /// Per-dimension tolerance on a cell dimension
+    ScalarVector3f m_eps;
 
     ScalarAffineTransform4f m_to_local;
 };

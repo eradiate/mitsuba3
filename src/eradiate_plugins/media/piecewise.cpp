@@ -161,7 +161,7 @@ template <typename Float, typename Spectrum>
 class PiecewiseMedium final : public Medium<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
-                   m_phase_function, m_extremum_structure,
+                   m_phase_function, m_extremum_structure, m_extrema,
                    m_ddis_phase_function, m_ddis_threshold,
                    create_ddis_phase_function, update_ddis_phase_function)
     MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, PhaseFunction, ExtremumStructure)
@@ -187,6 +187,7 @@ public:
         // Create a default global extremum structure.
         m_extremum_structure =
             PluginManager::instance()->create_object<ExtremumStructure>(Properties("extremum_global"));
+        m_extrema = { m_extremum_structure };
 
         precompute_optical_thickness();
 

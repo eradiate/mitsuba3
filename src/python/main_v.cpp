@@ -122,6 +122,7 @@ MI_PY_DECLARE(VolumeGrid);
 
 // ERADIATE_CHANGE_BEGIN
 MI_PY_DECLARE(ExtremumSegment);
+MI_PY_DECLARE(DDAState);
 MI_PY_DECLARE(ExtremumStructure);
 // ERADIATE_CHANGE_END
 
@@ -240,6 +241,7 @@ NB_MODULE(MI_VARIANT_NAME, m) {
 
 // ERADIATE_CHANGE_BEGIN
     MI_PY_IMPORT(ExtremumSegment);
+    MI_PY_IMPORT(DDAState);
     MI_PY_IMPORT(ExtremumStructure);
 // ERADIATE_CHANGE_END
 

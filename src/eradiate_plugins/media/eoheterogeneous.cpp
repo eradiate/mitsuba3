@@ -87,7 +87,7 @@ template <typename Float, typename Spectrum>
 class EOHeterogeneousMedium final : public Medium<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
-                    m_phase_function, m_extremum_structure,
+                    m_phase_function, m_extremum_structure, m_extrema,
                     m_ddis_phase_function, m_ddis_threshold,
                     create_ddis_phase_function, update_ddis_phase_function
                 )
@@ -119,6 +119,7 @@ public:
             m_extremum_structure =
                 PluginManager::instance()->create_object<ExtremumStructure>(Properties("extremum_global"));
         }
+        m_extrema = { m_extremum_structure };
 
         m_ddis_threshold = props.get<ScalarFloat>("ddis_threshold", 0.1f);
 
