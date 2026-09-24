@@ -179,6 +179,42 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
             "majorant optical thickness until `target_ot` is reached. Returns "
             "(distance, leftover_ot); `distance` is infinite if `target_ot` "
             "is not reached before `maxt`.");
+    cls.def("track_test",
+            [](Ptr ptr, const Ray3f &ray, UInt32 seed, bool ratio,
+               bool use_dda, Mask active) {
+                using TrackingStateType = TrackingState<Float, Spectrum>;
+
+                auto [mei, mint, maxt] =
+                    ptr->prepare_medium_traversal(ray, active);
+                active &= dr::isfinite(maxt) && mint < maxt;
+
+                dr::PCG32<UInt32> rng;
+                rng.seed(rng.PCG32_DEFAULT_STATE, dr::uint64_array_t<Float>(seed));
+                Float target_ot =
+                    -dr::log(1.f - rng.template next_float<Float>(active));
+
+                TrackingStateType state{ ray, rng, mei, target_ot,
+                                         ptr->use_rrt(),
+                                         ptr->has_spectral_extinction(),
+                                         0u, UnpolarizedSpectrum(1.f) };
+                auto func = ratio ? ratio_track_segment<Float, Spectrum>
+                                  : delta_track_segment<Float, Spectrum>;
+
+                if (use_dda)
+                    dr::masked(state, active) = ptr->dda_track(
+                        ptr->dda_init(ray, mint, maxt, active), state,
+                        UInt32(0), func, active);
+                else
+                    dr::masked(state, active) =
+                        ptr->extremum_structure()->traverse_extremum(
+                            ray, mint, maxt, UInt32(0), state, func, active);
+
+                return std::make_tuple(state.mei.t, state.throughput);
+            },
+            "ray"_a, "seed"_a, "ratio"_a, "use_dda"_a, "active"_a = true,
+            "Test utility: delta (or ratio) tracking along `ray`, through "
+            "`dda_track` or `traverse_extremum`. Returns (distance, "
+            "throughput).");
 // #ERADIATE_CHANGE_END
 }
 

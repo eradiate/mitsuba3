@@ -38,7 +38,9 @@ struct TrackingState {
 
 /**
  * \brief Signature of the tracking function callback accepted by
- * ``ExtremumStructures::traverse_extremum``.
+ * ``ExtremumStructure::traverse_extremum`` and ``Medium::dda_track``.
+ *
+ * One call is one collision attempt within \c segment, not one segment.
  *
  * \param segment
  *      An extremum segment along a ray.
@@ -58,11 +60,12 @@ struct TrackingState {
  *                  interaction or terminated for other reasons will return
  *                  ``false``, prompting the termination of the traversal.
  */
-template< typename Float, typename Spectrum >
+template <typename Float, typename Spectrum,
+          typename TrackState = TrackingState<Float, Spectrum>>
 using TrackingFunction =
     std::pair<dr::mask_t<Float>, dr::mask_t<Float>>(
     const ExtremumSegment<Float, Spectrum>& /*segment*/,
-    TrackingState<Float, Spectrum>& /*state*/,
+    TrackState& /*state*/,
     const dr::uint32_array_t<Float>& /*channel*/,
     dr::mask_t<Float> /*active*/
 );
@@ -82,6 +85,176 @@ Float index_spectrum(
         DRJIT_MARK_USED(idx);
     }
     return m;
+}
+
+/**
+ * \brief Delta tracking over one extremum segment.
+ *
+ * A \ref TrackingFunction: pass it to ``Medium::dda_track`` or
+ * ``ExtremumStructure::traverse_extremum``. Terminates a lane on a real
+ * scattering event and records the sampled medium component.
+ */
+template <typename Float, typename Spectrum>
+std::pair<dr::mask_t<Float>, dr::mask_t<Float>>
+delta_track_segment(const ExtremumSegment<Float, Spectrum> &segment,
+                    TrackingState<Float, Spectrum> &state,
+                    const dr::uint32_array_t<Float> &channel,
+                    dr::mask_t<Float> active) {
+    using Mask                = dr::mask_t<Float>;
+    using UnpolarizedSpectrum = unpolarized_spectrum_t<Spectrum>;
+
+    UnpolarizedSpectrum &throughput = state.throughput;
+    auto &rng                       = state.rng;
+    auto &mei                       = state.mei;
+
+    auto medium           = mei.medium;
+    Mask act_spectral     = state.has_spectral_extinction && active;
+    Mask act_not_spectral = !state.has_spectral_extinction && active;
+
+    Float mint = dr::select(mei.is_valid(),
+                            dr::maximum(segment.mint, mei.t), segment.mint);
+
+    Float segment_ot = (segment.maxt - mint) * segment.majorant();
+    Mask sampled     = (state.target_ot < segment_ot) && active;
+    Float maxt       = segment.maxt;
+
+    if (dr::any_or<true>(sampled))
+        dr::masked(maxt, sampled) =
+            mint + state.target_ot /
+                       dr::maximum(segment.majorant(), dr::Epsilon<Float>);
+
+    Float dt = maxt - mint;
+
+    if (dr::any_or<true>(act_spectral)) {
+        UnpolarizedSpectrum tr = dr::exp(-dt * segment.majorant());
+        Float pdf              = index_spectrum<Float, Spectrum>(
+            dr::select(sampled, tr * segment.majorant(), tr), channel);
+        dr::masked(throughput, act_spectral) *= tr / pdf;
+    }
+
+    if (dr::any_or<true>(sampled)) {
+        mei.t = maxt;
+        mei.p = state.ray(maxt);
+
+        auto medium_sample = medium->sample_scattering_properties(
+            mei, segment.majorant(), rng.template next_float<Float>(sampled),
+            sampled);
+
+        UnpolarizedSpectrum &sigma_s = medium_sample.sigma_s;
+        UnpolarizedSpectrum &sigma_n = medium_sample.sigma_n;
+        UnpolarizedSpectrum &sigma_t = medium_sample.sigma_t;
+
+        Float null_scatter_prob = dr::mean(sigma_n / segment.majorant());
+        Mask null_scatter =
+            (rng.template next_float<Float>(sampled) < null_scatter_prob) &&
+            sampled;
+        Mask real_scatter = !null_scatter && sampled;
+
+        if (dr::any_or<true>(null_scatter && act_spectral))
+            dr::masked(throughput, null_scatter && act_spectral) *=
+                sigma_n / null_scatter_prob;
+
+        if (dr::any_or<true>(real_scatter)) {
+            if (dr::any_or<true>(act_spectral))
+                dr::masked(throughput, real_scatter && act_spectral) *=
+                    sigma_s / (1.f - null_scatter_prob);
+
+            if (dr::any_or<true>(act_not_spectral))
+                dr::masked(throughput, real_scatter && act_not_spectral) *=
+                    sigma_s / sigma_t;
+
+            dr::masked(state.sampled_medium_component, real_scatter) =
+                medium_sample.sampled_component;
+
+            active &= !real_scatter;
+        }
+
+        dr::masked(state.target_ot, sampled) =
+            -dr::log(1.f - rng.template next_float<Float>(sampled));
+    }
+
+    dr::masked(mei.t, !sampled) = dr::Infinity<Float>;
+    dr::masked(state.target_ot, !sampled && active) -= segment_ot;
+
+    return { /*advance=*/!sampled, active };
+}
+
+/**
+ * \brief Ratio tracking over one extremum segment, residual ratio tracking
+ * when <tt>state.use_rrt</tt> is set.
+ *
+ * A \ref TrackingFunction. Never terminates a lane: a shadow ray runs to the
+ * end of its range.
+ */
+template <typename Float, typename Spectrum>
+std::pair<dr::mask_t<Float>, dr::mask_t<Float>>
+ratio_track_segment(const ExtremumSegment<Float, Spectrum> &segment,
+                    TrackingState<Float, Spectrum> &state,
+                    const dr::uint32_array_t<Float> &channel,
+                    dr::mask_t<Float> active) {
+    using Mask                = dr::mask_t<Float>;
+    using UnpolarizedSpectrum = unpolarized_spectrum_t<Spectrum>;
+
+    UnpolarizedSpectrum &throughput = state.throughput;
+    auto &rng                       = state.rng;
+    auto &mei                       = state.mei;
+    Mask use_rrt                    = state.use_rrt;
+
+    auto medium           = mei.medium;
+    Mask act_spectral     = state.has_spectral_extinction && active;
+    Mask act_not_spectral = !state.has_spectral_extinction && active;
+
+    Float control           = dr::select(use_rrt, segment.minorant(), 0.f);
+    Float residual_majorant = segment.majorant() - control;
+
+    Float mint = dr::select(mei.is_valid(),
+                            dr::maximum(segment.mint, mei.t), segment.mint);
+
+    Float segment_ot = (segment.maxt - mint) * residual_majorant;
+    Mask sampled     = (state.target_ot < segment_ot) && active;
+    Float maxt       = segment.maxt;
+
+    if (dr::any_or<true>(sampled))
+        dr::masked(maxt, sampled) =
+            mint + state.target_ot /
+                       dr::maximum(residual_majorant, dr::Epsilon<Float>);
+
+    Float dt = maxt - mint;
+
+    if (dr::any_or<true>(use_rrt))
+        dr::masked(throughput, active && use_rrt) *= dr::exp(-dt * control);
+
+    if (dr::any_or<true>(act_spectral)) {
+        UnpolarizedSpectrum tr = dr::exp(-dt * residual_majorant);
+        Float pdf              = index_spectrum<Float, Spectrum>(
+            dr::select(sampled, tr * residual_majorant, tr), channel);
+        dr::masked(throughput, act_spectral) *= tr / pdf;
+    }
+
+    if (dr::any_or<true>(sampled)) {
+        mei.t = maxt;
+        mei.p = state.ray(maxt);
+
+        UnpolarizedSpectrum sigma_t, sigma_n;
+        std::tie(std::ignore, std::ignore, sigma_t) =
+            medium->get_scattering_coefficients(mei, sampled);
+        sigma_n = segment.majorant() - sigma_t;
+
+        if (dr::any_or<true>(act_spectral))
+            dr::masked(throughput, sampled && act_spectral) *= sigma_n;
+
+        if (dr::any_or<true>(act_not_spectral))
+            dr::masked(throughput, sampled && act_not_spectral) *= dr::maximum(
+                1.f - (sigma_t - control) / residual_majorant, 0.f);
+
+        dr::masked(state.target_ot, sampled) =
+            -dr::log(1.f - rng.template next_float<Float>(active));
+    }
+
+    dr::masked(mei.t, !sampled) = dr::Infinity<Float>;
+    dr::masked(state.target_ot, !sampled && active) -= segment_ot;
+
+    return { /*advance=*/!sampled, active };
 }
 
 NAMESPACE_END(mitsuba)

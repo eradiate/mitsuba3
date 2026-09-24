@@ -7,6 +7,8 @@
 // #ERADIATE_CHANGE_BEGIN: DDA support
 #include <mitsuba/render/eradiate/dda.h>
 #include <mitsuba/render/eradiate/extremum_segment.h>
+#include <mitsuba/render/eradiate/tracking.h>
+#include <drjit/while_loop.h>
 // #ERADIATE_CHANGE_END
 #include <drjit/call.h>
 
@@ -270,6 +272,56 @@ public:
     /// By-value \ref dda_step, returning the segment and the advanced state.
     std::pair<ExtremumSegment, DDAStateList>
     dda_next(const DDAStateList &state, Mask active = true) const;
+
+    /**
+     * \brief Run \c func over the segments of a DDA traversal until it
+     * deactivates every lane or the range is exhausted.
+     *
+     * \c func is called once per collision attempt. A lane that stays inside
+     * its segment (<tt>advance == false</tt>) keeps both the segment and its
+     * traversal state until the next call.
+     *
+     * \param dda
+     *      Traversal state from \ref dda_init.
+     * \param state
+     *      Tracking state handed to \c func, returned once tracking ends.
+     */
+    template <typename TrackState>
+    TrackState dda_track(const DDAStateList &dda, const TrackState &state,
+                         const UInt32 &channel,
+                         TrackingFunction<Float, Spectrum, TrackState> *func,
+                         Mask active = true) const {
+        struct LoopState {
+            DDAStateList dda;
+            ExtremumSegment segment;
+            TrackState state;
+            Mask advance;
+            Mask active;
+
+            DRJIT_STRUCT(LoopState, dda, segment, state, advance, active)
+        };
+
+        active &= dda.mint < dda.maxt;
+        LoopState ls = { dda, dr::zeros<ExtremumSegment>(), state, active,
+                         active };
+
+        dr::tie(ls) = dr::while_loop(
+            dr::make_tuple(ls),
+            [](const LoopState &ls) { return ls.active; },
+            [this, channel, func](LoopState &ls) {
+                if (dr::any_or<true>(ls.advance))
+                    dr::masked(ls.segment, ls.advance) =
+                        dda_step(ls.dda, ls.advance);
+
+                std::tie(ls.advance, ls.active) =
+                    func(ls.segment, ls.state, channel, ls.active);
+
+                ls.active &= !ls.advance || (ls.dda.mint < ls.dda.maxt);
+            },
+            "Medium::dda_track");
+
+        return ls.state;
+    }
 // #ERADIATE_CHANGE_END
 
 // #ERADIATE_CHANGE_BEGIN: DDIS
@@ -374,6 +426,7 @@ DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::Medium)
     DRJIT_CALL_METHOD(prepare_medium_traversal)
     DRJIT_CALL_METHOD(dda_init)
     DRJIT_CALL_METHOD(dda_next)
+    DRJIT_CALL_METHOD(dda_track)
 // #ERADIATE_CHANGE_END
 DRJIT_CALL_END()
 

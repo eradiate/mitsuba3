@@ -308,3 +308,43 @@ def test_overlap_vcall_matches_direct(variants_vec_rgb):
         actual = ptr.sample_test_dda(ray, mint, maxt, target_ot)
         for e, a in zip(expected, actual):
             assert np.allclose(np.array(e), np.array(a), rtol=1e-5)
+
+
+def _track_media():
+    return [
+        _component(_grid_volume((4, 5, 3)), "extremum_grid", (2, 3, 3)),
+        _component(_spherical_volume((4, 4, 4)), "extremum_spherical", (3, 4, 4)),
+    ]
+
+
+@pytest.mark.parametrize("ratio", [False, True])
+def test_dda_track_matches_traverse_extremum(variant_scalar_rgb, ratio):
+    """Same tracking function, same draws: both routes sample the same
+    collisions, including lanes that stay in a segment across null ones."""
+    for medium in _track_media():
+        for ray in _spherical_rays() + _rays():
+            for seed in range(16):
+                expected = medium.track_test(ray, seed, ratio, use_dda=False)
+                actual = medium.track_test(ray, seed, ratio, use_dda=True)
+                for e, a in zip(expected, actual):
+                    assert np.allclose(
+                        np.array(e), np.array(a), rtol=1e-5, atol=1e-6
+                    ), (ray, seed)
+
+
+@pytest.mark.parametrize("ratio", [False, True])
+def test_dda_track_vcall_matches_traverse_extremum(variants_vec_rgb, ratio):
+    """``dda_track`` through a ``MediumPtr`` vcall, lanes diverging."""
+    rays = _spherical_rays() + _rays()
+    n_seeds = 16
+    o = np.array([np.array(r.o).reshape(-1) for r in rays] * n_seeds).T
+    d = np.array([np.array(r.d).reshape(-1) for r in rays] * n_seeds).T
+    ray = mi.Ray3f(o=mi.Point3f(o), d=mi.Vector3f(d))
+    seed = mi.UInt32(np.repeat(np.arange(n_seeds), len(rays)))
+
+    for medium in _track_media():
+        ptr = dr.full(mi.MediumPtr, medium, dr.width(seed))
+        expected = medium.track_test(ray, seed, ratio, use_dda=False)
+        actual = ptr.track_test(ray, seed, ratio, use_dda=True)
+        for e, a in zip(expected, actual):
+            assert np.allclose(np.array(e), np.array(a), rtol=1e-5, atol=1e-6)
