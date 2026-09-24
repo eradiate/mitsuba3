@@ -1,0 +1,46 @@
+<scene version='2.0.0'>
+    <path value="../../../../../../resources/data/common"/>
+    <path value="../../../../../../resources/data/tests/scenes/participating_media"/>
+
+    <default name="integrator" value="volpath"/>
+
+    <emitter type="envmap">
+        <string name="filename" value="textures/museum.exr"/>
+    </emitter>
+
+    <include filename="include/test-scene-base.xml"/>
+
+    <medium id="medium1" type="eoheterogeneous">
+        <float name="scale" value="5"/>
+
+        <volume name="sigma_t" type="gridvolume">
+            <transform name="to_world">
+                <translate x="-0.5" y="-0.5" z="-0.5"/>
+                <scale x="1.5" y="1.5" z="1.5"/>
+            </transform>
+            <string name="filename" value="textures/sigmat.vol"/>
+        </volume>
+
+        <extremum type="extremum_grid">
+            <vector name="resolution" value="8, 8, 8"/>
+        </extremum>
+
+        <rgb name="albedo" value="0.99, 0.5, 0.5"/>
+        <phase type="isotropic"/>
+    </medium>
+
+    <shape type="obj">
+        <string name="filename" value="meshes/unit_cube_centered.obj"/>
+        <bsdf type="null"/>
+        <ref id="medium1" name="interior"/>
+        <transform name="to_world">
+            <scale x="1.5" y="1.5" z="1.5"/>
+        </transform>
+    </shape>
+
+    <shape type="sphere">
+        <float name="radius" value="0.3"/>
+        <bsdf type="diffuse"/>
+        <ref id="medium1" name="exterior"/>
+    </shape>
+</scene>

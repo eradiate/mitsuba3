@@ -1,0 +1,42 @@
+<scene version='2.0.0'>
+    <path value="../../../../../../resources/data/common"/>
+    <path value="../../../../../../resources/data/tests/scenes/participating_media"/>
+
+    <default name="integrator" value="volpath"/>
+
+    <emitter type="envmap">
+        <string name="filename" value="textures/museum.exr"/>
+    </emitter>
+
+    <include filename="include/test-scene-base.xml"/>
+
+    <medium id="medium1" type="eoheterogeneous">
+        <float name="scale" value="2"/>
+
+        <volume name="sigma_t" type="sphericalcoordsvolume">
+            <float name="rmin" value="0.4"/>
+            <float name="rmax" value="1"/>
+            <volume name="volume" type="gridvolume">
+                <string name="filename" value="textures/sigmat_spherical.vol"/>
+            </volume>
+        </volume>
+
+        <extremum type="extremum_spherical">
+            <vector name="resolution" value="16, 1, 1"/>
+        </extremum>
+
+        <rgb name="albedo" value="0.99, 0.7, 0.5"/>
+        <phase type="isotropic"/>
+    </medium>
+
+    <shape type="sphere">
+        <bsdf type="null"/>
+        <ref id="medium1" name="interior"/>
+    </shape>
+
+    <shape type="sphere">
+        <float name="radius" value="0.4"/>
+        <bsdf type="diffuse"/>
+        <ref id="medium1" name="exterior"/>
+    </shape>
+</scene>
