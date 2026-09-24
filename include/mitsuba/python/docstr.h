@@ -5878,6 +5878,183 @@ static const char *__doc_mitsuba_Object_type = R"doc(Return the object type. The
 
 static const char *__doc_mitsuba_Object_variant_name = R"doc(Return the instance variant (empty if this is not a variant object))doc";
 
+static const char *__doc_mitsuba_OptixDenoiser =
+R"doc(Wrapper for the OptiX AI denoiser
+
+The OptiX AI denoiser is wrapped in this object such that it can work
+directly with Mitsuba types and its conventions.
+
+The denoiser works best when applied to noisy renderings that were
+produced with a Film which used the `box` ReconstructionFilter. With a
+filter that spans multiple pixels, the denoiser might identify some
+local variance as a feature of the scene and will not denoise it.)doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_2 = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_3 = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_4 = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_5 = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_6 = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_7 = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_8 = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_9 = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_10 = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_OptixDenoiser =
+R"doc(Constructs an OptiX denoiser
+
+Parameter ``input_size``:
+    Resolution of noisy images that will be fed to the denoiser.
+
+Parameter ``albedo``:
+    Whether or not albedo information will also be given to the
+    denoiser. This parameter is optional, by default it is false.
+
+Parameter ``normals``:
+    Whether or not shading normals information will also be given to
+    the denoiser. This parameter is optional, by default it is false.
+
+Parameter ``temporal``:
+    Whether or not temporal information will also be given to the
+    denoiser. This parameter is optional, by default it is false.
+
+Parameter ``denoise_alpha``:
+    Whether or not the alpha channel (if specified in the noisy input)
+    should be denoised too. This parameter is optional, by default it
+    is false.
+
+Returns:
+    A callable object which will apply the OptiX denoiser.)doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_OptixDenoiser_2 = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_class_name = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_m_denoiser = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_m_hdr_intensity = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_m_input_size = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_m_options = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_m_scratch = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_m_scratch_size = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_m_state = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_m_state_size = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_m_temporal = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_operator_assign = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_operator_call =
+R"doc(Apply denoiser on inputs which are TensorXf objects.
+
+Parameter ``noisy``:
+    The noisy input. (tensor shape: (width, height, 3 | 4))
+
+Parameter ``albedo``:
+    Albedo information of the noisy rendering. This parameter is
+    optional unless the OptixDenoiser was built with albedo support.
+    (tensor shape: (width, height, 3))
+
+Parameter ``normals``:
+    Shading normal information of the noisy rendering. The normals
+    must be in the coordinate frame of the sensor which was used to
+    render the noisy input. This parameter is optional unless the
+    OptixDenoiser was built with normals support. (tensor shape:
+    (width, height, 3))
+
+Parameter ``to_sensor``:
+    A Transform4f which is applied to the ``normals`` parameter before
+    denoising. This should be used to transform the normals into the
+    correct coordinate frame. This parameter is optional, by default
+    no transformation is applied.
+
+Parameter ``flow``:
+    With temporal denoising, this parameter is the optical flow
+    between the previous frame and the current one. It should capture
+    the 2D motion of each individual pixel. When this parameter is
+    unknown, it can be set to a zero-initialized TensorXf of the
+    correct size and still produce convincing results. This parameter
+    is optional unless the OptixDenoiser was built with temporal
+    denoising support. (tensor shape: (width, height, 2))
+
+Parameter ``previous_denoised``:
+    With temporal denoising, the previous denoised frame should be
+    passed here. For the very first frame, the OptiX documentation
+    recommends passing the noisy input for this argument. This
+    parameter is optional unless the OptixDenoiser was built with
+    temporal denoising support. (tensor shape: (width, height, 3 | 4))
+
+Returns:
+    The denoised input.)doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_operator_call_2 =
+R"doc(Apply denoiser on inputs which are Bitmap objects.
+
+Parameter ``noisy``:
+    The noisy input. When passing additional information like albedo
+    or normals to the denoiser, this Bitmap object must be a
+    MultiChannel bitmap.
+
+Parameter ``albedo_ch``:
+    The name of the channel in the ``noisy`` parameter which contains
+    the albedo information of the noisy rendering. This parameter is
+    optional unless the OptixDenoiser was built with albedo support.
+
+Parameter ``normals_ch``:
+    The name of the channel in the ``noisy`` parameter which contains
+    the shading normal information of the noisy rendering. The normals
+    must be in the coordinate frame of the sensor which was used to
+    render the noisy input. This parameter is optional unless the
+    OptixDenoiser was built with normals support.
+
+Parameter ``to_sensor``:
+    A Transform4f which is applied to the ``normals`` parameter before
+    denoising. This should be used to transform the normals into the
+    correct coordinate frame. This parameter is optional, by default
+    no transformation is applied.
+
+Parameter ``flow_ch``:
+    With temporal denoising, this parameter is name of the channel in
+    the ``noisy`` parameter which contains the optical flow between
+    the previous frame and the current one. It should capture the 2D
+    motion of each individual pixel. When this parameter is unknown,
+    it can be set to a zero-initialized TensorXf of the correct size
+    and still produce convincing results. This parameter is optional
+    unless the OptixDenoiser was built with temporal denoising
+    support.
+
+Parameter ``previous_denoised_ch``:
+    With temporal denoising, this parameter is name of the channel in
+    the ``noisy`` parameter which contains the previous denoised
+    frame. For the very first frame, the OptiX documentation
+    recommends passing the noisy input for this argument. This
+    parameter is optional unless the OptixDenoiser was built with
+    temporal denoising support.
+
+Parameter ``noisy_ch``:
+    The name of the channel in the ``noisy`` parameter which contains
+    the shading normal information of the noisy rendering.
+
+Returns:
+    The denoised input.)doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_to_string = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixDenoiser_validate_input = R"doc(Helper function to validate tensor sizes)doc";
+
 static const char *__doc_mitsuba_OptixProgramGroupMapping = R"doc()doc";
 
 static const char *__doc_mitsuba_OptixProgramGroupMapping_OptixProgramGroupMapping = R"doc()doc";
