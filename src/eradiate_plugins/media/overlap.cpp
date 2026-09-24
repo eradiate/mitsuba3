@@ -62,7 +62,7 @@ public:
                     m_ddis_phase_function, m_ddis_threshold,
                     create_ddis_phase_function
                 )
-    MI_IMPORT_TYPES(Scene, Sampler, MediumPtr, ExtremumStructure,
+    MI_IMPORT_TYPES(Scene, Sampler, ExtremumStructure,
                     ExtremumStructurePtr, PhaseFunction, PhaseFunctionPtr)
 
     using FloatStorage = DynamicBuffer<Float>;
@@ -87,9 +87,14 @@ public:
         if (m_components.size() > MAX_OVERLAPPING_VOLUMES)
             Throw("overlapping medium: too many components (%zu > %zu)", m_components.size(), MAX_OVERLAPPING_VOLUMES);
 
-        m_components_dr = dr::load<DynamicBuffer<MediumPtr>>(
-            m_components.data(), m_components.size());
-        dr::eval(m_components_dr);
+        std::vector<const PhaseFunction *> phase_functions;
+        phase_functions.reserve(m_components.size());
+        for (const auto &component : m_components)
+            phase_functions.push_back(component->phase_function());
+
+        m_phase_functions_dr = dr::load<DynamicBuffer<PhaseFunctionPtr>>(
+            phase_functions.data(), phase_functions.size());
+        dr::eval(m_phase_functions_dr);
 
         m_phase_function = m_components[0]->phase_function();
 
@@ -180,7 +185,8 @@ public:
     }
 
     PhaseFunctionPtr phase_function(const UInt32 &component, Mask active /*= true*/) const override {
-        return dr::gather<MediumPtr>(m_components_dr, component, active)->phase_function();
+        return dr::gather<PhaseFunctionPtr>(m_phase_functions_dr, component,
+                                            active);
     }
 
     MediumSample sample_scattering_properties(const MediumInteraction3f &mei,
@@ -320,10 +326,10 @@ protected:
 
 private:
     std::vector<ref<Base>> m_components;
-    DynamicBuffer<MediumPtr> m_components_dr;
+    DynamicBuffer<PhaseFunctionPtr> m_phase_functions_dr;
     ScalarBoundingBox3f m_aabb;
 
-    MI_TRAVERSE_CB(Base, m_aabb, m_components_dr)
+    MI_TRAVERSE_CB(Base, m_aabb, m_phase_functions_dr)
 };
 
 MI_EXPORT_PLUGIN(OverlappingMedium)
