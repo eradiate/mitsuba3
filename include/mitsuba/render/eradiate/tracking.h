@@ -38,7 +38,7 @@ struct TrackingState {
 
 /**
  * \brief Signature of the tracking function callback accepted by
- * ``ExtremumStructure::traverse_extremum`` and ``Medium::dda_track``.
+ * ``Medium::dda_track``.
  *
  * One call is one collision attempt within \c segment, not one segment.
  *
@@ -90,8 +90,7 @@ Float index_spectrum(
 /**
  * \brief Delta tracking over one extremum segment.
  *
- * A \ref TrackingFunction: pass it to ``Medium::dda_track`` or
- * ``ExtremumStructure::traverse_extremum``. Terminates a lane on a real
+ * A \ref TrackingFunction: pass it to ``Medium::dda_track``. Terminates a lane on a real
  * scattering event and records the sampled medium component.
  */
 template <typename Float, typename Spectrum>
@@ -248,7 +247,7 @@ ratio_track_segment(const ExtremumSegment<Float, Spectrum> &segment,
                 1.f - (sigma_t - control) / residual_majorant, 0.f);
 
         dr::masked(state.target_ot, sampled) =
-            -dr::log(1.f - rng.template next_float<Float>(active));
+            -dr::log(1.f - rng.template next_float<Float>(sampled));
     }
 
     dr::masked(mei.t, !sampled) = dr::Infinity<Float>;

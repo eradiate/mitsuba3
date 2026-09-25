@@ -154,8 +154,8 @@ public:
 // #ERADIATE_CHANGE_BEGIN: DDA support
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
                     m_phase_function, m_extremum_structure, m_extrema)
+    MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, ExtremumStructure)
 // #ERADIATE_CHANGE_END
-    MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, ExtremumStructure, ExtremumStructurePtr)
 
     HeterogeneousMedium(const Properties &props) : Base(props) {
         m_is_homogeneous = false;

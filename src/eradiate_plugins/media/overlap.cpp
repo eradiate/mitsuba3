@@ -62,7 +62,7 @@ public:
                     create_ddis_phase_function
                 )
     MI_IMPORT_TYPES(Scene, Sampler, ExtremumStructure,
-                    ExtremumStructurePtr, PhaseFunction, PhaseFunctionPtr)
+                    PhaseFunction, PhaseFunctionPtr)
 
     using FloatStorage = DynamicBuffer<Float>;
     using MediumSample = MediumSample<Float, Spectrum>;

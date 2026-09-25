@@ -219,8 +219,10 @@ public:
      *      A tuple (mei, mint, maxt): ``mei`` is a  ``MediumInteraction3f``
      *      object initialized with the current ray and medium data. ``mint``
      *      and ``maxt`` represent the minimum and maximum intersection
-     *      distances of the ray with the medium's bbox. In case there are no
-     *      valid intersection, the range defaults to [0, +Inf].
+     *      distances of the ray with the medium's bbox, clipped to
+     *      <tt>[0, ray.maxt]</tt>. If that range is empty (no intersection,
+     *      box behind the origin or beyond <tt>ray.maxt</tt>), it defaults to
+     *      [0, +Inf].
      */
     std::tuple<MediumInteraction3f, Float, Float>
     prepare_medium_traversal(const Ray3f& ray, Mask active) const;
@@ -456,7 +458,6 @@ DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::Medium)
     // RRT
     DRJIT_CALL_GETTER(use_rrt)
     // Extremum Support
-    DRJIT_CALL_GETTER(extremum_structure)
     DRJIT_CALL_METHOD(prepare_medium_traversal)
     DRJIT_CALL_METHOD(dda_track)
 // #ERADIATE_CHANGE_END

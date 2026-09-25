@@ -59,9 +59,6 @@ MI_PY_EXPORT(DDAState) {
 }
 
 /// Trampoline for derived types implemented in Python
-// Note that `traverse_extremum` does not appear in this list. This is because
-// it accepts a concrete function pointer as parameter, the binding of which
-// has not been solved yet.
 MI_VARIANT class PyExtremumStructure : public ExtremumStructure<Float, Spectrum> {
 public:
     MI_IMPORT_TYPES(ExtremumStructure, Volume)
@@ -105,71 +102,8 @@ public:
     DR_TRAMPOLINE_TRAVERSE_CB(ExtremumStructure)
 };
 
-template <typename Ptr, typename Cls> void bind_extremum_structure_generic(Cls &cls) {
-    MI_PY_IMPORT_TYPES(ExtremumStructure, Medium)
-
-    cls.def("eval_1",
-            [](Ptr ptr, const Interaction3f &it, Mask active) {
-                return ptr->eval_1(it, active);
-            },
-            "it"_a, "active"_a = true,
-            D(ExtremumStructure, eval_1));
-
-
-    // Test utility: deterministic delta tracking driven by a fixed target
-    // optical thickness.
-    cls.def("sample_test",
-            [](Ptr ptr, const Ray3f &ray, Float mint, Float maxt,
-               Float target_ot, UInt32 channel, Mask active) {
-                using TrackingStateType = TrackingState<Float, Spectrum>;
-
-                TrackingStateType state = dr::zeros<TrackingStateType>();
-                state.ray       = ray;
-                state.target_ot = target_ot;
-                state.mei       = dr::zeros<MediumInteraction3f>();
-
-                state = ptr->traverse_extremum(
-                    ray, mint, maxt, channel, state,
-                    [](const ExtremumSegment &segment, TrackingStateType &state,
-                       const UInt32 &, Mask active) {
-                        Float mint = dr::select(
-                            state.mei.is_valid(),
-                            dr::maximum(segment.mint, state.mei.t),
-                            segment.mint);
-                        Float segment_ot =
-                            (segment.maxt - mint) * segment.majorant();
-                        Mask sampled = (state.target_ot < segment_ot) && active;
-
-                        Float maxt = dr::select(
-                            sampled,
-                            mint + state.target_ot /
-                                       dr::maximum(segment.majorant(),
-                                                   dr::Epsilon<Float>),
-                            segment.maxt);
-
-                        dr::masked(state.mei.t, sampled)  = maxt;
-                        dr::masked(state.mei.t, !sampled) = dr::Infinity<Float>;
-                        dr::masked(state.target_ot, !sampled && active) -=
-                            segment_ot;
-
-                        return std::pair<Mask, Mask>(/*advance=*/!sampled,
-                                                     active && !sampled);
-                    },
-                    active);
-
-                return std::make_tuple(state.mei.t, state.target_ot);
-            },
-            "ray"_a, "mint"_a, "maxt"_a, "target_ot"_a, "channel"_a = 0u,
-            "active"_a = true,
-            "Deterministic delta-tracking test utility. Traverses the extremum "
-            "structure's segments, until an interaction is sampled based on "
-            "`target_ot`. Returns (distance, leftover_ot); `distance` is "
-            "infinite if `target_ot` is not reached before `maxt`.");
-}
-
-
 MI_PY_EXPORT(ExtremumStructure) {
-    MI_PY_IMPORT_TYPES(ExtremumStructure, ExtremumStructurePtr)
+    MI_PY_IMPORT_TYPES(ExtremumStructure)
     using PyExtremumStructure = PyExtremumStructure<Float, Spectrum>;
     using Properties = mitsuba::Properties;
 
@@ -191,15 +125,10 @@ MI_PY_EXPORT(ExtremumStructure) {
              D(ExtremumStructure, dda_init))
         .def("dda_next", &ExtremumStructure::dda_next,
              "state"_a, "active"_a = true,
-             D(ExtremumStructure, dda_next));
+             D(ExtremumStructure, dda_next))
+        .def("eval_1", &ExtremumStructure::eval_1,
+             "it"_a, "active"_a = true,
+             D(ExtremumStructure, eval_1));
 
     drjit::bind_traverse(extremum);
-
-    bind_extremum_structure_generic<ExtremumStructure *>(extremum);
-
-    if constexpr (dr::is_array_v<ExtremumStructurePtr>) {
-        dr::ArrayBinding b;
-        auto extremum_ptr = dr::bind_array_t<ExtremumStructurePtr>(b, m, "ExtremumStructurePtr");
-        bind_extremum_structure_generic<ExtremumStructurePtr>(extremum_ptr);
-    }
 }

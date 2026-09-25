@@ -8,7 +8,6 @@
 #include <mitsuba/render/medium.h>
 #include <mitsuba/render/phase.h>
 #include <mitsuba/render/eradiate/tracking.h>
-#include <mitsuba/render/eradiate/extremum.h>
 #include <mitsuba/render/eradiate/extremum_segment.h>
 
 
@@ -156,7 +155,7 @@ class EOVolumetricPathIntegrator : public MonteCarloIntegrator<Float, Spectrum> 
 public:
     MI_IMPORT_BASE(MonteCarloIntegrator, m_max_depth, m_rr_depth, m_hide_emitters)
     MI_IMPORT_TYPES(Scene, Sampler, Emitter, EmitterPtr, BSDF, BSDFPtr, Medium,
-                    MediumPtr, PhaseFunction, PhaseFunctionContext, ExtremumStructure)
+                    MediumPtr, PhaseFunction, PhaseFunctionContext)
 
     using TrackingStateType = TrackingState<Float, Spectrum>;
 
@@ -510,9 +509,6 @@ public:
             }
 
             if (dr::any_or<true>(active_medium)) {
-                // Prepare Extremum traversal
-                auto extremum = medium->extremum_structure();
-
                 Float sample1 = sampler->next_1d();
                 Float sample2 = sampler->next_1d();
                 auto [seed, offset] = new_seed_offset(sample1, sample2);
@@ -533,8 +529,8 @@ public:
                 };
 
                 // Traverse extremum segments and perform delta tracking
-                state = extremum->traverse_extremum(
-                    ray, mint, maxt, channel, state,
+                state = medium->dda_track(
+                    ray, mint, maxt, state, channel,
                     &delta_track_segment<Float, Spectrum>, active_medium);
 
                 // Update throughput by the transmittance and pdf weight
@@ -1035,9 +1031,6 @@ public:
             }
 
             if (dr::any_or<true>(active_medium)) {
-                // Prepare extremum traversal
-                auto extremum = medium->extremum_structure();
-
                 Float sample1 = sampler->next_1d();
                 Float sample2 = sampler->next_1d();
                 auto [seed, offset] = new_seed_offset(sample1, sample2);
@@ -1060,8 +1053,8 @@ public:
                 // Unified Ratio Tracking and Residual Ratio Tracking approach:
                 // if `use_rrt` is false, set control to 0., which automatically
                 // devolves the algorithm to Ratio Tracking.
-                state = extremum->traverse_extremum(
-                    ray, mint, maxt, channel, state,
+                state = medium->dda_track(
+                    ray, mint, maxt, state, channel,
                     &ratio_track_segment<Float, Spectrum>, active_medium);
 
                 dr::masked(transmittance, active_medium) *= state.throughput;

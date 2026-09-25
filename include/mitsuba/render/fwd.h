@@ -119,8 +119,6 @@ template <typename Float_, typename Spectrum_> struct RenderAliases {
 // #ERADIATE_CHANGE_BEGIN: Local extremum support
     using ExtremumStructure      = mitsuba::ExtremumStructure<Float, Spectrum>;
     
-    using ExtremumStructurePtr   = dr::replace_scalar_t<Float, const ExtremumStructure *>;
-    
     using ExtremumSegment        = mitsuba::ExtremumSegment<Float, Spectrum>;
 
     using DDAState               = mitsuba::DDAState<Float, Spectrum>;
@@ -217,6 +215,5 @@ template <typename Float_, typename Spectrum_> struct RenderAliases {
     using SensorPtr              = typename RenderAliases::SensorPtr;                              \
 /* #ERADIATE_CHANGE_BEGIN: Local extremum support */                                               \
     using ExtremumStructure      = typename RenderAliases::ExtremumStructure;                      \
-    using ExtremumStructurePtr   = typename RenderAliases::ExtremumStructurePtr;                   \
 /* #ERADIATE_CHANGE_END */                                                                         
 NAMESPACE_END(mitsuba)

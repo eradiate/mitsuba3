@@ -5,8 +5,6 @@
 #include <mitsuba/render/volume.h>
 #include <mitsuba/render/eradiate/extremum_segment.h>
 #include <mitsuba/render/eradiate/dda.h>
-#include <mitsuba/render/eradiate/tracking.h>
-#include <drjit/call.h>
 
 #include <optional>
 
@@ -20,9 +18,9 @@ NAMESPACE_BEGIN(mitsuba)
  * This enables efficient use of tracking algorithms with locally-adaptive
  * majorants and minorants.
  *
- * To minimize virtual function overhead, the ``traverse_extremum()`` method
- * encapsulates the entire traversal loop internally, requiring only a single
- * virtual call per distance sample.
+ * Structures are traversed through ``dda_init`` / ``dda_next``, driven by
+ * the owning ``Medium``. They are host-side objects: no method is reachable
+ * through a Dr.Jit vcall.
  *
  * The extremum structure needs to be built using the ``update_extremum``
  * function, it is **not** called automatically in the constructor. The caller,
@@ -32,9 +30,6 @@ template <typename Float, typename Spectrum>
 class MI_EXPORT_LIB ExtremumStructure : public JitObject<ExtremumStructure<Float, Spectrum>> {
 public:
     MI_IMPORT_TYPES(Medium, Sampler, Volume)
-
-    using TrackingStateType    = TrackingState<Float, Spectrum>;
-    using TrackingFunctionType = TrackingFunction<Float, Spectrum>;
 
     /// Destructor
     ~ExtremumStructure();
@@ -98,44 +93,6 @@ public:
     virtual std::pair<ExtremumSegment, DDAState>
     dda_next(const DDAState &state, Mask active = true) const = 0;
 
-
-    /**
-     * \brief Traverse the extremum along a ray and applies a callback at each
-     * encountered segment.
-     *
-     * This method traverses the extremum structure segment by segment. At each
-     * segment, the callback ``func`` is called to advance the ``state``. This
-     * is useful for example to implement Delta Tracking, Ratio Tracking, and
-     * Residual Ratio Tracking. The callback is typically defined in the
-     * integrator.
-     *
-     * \param ray           Ray along which to sample
-     * \param mint          Minimum distance to consider
-     * \param maxt          Maximum distance to consider
-     * \param channel       Channel from which to sample
-     * \param state         Mutable tracking state carried through the traversal loop
-     * \param func          Callback function called at every segment.
-     * \param active        Mask for active lanes
-     *
-     * \return
-     *      The final tracking state, that includes the medium interaction if
-     *      a real scattering event was sampled, and the throughput and pdfs
-     *      accumulated throughout the traversal.
-     *
-     * Note that this function cannot be made abstract because of it would
-     * force the requirement for bindings, which are incompatible with
-     * function types.
-     */
-    virtual TrackingStateType traverse_extremum(
-        const Ray3f &ray,
-        Float mint,
-        Float maxt,
-        UInt32 channel,
-        TrackingStateType state,
-        TrackingFunctionType *func,
-        Mask active = true
-    ) const;
-
     // Note: this is currently dead code. It is kept in case it is needed in the future.
     /**
      * \brief Evaluate the minorant and majorant at a medium interaction point.
@@ -180,14 +137,3 @@ protected:
 MI_EXTERN_CLASS(ExtremumStructure)
 NAMESPACE_END(mitsuba)
 
-// -----------------------------------------------------------------------
-//! @{ \name Enables vectorized method calls on Dr.Jit medium arrays
-// -----------------------------------------------------------------------
-
-DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::ExtremumStructure)
-    DRJIT_CALL_METHOD(traverse_extremum)
-    DRJIT_CALL_METHOD(eval_1)
-DRJIT_CALL_END()
-
-//! @}
-// -----------------------------------------------------------------------

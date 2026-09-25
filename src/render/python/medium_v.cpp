@@ -134,14 +134,19 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
             "mi"_a, "active"_a=true,
             D(Medium, get_scattering_coefficients));
 // #ERADIATE_CHANGE_BEGIN: DDA support
+    cls.def("prepare_medium_traversal",
+            [](Ptr ptr, const Ray3f &ray, Mask active) {
+                return ptr->prepare_medium_traversal(ray, active); },
+            "ray"_a, "active"_a = true,
+            D(Medium, prepare_medium_traversal));
     cls.def("track_test",
             [](Ptr ptr, const Ray3f &ray, UInt32 seed, bool ratio,
-               bool use_dda, Mask active) {
+               Mask active) {
                 using TrackingStateType = TrackingState<Float, Spectrum>;
 
                 auto [mei, mint, maxt] =
                     ptr->prepare_medium_traversal(ray, active);
-                active &= dr::isfinite(maxt) && mint < maxt;
+                active &= dr::isfinite(maxt);
 
                 dr::PCG32<UInt32> rng;
                 rng.seed(rng.PCG32_DEFAULT_STATE, dr::uint64_array_t<Float>(seed));
@@ -155,20 +160,14 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
                 auto func = ratio ? ratio_track_segment<Float, Spectrum>
                                   : delta_track_segment<Float, Spectrum>;
 
-                if (use_dda)
-                    dr::masked(state, active) = ptr->dda_track(
-                        ray, mint, maxt, state, UInt32(0), func, active);
-                else
-                    dr::masked(state, active) =
-                        ptr->extremum_structure()->traverse_extremum(
-                            ray, mint, maxt, UInt32(0), state, func, active);
+                dr::masked(state, active) = ptr->dda_track(
+                    ray, mint, maxt, state, UInt32(0), func, active);
 
                 return std::make_tuple(state.mei.t, state.throughput);
             },
-            "ray"_a, "seed"_a, "ratio"_a, "use_dda"_a, "active"_a = true,
-            "Test utility: delta (or ratio) tracking along `ray`, through "
-            "`dda_track` or `traverse_extremum`. Returns (distance, "
-            "throughput).");
+            "ray"_a, "seed"_a, "ratio"_a, "active"_a = true,
+            "Test utility: delta (or ratio) tracking along `ray` through "
+            "`dda_track`. Returns (distance, throughput).");
 // #ERADIATE_CHANGE_END
 }
 

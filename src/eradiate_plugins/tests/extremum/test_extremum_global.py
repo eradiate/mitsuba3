@@ -2,6 +2,8 @@ import mitsuba as mi
 import numpy as np
 import pytest
 
+from .test_dda import _sample_dda
+
 
 def _make_grid_volume(values, n):
     data = np.array(values, dtype=float).reshape(n, 1, 1)
@@ -86,28 +88,30 @@ def test_update_on_scale_change(variant_scalar_mono, medium_type):
     assert np.allclose(got, (2.0, 8.0))
 
 
-def test_sample_test_sampled(variant_scalar_mono):
-    # Homogeneous majorant of 3.0 over [1, 4]: segment_ot = 3 * 3 = 9.
+def test_sample_sampled(variant_scalar_mono):
+    # Homogeneous majorant of 3.0 over [1, 4]: segment_ot = 3 * 3 = 9. The
+    # domain extends along z to hold the range.
     volume = _make_grid_volume([3.0, 3.0], 2)
     extremum = mi.load_dict({"type": "extremum_global"})
-    extremum.update_extremum(volume.bbox(), volume)
+    extremum.update_extremum(mi.ScalarBoundingBox3f([0, 0, 0], [1, 1, 5]), volume)
 
     ray = mi.Ray3f(o=[0.5, 0.5, 0], d=[0, 0, 1])
-    distance, leftover_ot = extremum.sample_test(ray, 1.0, 4.0, target_ot=6.0)
+    distance, leftover_ot = _sample_dda(extremum, ray, 1.0, 4.0, target_ot=6.0)
 
     # target_ot < segment_ot: interaction sampled inside the segment.
     assert np.allclose(distance, 3.0)
     assert np.allclose(leftover_ot, 6.0)
 
 
-def test_sample_test_escapes(variant_scalar_mono):
-    # Homogeneous majorant of 3.0 over [1, 4]: segment_ot = 3 * 3 = 9.
+def test_sample_escapes(variant_scalar_mono):
+    # Homogeneous majorant of 3.0 over [1, 4]: segment_ot = 3 * 3 = 9. The
+    # domain extends along z to hold the range.
     volume = _make_grid_volume([3.0, 3.0], 2)
     extremum = mi.load_dict({"type": "extremum_global"})
-    extremum.update_extremum(volume.bbox(), volume)
+    extremum.update_extremum(mi.ScalarBoundingBox3f([0, 0, 0], [1, 1, 5]), volume)
 
     ray = mi.Ray3f(o=[0.5, 0.5, 0], d=[0, 0, 1])
-    distance, leftover_ot = extremum.sample_test(ray, 1.0, 4.0, target_ot=12.0)
+    distance, leftover_ot = _sample_dda(extremum, ray, 1.0, 4.0, target_ot=12.0)
 
     # target_ot > segment_ot: ray exits the medium before sampling.
     assert np.isinf(distance)

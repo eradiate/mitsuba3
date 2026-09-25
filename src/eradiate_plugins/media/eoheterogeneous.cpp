@@ -92,7 +92,7 @@ public:
                     create_ddis_phase_function, update_ddis_phase_function
                 )
     MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, ExtremumStructure,
-                    ExtremumStructurePtr, PhaseFunction)
+                    PhaseFunction)
     using FloatStorage = DynamicBuffer<Float>;
 
     EOHeterogeneousMedium(const Properties &props) : Base(props) {

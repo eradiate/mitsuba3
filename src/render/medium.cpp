@@ -161,12 +161,11 @@ Medium<Float, Spectrum>::prepare_medium_traversal(const Ray3f& ray, Mask active)
     // Intersect AABB
     auto [aabb_its, mint, maxt] = intersect_aabb(ray);
     aabb_its &= (dr::isfinite(mint) || dr::isfinite(maxt));
-    active &= aabb_its;
+    mint = dr::maximum(0.f, mint);
+    maxt = dr::minimum(ray.maxt, maxt);
+    active &= aabb_its && mint < maxt;
     dr::masked(mint, !active) = 0.f;
     dr::masked(maxt, !active) = dr::Infinity<Float>;
-
-    dr::masked(mint, active) = dr::maximum(0.f, mint);
-    dr::masked(maxt, active) = dr::minimum(ray.maxt, maxt);
     mei.mint = mint;
 
     return {mei, mint, maxt};

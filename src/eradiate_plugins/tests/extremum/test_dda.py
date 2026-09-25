@@ -115,11 +115,8 @@ def _spherical_rays():
 
 
 def _clip(ray, bbox=(0.0, 1.0), maxt=4.0):
-    """Entry/exit distances through the domain ``bbox``, or None if missed.
-
-    ``sample_test`` does not clip to the structure's bbox, so the routes only
-    agree over a range already clipped to the domain, as an integrator passes.
-    """
+    """Entry/exit distances through the domain ``bbox``, or None if missed:
+    the range an integrator passes."""
     o = np.array(ray.o).reshape(-1)
     d = np.array(ray.d).reshape(-1)
     lo, hi = bbox
@@ -151,7 +148,7 @@ def _walk_dda(extremum, ray, mint, maxt):
 
 def _sample(segments, mint, maxt, target_ot):
     """Delta-tracking oracle over a piecewise-constant majorant: returns
-    ``(distance, leftover_ot)`` like ``sample_test``."""
+    ``(distance, leftover_ot)`` like ``sample_test_dda``."""
     for lo, hi, _, majorant in segments:
         lo, hi = max(lo, mint), min(hi, maxt)
         if hi <= lo:
@@ -161,6 +158,10 @@ def _sample(segments, mint, maxt, target_ot):
             return lo + target_ot / max(majorant, 1e-7), target_ot
         target_ot -= ot
     return np.inf, target_ot
+
+
+def _sample_dda(structure, ray, mint, maxt, target_ot):
+    return _sample(_walk_dda(structure, ray, mint, maxt), mint, maxt, target_ot)
 
 
 def _sum(walks, mint, maxt):
@@ -223,23 +224,6 @@ def test_structure_segments_tile(variant_scalar_rgb):
                 assert before[1] == after[0], (name, ray)
 
 
-@pytest.mark.parametrize("target_ot", [0.0, 0.05, 0.5, 2.0, 1e6])
-def test_structure_matches_traverse_extremum(variant_scalar_rgb, target_ot):
-    for name, extremum, rays, bbox in _structures():
-        for ray in rays:
-            clipped = _clip(ray, bbox)
-            if clipped is None:
-                continue
-            mint, maxt = clipped
-            expected = extremum.sample_test(ray, mint, maxt, target_ot)
-            actual = _sample(
-                _walk_dda(extremum, ray, mint, maxt), mint, maxt, target_ot
-            )
-            # atol: `dda_init` re-derives the entry distance from its own bbox
-            # test, which can differ from `mint` by an ulp.
-            _assert_close(expected, actual, (name, ray), atol=1e-6)
-
-
 @pytest.mark.parametrize("target_ot", [0.0, 0.5, 2.0])
 def test_plain_medium_matches_structure(variant_scalar_rgb, target_ot):
     volume = _grid_volume((4, 5, 3))
@@ -250,7 +234,7 @@ def test_plain_medium_matches_structure(variant_scalar_rgb, target_ot):
         if clipped is None:
             continue
         mint, maxt = clipped
-        expected = extremum.sample_test(ray, mint, maxt, target_ot)
+        expected = _sample_dda(extremum, ray, mint, maxt, target_ot)
         actual = medium.sample_test_dda(ray, mint, maxt, target_ot)
         _assert_close(expected, actual, ray)
 
@@ -294,44 +278,140 @@ def test_overlap_matches_summed_components(variant_scalar_rgb, n, target_ot):
 def _track_media():
     return [
         _component(_grid_volume((4, 5, 3)), "extremum_grid", (2, 3, 3)),
+        _component(_spherical_volume((4, 4, 4)), "extremum_spherical", (4, 1, 1)),
         _component(_spherical_volume((4, 4, 4)), "extremum_spherical", (3, 4, 4)),
     ]
 
 
+@pytest.mark.parametrize(
+    "o,d,maxt,expected",
+    [
+        ([0.5, 0.5, 0.5], [1, 0, 0], np.inf, (0.0, 0.5)),
+        ([-1.0, 0.5, 0.5], [1, 0, 0], 1.25, (1.0, 1.25)),
+        ([2.0, 0.5, 0.5], [1, 0, 0], np.inf, (0.0, np.inf)),
+        ([-2.0, 0.5, 0.5], [1, 0, 0], 1.0, (0.0, np.inf)),
+        ([-1.0, 5.0, 0.5], [1, 0, 0], np.inf, (0.0, np.inf)),
+    ],
+    ids=["inside", "clipped", "behind", "beyond_maxt", "miss"],
+)
+def test_prepare_medium_traversal(variant_scalar_rgb, o, d, maxt, expected):
+    """The range is clipped to ``[0, ray.maxt]``; an empty one is ``[0, inf]``,
+    so the lane counts as escaped."""
+    medium = _component(_grid_volume((2, 2, 2)), "extremum_global", None)
+    ray = mi.Ray3f(mi.Ray3f(o=mi.Point3f(o), d=mi.Vector3f(d)), maxt)
+    _, mint, maxt = medium.prepare_medium_traversal(ray)
+    assert np.allclose((_f(mint), _f(maxt)), expected)
+
+
+def _track(medium, ray, seed, ratio):
+    """Python delta / residual ratio tracking over ``_walk_medium``, with the
+    draws of ``track_test``: ``(distance, throughput)``. Non-spectral media,
+    ``use_rrt`` on."""
+    hit, mint, maxt = medium.intersect_aabb(ray)
+    mint, maxt = max(_f(mint), 0.0), _f(maxt)
+    rng = mi.PCG32(initseq=seed)
+    if not (hit and mint < maxt < np.inf):
+        return np.inf, np.ones(3)
+    target = -np.log(1.0 - rng.next_float32())
+    throughput = np.ones(3)
+    for lo, hi, minorant, majorant in _walk_medium(medium, ray, mint, maxt):
+        control = minorant if ratio else 0.0
+        residual = majorant - control
+        start = lo
+        while target < (hi - start) * residual:
+            t = start + target / max(residual, 2.0**-24)
+            throughput *= np.exp(-(t - start) * control)
+            mei = dr.zeros(mi.MediumInteraction3f)
+            mei.t, mei.p = t, ray(t)
+            sigma_s, _, sigma_t = (
+                np.array(x).reshape(-1) for x in medium.get_scattering_coefficients(mei)
+            )
+            if ratio:
+                throughput *= np.maximum(1.0 - (sigma_t - control) / residual, 0.0)
+            else:
+                rng.next_float32()
+                if not rng.next_float32() < np.mean((majorant - sigma_t) / majorant):
+                    return t, throughput * sigma_s / sigma_t
+            target = -np.log(1.0 - rng.next_float32())
+            start = t
+        throughput *= np.exp(-(hi - start) * control)
+        target -= (hi - start) * residual
+    return np.inf, throughput
+
+
 @pytest.mark.parametrize("ratio", [False, True])
-def test_dda_track_matches_traverse_extremum(variant_scalar_rgb, ratio):
-    """Same tracking function, same draws: both routes sample the same
-    collisions, including lanes that stay in a segment across null ones."""
+def test_dda_track_matches_python_tracking(variant_scalar_rgb, ratio):
+    """Same draws: ``dda_track`` samples the collisions of the Python tracker,
+    including lanes that stay in a segment across null ones."""
     for medium in _track_media():
         for ray in _spherical_rays() + _rays():
             for seed in range(16):
-                expected = medium.track_test(ray, seed, ratio, use_dda=False)
-                actual = medium.track_test(ray, seed, ratio, use_dda=True)
+                expected = _track(medium, ray, seed, ratio)
+                actual = medium.track_test(ray, seed, ratio)
                 for e, a in zip(expected, actual):
                     assert np.allclose(
-                        np.array(e), np.array(a), rtol=1e-5, atol=1e-6
+                        np.array(e), np.array(a).reshape(-1), rtol=1e-4, atol=1e-5
                     ), (ray, seed)
 
 
 @pytest.mark.parametrize("ratio", [False, True])
-def test_dda_track_vcall_matches_traverse_extremum(variants_vec_rgb, ratio):
-    """``dda_track`` through a ``MediumPtr`` vcall, lanes diverging."""
+def test_dda_track_vcall_matches_scalar(variants_vec_rgb, ratio):
+    """``dda_track`` through a ``MediumPtr`` vcall, lanes diverging, against
+    the same rays one at a time in ``scalar_rgb``: same draws, same result."""
     rays = _spherical_rays() + _rays()
     n_seeds = 16
+    variant = mi.variant()
+    mi.set_variant("scalar_rgb")
+    expected = [
+        [
+            [np.array(x).reshape(-1) for x in medium.track_test(ray, seed, ratio)]
+            for seed in range(n_seeds)
+            for ray in _spherical_rays() + _rays()
+        ]
+        for medium in _track_media()
+    ]
+    mi.set_variant(variant)
+
     o = np.array([np.array(r.o).reshape(-1) for r in rays] * n_seeds).T
     d = np.array([np.array(r.d).reshape(-1) for r in rays] * n_seeds).T
     ray = mi.Ray3f(o=mi.Point3f(o), d=mi.Vector3f(d))
     seed = mi.UInt32(np.repeat(np.arange(n_seeds), len(rays)))
 
-    for medium in _track_media():
+    for medium, lanes in zip(_track_media(), expected):
         ptr = dr.full(mi.MediumPtr, medium, dr.width(seed))
-        expected = medium.track_test(ray, seed, ratio, use_dda=False)
-        actual = ptr.track_test(ray, seed, ratio, use_dda=True)
-        for e, a in zip(expected, actual):
-            assert np.allclose(np.array(e), np.array(a), rtol=1e-5, atol=1e-6)
+        distance, throughput = ptr.track_test(ray, seed, ratio)
+        distance, throughput = np.array(distance), np.array(throughput)
+        for i, (e_distance, e_throughput) in enumerate(lanes):
+            assert np.allclose(e_distance, distance[i], rtol=1e-5, atol=1e-6), i
+            assert np.allclose(e_throughput, throughput[:, i], rtol=1e-5, atol=1e-6), i
 
 
-def _repeat(inner, lattice=None, aabb=None):
+def test_dda_track_in_symbolic_loop(variants_vec_rgb):
+    """``dda_track`` nested in an outer symbolic loop, as in an integrator:
+    re-recording the outer loop must not change what the inner loop presumed
+    constant (a radial structure stepping its unused indices did)."""
+    rays = _spherical_rays()
+    o = np.array([np.array(r.o).reshape(-1) for r in rays]).T
+    d = np.array([np.array(r.d).reshape(-1) for r in rays]).T
+    ray = mi.Ray3f(o=mi.Point3f(o), d=mi.Vector3f(d))
+
+    for medium in _track_media():
+        ptr = dr.full(mi.MediumPtr, medium, len(rays))
+        i, total = dr.while_loop(
+            (dr.zeros(mi.UInt32, len(rays)), dr.zeros(mi.Float, len(rays))),
+            lambda i, total: i < 2,
+            lambda i, total, ptr=ptr: (
+                i + 1,
+                total + ptr.track_test(ray, i, False)[1].x,
+            ),
+        )
+        dr.eval(total)
+
+
+FAR = ((-20.0,) * 3, (20.0,) * 3)
+
+
+def _repeat(inner, lattice=None, aabb=FAR):
     d = {"type": "repeat", "inner": inner}
     if lattice is not None:
         d["lattice"] = mi.ScalarVector3f(*lattice)
@@ -349,13 +429,15 @@ def _bbox(structure):
 def _repeat_cases():
     """``(name, medium, entries, domain)``. ``entries`` are the medium's
     structures as ``(structure, tiling)``, ``tiling`` being ``(cell_min,
-    lattice, region)`` or None; ``domain`` is the box the rays aim at."""
+    lattice, region)`` or None; ``domain`` is the box the rays aim at. Every
+    region is finite; ``FAR`` holds every ray, so the abutting grid has no
+    gap."""
     grid = (_grid_volume((4, 5, 3)), "extremum_grid", (2, 3, 3))
     radial = (_spherical_volume((4, 4, 4)), "extremum_spherical", (4, 1, 1))
     glob = (_grid_volume((4, 4, 4), seed=3), "extremum_global", None)
     aabb = ((-1.2, -0.3, -2.0), (2.7, 3.1, 1.6))
 
-    def tiled(part, lattice=None, aabb=None):
+    def tiled(part, lattice, aabb):
         structure = _extremum(*part)
         cell_min, extents = _bbox(structure)
         lattice = extents if lattice is None else np.array(lattice)
@@ -364,11 +446,11 @@ def _repeat_cases():
 
     cases = []
     for name, part, lattice, region in [
-        ("grid", grid, None, None),
-        ("grid_gaps", grid, (1.5, 1.25, 1.0), None),
+        ("grid", grid, None, FAR),
+        ("grid_gaps", grid, (1.5, 1.25, 1.0), FAR),
         ("grid_aabb", grid, (1.5, 1.0, 2.0), aabb),
-        ("radial_gaps", radial, (2.5, 3.0, 2.0), None),
-        ("global_gaps", glob, (1.25, 1.5, 1.75), None),
+        ("radial_gaps", radial, (2.5, 3.0, 2.0), FAR),
+        ("global_gaps", glob, (1.25, 1.5, 1.75), FAR),
     ]:
         medium, entry = tiled(part, lattice, region)
         cases.append((name, medium, [entry], _bbox(entry[0])))
@@ -389,7 +471,7 @@ def _repeat_cases():
         (
             "repeat_overlap",
             _repeat(_overlap([_component(*grid), _component(*radial)]), lattice),
-            [(s, (_bbox(s)[0], lattice, None)) for s in structures],
+            [(s, (_bbox(s)[0], lattice, FAR)) for s in structures],
             _bbox(structures[1]),
         )
     )
@@ -436,10 +518,8 @@ def _walk_entry(structure, tiling, ray, mint, maxt):
     ts, cell_min, lattice = {mint, maxt}, np.zeros(3), np.full(3, np.inf)
     if tiling is not None:
         cell_min, lattice, region = tiling
-        start, end = mint, maxt
-        if region is not None:
-            r0, r1 = _slab(o, d, *region)
-            start, end = max(mint, r0), min(maxt, r1)
+        r0, r1 = _slab(o, d, *region)
+        start, end = max(mint, r0), min(maxt, r1)
         if start >= end:
             return [(mint, maxt, 0.0, 0.0)]
         ts = {start, end}
@@ -538,6 +618,8 @@ def test_repeat_rejects_invalid_tiling(variant_scalar_rgb):
         _repeat(_repeat(_component(*grid)))
     with pytest.raises(RuntimeError, match="does not fit"):
         _repeat(_component(*grid), (1.5, 0.5, 1.0))
+    with pytest.raises(RuntimeError, match="aabb_min"):
+        _repeat(_component(*grid), aabb=None)
 
 
 def test_repeat_wide_matches_scalar(variants_vec_backends_once_rgb):

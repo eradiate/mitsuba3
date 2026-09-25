@@ -43,9 +43,6 @@ public:
     MI_IMPORT_BASE(ExtremumStructure, m_bbox, m_scale)
     MI_IMPORT_TYPES(Volume)
 
-    using TrackingStateType    = TrackingState<Float, Spectrum>;
-    using TrackingFunctionType = TrackingFunction<Float, Spectrum>;
-
     ExtremumSpherical(const Properties &props) : Base(props), m_props(props) {
         ScalarVector3i resolution = props.get<ScalarVector3i>("resolution", ScalarVector3i(1, 1, 1));
 
@@ -86,11 +83,6 @@ public:
     }
 
     // Stub overrides — never called, expand() replaces this object
-    TrackingStateType traverse_extremum(const Ray3f &, Float, Float, UInt32,
-                    TrackingStateType, TrackingFunctionType*, Mask) const override {
-        NotImplementedError("traverse_extremum");
-    }
-
     std::tuple<Float, Float> eval_1(const Interaction3f &,
                                     Mask) const override {
         NotImplementedError("eval_1");
@@ -123,8 +115,6 @@ public:
     MI_IMPORT_BASE(ExtremumStructure, m_bbox, m_scale)
     MI_IMPORT_TYPES(Volume)
 
-    using TrackingStateType    = TrackingState<Float, Spectrum>;
-    using TrackingFunctionType = TrackingFunction<Float, Spectrum>;
     using FloatStorage         = DynamicBuffer<Float>;
 
     static constexpr size_t Dim =
@@ -268,9 +258,12 @@ public:
 
         auto crossed =
             (dt <= next_threshold) && !(t_turn_fwd <= next_threshold);
-        dr::masked(next.pi, crossed && active) += step;
 
-        if constexpr (TraversalType == SphericalTraversalType::Full3D) {
+        if constexpr (TraversalType == SphericalTraversalType::RadialOnly) {
+            dr::masked(next.pi.x(), crossed.x() && active) += step.x();
+        } else {
+            dr::masked(next.pi, crossed && active) += step;
+
             next.pi.y() = dr::clip(next.pi.y(), 0, m_resolution.y() - 1);
 
             dr::masked(next.pi.y(), on_axis) = dr::select(
@@ -282,192 +275,6 @@ public:
 
         return { ExtremumSegment(state.mint, t_next, m_scale * extremum),
                  next };
-    }
-
-    /** \brief Spherical-grid traversal algorithm.
-     *
-     * DDA-like traversal of a spherical grid. Templated over `TraversalType`
-     * so that `RadialOnly` only considers shell boundaries and Full3D all
-     * coordinates.
-     *
-     * Traversal follows the principle of a DDA algorithm: the distance to
-     * the next boundary is computed for each dimension. The smallest distance
-     * is chosen to advance the tracked distance and indices. Two major
-     * differences with regular grid DDA:
-     * - The direction of travel changes at a "turning point". For the radial
-     *   dimension, this is the closest approach of the ray to the center. For
-     *   the zenithal dimension is the extremum `t` of cos(theta) = z(t)/r(t).
-     *   The azimutal dimension does not have a turning point.
-     * - The distance between boundaries is not equal between subsequent
-     *   regions. In practice this means we need to compute the next
-     *   intersection at each iteration.
-     * Reaching a turning point is similar to reaching a boundary, except that
-     * the position index `pi` is not incremented.
-     *
-     * \param func  Function called at each traversed cell. Must have the
-     *              \ref TrackingFunction signature which returns
-     *              (advance, active): a false ``advance`` repeats
-     *              the loop with the same segment, a false ``active``
-     *              terminates the lane.
-     * \param state   The payload passed to ``func``.
-     * \param ray     The ray along which the structure is traversed.
-     * \param mint    The minimum distance along the ray.
-     * \param maxt    The maximum distance along the ray.
-     * \param channel The channel from which to sample.
-     * \param active  Mask for active lanes.
-     *
-     * \return
-     *      The final state at the end of the traversal.
-     */
-    TrackingStateType traverse_extremum(
-        const Ray3f &ray,
-        Float mint,
-        Float maxt,
-        UInt32 channel,
-        TrackingStateType state,
-        TrackingFunctionType* func,
-        Mask active
-    ) const override {
-
-        Ray3f l_ray = m_to_local * ray;
-        const Point3f&  o = l_ray.o;
-        const Vector3f& d = l_ray.d;
-
-        RayCoeffs rc = ray_coeffs(o, d);
-
-        Point3f p = l_ray(mint);
-        Float   r = dr::norm(p);
-
-        // Each coordinate direction of travel reverses past its turning point.
-        // Store the turning point and direction past that point. Dimensions
-        // with no turning point stay at -inf (e.g. azimth).
-        CoordI pi         = dr::zeros<CoordI>();
-        CoordI step_after = dr::zeros<CoordI>();
-        CoordF t_turn     = -dr::Infinity<Float>;
-
-        t_turn.x()     = -rc.b * rc.inv_a;  // closest approach to the origin
-        step_after.x() = 1;
-        pi.x()         =
-            radial_idx(r, idx_bias(m_eps.x(), dr::fmadd(mint, rc.a, rc.b)));
-
-        Mask on_axis = false;
-
-        if constexpr (TraversalType == SphericalTraversalType::Full3D) {
-            on_axis = on_axis_ray(o, d);
-            pi.y()  = theta_idx(p, r, on_axis, idx_bias(m_eps.y(), -dr::fmadd(mint, rc.n1, rc.n0)));
-            pi.z()  = phi_idx(p, idx_bias(m_eps.z(), rc.phi_dot));
-
-            // d/dt cos(theta(t)) has shape n0+n1*t/r(t) with r(t) positive.
-            // the turning point is therefore -n0/n1 and the index grows when
-            // n1 is negative. n1 == 0 has a turning point on the xy plane, and
-            // step is monotonic with sign n0.
-            Mask no_turn = rc.n1 == 0.f;
-
-            t_turn.y() =
-                dr::select(no_turn, -dr::Infinity<Float>, -rc.n0 / rc.n1);
-
-            // ray on axis: turn distance is distance to origin
-            dr::masked(t_turn.y(), on_axis) = -o.z() * dr::rcp(d.z());
-
-            step_after.y() =
-                dr::select(dr::select(no_turn, rc.n0, rc.n1) < 0.f, 1, -1);
-
-            // Direction determined by clockwise direction, no turns.
-            step_after.z() = dr::select(rc.phi_dot > 0.f, 1, -1);
-        }
-
-        struct LoopState {
-            TrackingStateType state;
-            Mask active;
-            Float current_t;
-            CoordI pi;
-
-            DRJIT_STRUCT(LoopState, state, active, current_t, pi)
-        } ls = { state, active, mint, pi };
-
-        dr::tie(ls) = dr::while_loop(
-            dr::make_tuple(ls),
-            [](const LoopState &ls) { return ls.active; },
-            [this, rc, o, d, on_axis, t_turn, step_after, maxt,
-             channel, func](LoopState &ls) {
-
-            CoordF dt = dr::Infinity<Float>;
-            const Float threshold = ls.current_t + dr::Epsilon<Float> * 2.f;
-
-            // Direction of travel and tested boundary
-            CoordI step =
-                dr::select(ls.current_t < t_turn, -step_after, step_after);
-            CoordI test_idx =
-                ls.pi + dr::select(step > 0, CoordI(1), CoordI(0));
-
-            // 1. Radius shell intersection ------------------------------------
-            Float r_test = shell_radius(dr::clip(test_idx.x(), 0, m_resolution.x()));
-            dt.x()       = sphere_crossing(rc, r_test,threshold);
-
-            if constexpr (TraversalType == SphericalTraversalType::Full3D) {
-                // 2. Zenith cone intersection ---------------------------------
-                Float c_theta = cos_theta(test_idx.y());
-                dr::masked(dt.y(), !on_axis) =
-                    cone_crossing(rc, o, d, c_theta, threshold);
-
-                // 3. Azimuth plane intersection -------------------------------
-                Vector2f phi_n = phi_normal(test_idx.z());
-                dt.z() = plane_crossing(o, d, phi_n, threshold, !on_axis);
-            } else {
-                DRJIT_MARK_USED(o);
-                DRJIT_MARK_USED(d);
-                DRJIT_MARK_USED(on_axis);
-            }
-
-            CoordF t_turn_fwd = dr::select(t_turn > threshold, t_turn,
-                                           dr::Infinity<Float>);
-
-            Float t_next = dr::minimum(
-                dr::min(dr::minimum(dt, t_turn_fwd)), maxt);
-
-            // 4. Construct Segment --------------------------------------------
-            UInt32 idx = UInt32(dr::clip(ls.pi.x(), 0, m_resolution.x() - 1));
-            if constexpr (TraversalType == SphericalTraversalType::Full3D)
-                idx += UInt32(ls.pi.y() * m_resolution.x() +
-                              ls.pi.z() * (m_resolution.x() * m_resolution.y()));
-
-            Vector2f extremum = dr::gather<Vector2f>(m_extremum_grid, idx);
-            dr::masked(extremum, ls.pi.x() < 0) = Vector2f(m_fillmin);
-            dr::masked(extremum, ls.pi.x() >= m_resolution.x()) =
-                Vector2f(m_fillmax);
-
-            ExtremumSegment segment(ls.current_t, t_next, m_scale * extremum);
-
-            auto [advance, active_segment] =
-                func(segment, ls.state, channel, ls.active);
-
-            // 5. Advance Variables --------------------------------------------
-            dr::masked(ls.current_t, advance) = t_next;
-
-            const Float next_threshold = t_next + dr::Epsilon<Float> * 2.f;
-
-            // Skip advancing if next point is a turning point (includes tangent).
-            auto mask = (dt <= next_threshold) && !(t_turn_fwd <= next_threshold);
-            dr::masked(ls.pi, advance && mask) += step;
-
-            if constexpr (TraversalType == SphericalTraversalType::Full3D) {
-                ls.pi.y() = dr::clip(ls.pi.y(), 0, m_resolution.y() - 1);
-
-                // On axis theta index is discontinuous, rederive separatly.
-                dr::masked(ls.pi.y(), on_axis) =
-                    dr::select(dr::fmadd(ls.current_t, d.z(), o.z()) > 0.f,
-                               0, m_resolution.y() - 1);
-
-                // Wrap azimuth
-                dr::masked(ls.pi.z(), ls.pi.z() < 0) = m_resolution.z() - 1;
-                dr::masked(ls.pi.z(), ls.pi.z() >= m_resolution.z()) = 0;
-            }
-
-            ls.active = active_segment && (ls.current_t < maxt);
-        },
-        "Spherical Grid Traversal");
-
-        return ls.state;
     }
 
     std::tuple<Float, Float> eval_1(

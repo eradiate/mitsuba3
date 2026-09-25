@@ -3,6 +3,8 @@ import mitsuba as mi
 import numpy as np
 import pytest
 
+from .test_dda import _sample_dda
+
 
 def generate_extremum_spherical(
     volume_grid,
@@ -139,14 +141,18 @@ def _make_spherical_volume(values, rmin, rmax, fillmin=1.0, fillmax=0.0):
     )
 
 
-def _make_extremum(volume, n, n_y=1, n_z=1):
+OUTER = ([-4.0] * 3, [4.0] * 3)
+
+
+def _make_extremum(volume, n, n_y=1, n_z=1, bbox=None):
     extremum = mi.load_dict(
         {
             "type": "extremum_spherical",
             "resolution": mi.ScalarVector3i(n, n_y, n_z),
         }
     )
-    extremum.update_extremum(volume.bbox(), volume)
+    bbox = volume.bbox() if bbox is None else mi.ScalarBoundingBox3f(*bbox)
+    extremum.update_extremum(bbox, volume)
     return extremum
 
 
@@ -198,7 +204,7 @@ def test_sample_multi_layer(variant_scalar_mono):
     extremum = _make_extremum(volume, 4)
 
     ray = mi.Ray3f(o=[1, 0, 0], d=[-1, 0, 0])
-    distance, leftover_ot = extremum.sample_test(ray, 0.0, 2.0, target_ot=1.6)
+    distance, leftover_ot = _sample_dda(extremum, ray, 0.0, 2.0, target_ot=1.6)
 
     assert np.allclose(distance, 0.5)
     assert np.allclose(leftover_ot, 0.2)
@@ -210,7 +216,7 @@ def test_sample_escapes(variant_scalar_mono):
     extremum = _make_extremum(volume, 4)
 
     ray = mi.Ray3f(o=[1, 0, 0], d=[-1, 0, 0])
-    distance, leftover_ot = extremum.sample_test(ray, 0.0, 3.0, target_ot=6.0)
+    distance, leftover_ot = _sample_dda(extremum, ray, 0.0, 3.0, target_ot=6.0)
 
     assert np.isinf(distance)
     assert np.allclose(leftover_ot, 1.6)
@@ -223,7 +229,7 @@ def test_sample_tangent_shell(variant_scalar_mono):
     extremum = _make_extremum(volume, 1)
 
     ray = mi.Ray3f(o=[0.6, 0, -3], d=[0, 0, 1])
-    distance, leftover_ot = extremum.sample_test(ray, 0.0, 10.0, target_ot=2.4)
+    distance, leftover_ot = _sample_dda(extremum, ray, 0.0, 10.0, target_ot=2.4)
 
     assert np.allclose(distance, 3.4, rtol=0.001)
     assert np.allclose(leftover_ot, 0.8)
@@ -236,7 +242,7 @@ def test_sample_through_origin(variant_scalar_mono):
     extremum = _make_extremum(volume, 1)
 
     ray = mi.Ray3f(o=[0, 0, -3], d=[0, 0, 1])
-    distance, leftover_ot = extremum.sample_test(ray, 0.0, 10.0, target_ot=7.5)
+    distance, leftover_ot = _sample_dda(extremum, ray, 0.0, 10.0, target_ot=7.5)
 
     assert np.allclose(distance, 3.5)
     # `leftover_ot = 2.5` instead of 7.5 means that the origin, in this case the
@@ -246,12 +252,13 @@ def test_sample_through_origin(variant_scalar_mono):
 
 def test_sample_fillmax_sampled(variant_scalar_mono):
     # fillmax=0.5: the region outside rmax is not vacuum, so an interaction
-    # can be sampled there before the ray ever reaches the shell.
+    # can be sampled there before the ray ever reaches the shell. The domain
+    # extends past rmax to hold it.
     volume = _make_spherical_volume([2.0], rmin=0.5, rmax=1.0, fillmax=0.5)
-    extremum = _make_extremum(volume, 1)
+    extremum = _make_extremum(volume, 1, bbox=OUTER)
 
     ray = mi.Ray3f(o=[3, 0, 0], d=[-1, 0, 0])
-    distance, leftover_ot = extremum.sample_test(ray, 0.0, 10.0, target_ot=0.6)
+    distance, leftover_ot = _sample_dda(extremum, ray, 0.0, 10.0, target_ot=0.6)
 
     assert np.allclose(distance, 1.2)
     assert np.allclose(leftover_ot, 0.6)
@@ -263,7 +270,7 @@ def test_sample_traverse_outside_rmax(variant_scalar_mono):
     volume = _make_spherical_volume(
         [sigma_t], rmin=rmin, rmax=rmax, fillmin=0.0, fillmax=0.0
     )
-    extremum = _make_extremum(volume, 1, n_y=2, n_z=4)
+    extremum = _make_extremum(volume, 1, n_y=2, n_z=4, bbox=OUTER)
 
     ray = mi.Ray3f(
         o=mi.Vector3f([3.0, 1.0, 0.0]), d=dr.normalize(mi.Vector3f([-1.0, -0.8, 0.0]))
@@ -277,7 +284,7 @@ def test_sample_traverse_outside_rmax(variant_scalar_mono):
     # The ray crosses the azimuth boundary (y=0) before entering the shell.
     assert -ray.o.y / ray.d.y < t_in
 
-    distance, _ = extremum.sample_test(ray, 0.0, 10.0, target_ot=target_ot)
+    distance, _ = _sample_dda(extremum, ray, 0.0, 10.0, target_ot=target_ot)
 
     assert np.allclose(distance, t_in + target_ot / sigma_t)
 
@@ -328,8 +335,8 @@ def test_sample_turning_point_vs_boundary(variant_scalar_mono):
             n1 = dr.dot(o, d) * d.z - dr.squared_norm(d) * o.z
             assert np.allclose(-n0 / n1, t_plane)
 
-            distance, _ = extremum.sample_test(
-                mi.Ray3f(o=o, d=d), 0.0, 10.0, target_ot=target_ot
+            distance, _ = _sample_dda(
+                extremum, mi.Ray3f(o=o, d=d), 0.0, 10.0, target_ot=target_ot
             )
 
             assert np.allclose(distance, expected, rtol=1e-4), (a, b)
@@ -349,7 +356,7 @@ def test_sample_across_zenith_boundary(variant_scalar_mono):
     # Runs parallel to -Z at x = 0.2: crosses r = 0.5 at z = sqrt(0.21), then
     # the z = 0 cone at t = 2, and leaves the absorbing cell at z = -sqrt(0.21).
     ray = mi.Ray3f(o=[0.2, 0, 2], d=[0, 0, -1])
-    distance, _ = extremum.sample_test(ray, 0.0, 10.0, target_ot=target_ot)
+    distance, _ = _sample_dda(extremum, ray, 0.0, 10.0, target_ot=target_ot)
 
     assert np.allclose(distance, 2.0 + target_ot / sigma_t)
 
@@ -365,6 +372,6 @@ def test_sample_on_z_axis(variant_scalar_mono):
     extremum = _make_extremum(volume, 1, n_y=2, n_z=4)
 
     ray = mi.Ray3f(o=[0, 0, 2], d=[0, 0, -1])
-    distance, _ = extremum.sample_test(ray, 0.0, 10.0, target_ot=target_ot)
+    distance, _ = _sample_dda(extremum, ray, 0.0, 10.0, target_ot=target_ot)
 
     assert np.allclose(distance, 2.0 + target_ot / sigma_t)

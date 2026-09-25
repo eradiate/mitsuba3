@@ -2999,9 +2999,9 @@ that store local extrema (majorant/minorant) of volumetric extinction
 coefficients. This enables efficient use of tracking algorithms with
 locally-adaptive majorants and minorants.
 
-To minimize virtual function overhead, the ``traverse_extremum()``
-method encapsulates the entire traversal loop internally, requiring
-only a single virtual call per distance sample.
+Structures are traversed through ``dda_init`` / ``dda_next``, driven by
+the owning ``Medium``. They are host-side objects: no method is
+reachable through a Dr.Jit vcall.
 
 The extremum structure needs to be built using the ``update_extremum``
 function, it is **not** called automatically in the constructor. The
@@ -3084,46 +3084,6 @@ static const char *__doc_mitsuba_ExtremumStructure_m_scale = R"doc(Scale by whic
 static const char *__doc_mitsuba_ExtremumStructure_set_bbox = R"doc(Setter for the bbox over which the structure must be valid.)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure_set_scale = R"doc(Setter for the scale by which to multiply the extremum values.)doc";
-
-static const char *__doc_mitsuba_ExtremumStructure_traverse_extremum =
-R"doc(Traverse the extremum along a ray and applies a callback at each
-encountered segment.
-
-This method traverses the extremum structure segment by segment. At
-each segment, the callback ``func`` is called to advance the
-``state``. This is useful for example to implement Delta Tracking,
-Ratio Tracking, and Residual Ratio Tracking. The callback is typically
-defined in the integrator.
-
-Parameter ``ray``:
-    Ray along which to sample
-
-Parameter ``mint``:
-    Minimum distance to consider
-
-Parameter ``maxt``:
-    Maximum distance to consider
-
-Parameter ``channel``:
-    Channel from which to sample
-
-Parameter ``state``:
-    Mutable tracking state carried through the traversal loop
-
-Parameter ``func``:
-    Callback function called at every segment.
-
-Parameter ``active``:
-    Mask for active lanes
-
-Returns:
-    The final tracking state, that includes the medium interaction if
-    a real scattering event was sampled, and the throughput and pdfs
-    accumulated throughout the traversal.
-
-Note that this function cannot be made abstract because of it would
-force the requirement for bindings, which are incompatible with
-function types.)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure_type = R"doc()doc";
 
@@ -4952,8 +4912,10 @@ Returns:
     A tuple (mei, mint, maxt): ``mei`` is a ``MediumInteraction3f``
     object initialized with the current ray and medium data. ``mint``
     and ``maxt`` represent the minimum and maximum intersection
-    distances of the ray with the medium's bbox. In case there are no
-    valid intersection, the range defaults to [0, +Inf].)doc";
+    distances of the ray with the medium's bbox, clipped to
+    <tt>[0, ray.maxt]</tt>. If that range is empty (no intersection,
+    box behind the origin or beyond <tt>ray.maxt</tt>), it defaults to
+    [0, +Inf].)doc";
 
 static const char *__doc_mitsuba_Medium_sample_interaction =
 R"doc(Sample a free-flight distance in the medium.

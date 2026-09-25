@@ -30,19 +30,5 @@ MI_VARIANT void ExtremumStructure<Float, Spectrum>::update_extremum(
     build(volume);
 }
 
-MI_VARIANT
-TrackingState<Float, Spectrum>
-ExtremumStructure<Float, Spectrum>::traverse_extremum(
-    const Ray3f &/*ray*/,
-    Float /*mint*/,
-    Float /*maxt*/,
-    UInt32 /*channel*/,
-    TrackingStateType /*state*/,
-    TrackingFunctionType * /*func*/,
-    Mask /*active*/
-) const {
-    NotImplementedError("traverse_extremum");
-}
-
 MI_INSTANTIATE_CLASS(ExtremumStructure)
 NAMESPACE_END(mitsuba)

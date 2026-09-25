@@ -2,6 +2,8 @@ import mitsuba as mi
 import numpy as np
 import pytest
 
+from .test_dda import _sample_dda
+
 
 def generate_extremum_grid(
     volume_grid,
@@ -370,7 +372,7 @@ def test_sample_tight_sampled(variant_scalar_mono):
     extremum = _make_x_extremum(volume.bbox(), volume, 4)
 
     ray = mi.Ray3f(o=[0, 0.5, 0.5], d=[1, 0, 0])
-    distance, leftover_ot = extremum.sample_test(ray, 0.0, 1.0, target_ot=1.6)
+    distance, leftover_ot = _sample_dda(extremum, ray, 0.0, 1.0, target_ot=1.6)
 
     assert np.allclose(distance, 0.775)
     assert np.allclose(leftover_ot, 0.1)
@@ -383,7 +385,7 @@ def test_sample_tight_escapes(variant_scalar_mono):
     extremum = _make_x_extremum(volume.bbox(), volume, 4)
 
     ray = mi.Ray3f(o=[0, 0.5, 0.5], d=[1, 0, 0])
-    distance, leftover_ot = extremum.sample_test(ray, 0.0, 1.0, target_ot=3.0)
+    distance, leftover_ot = _sample_dda(extremum, ray, 0.0, 1.0, target_ot=3.0)
 
     assert np.isinf(distance)
     assert np.allclose(leftover_ot, 0.5)
@@ -414,7 +416,7 @@ def test_sample_non_tight_sampled(
     extremum = _make_x_extremum(domain, volume, 4)
 
     ray = mi.Ray3f(o=[0, 0.5, 0.5], d=[1, 0, 0])
-    distance, leftover_ot = extremum.sample_test(ray, 0.0, 2.0, target_ot=4.1)
+    distance, leftover_ot = _sample_dda(extremum, ray, 0.0, 2.0, target_ot=4.1)
 
     assert np.allclose(distance, expected_distance)
     assert np.allclose(leftover_ot, expected_leftover)
@@ -428,7 +430,7 @@ def test_sample_non_tight_no_wrap(variant_scalar_mono):
     extremum = _make_x_extremum(domain, volume, 4)
 
     ray = mi.Ray3f(o=[0, 0.5, 0.5], d=[1, 0, 0])
-    distance, leftover_ot = extremum.sample_test(ray, 0.0, 2.0, target_ot=3.0)
+    distance, leftover_ot = _sample_dda(extremum, ray, 0.0, 2.0, target_ot=3.0)
 
     assert np.isinf(distance)
     assert np.allclose(leftover_ot, 0.5)
@@ -446,7 +448,7 @@ def test_sample_rotated_axis_aligned(variant_scalar_mono, wrap_mode):
     extremum = _make_x_extremum(volume.bbox(), volume, 4)
 
     ray = mi.Ray3f(o=[-0.5, 0, 0.5], d=[0, 1, 0])
-    distance, leftover_ot = extremum.sample_test(ray, 0.0, 1.0, target_ot=1.6)
+    distance, leftover_ot = _sample_dda(extremum, ray, 0.0, 1.0, target_ot=1.6)
 
     assert np.allclose(distance, 0.775)
     assert np.allclose(leftover_ot, 0.1)
@@ -481,7 +483,7 @@ def test_sample_rotated(
         o=to_world @ mi.ScalarPoint3f(-0.5, 0.5, 0.5),
         d=to_world @ mi.ScalarVector3f(1, 0, 0),
     )
-    distance, leftover_ot = extremum.sample_test(ray, 0.0, 1.5, target_ot=1.6)
+    distance, leftover_ot = _sample_dda(extremum, ray, 0.0, 1.5, target_ot=1.6)
 
     assert np.allclose(distance, expected_distance)
     assert np.allclose(leftover_ot, expected_leftover)
@@ -498,7 +500,7 @@ def test_sample_rotated_no_wrap(variant_scalar_mono):
         o=to_world @ mi.ScalarPoint3f(-0.5, 0.5, 0.5),
         d=to_world @ mi.ScalarVector3f(1, 0, 0),
     )
-    distance, leftover_ot = extremum.sample_test(ray, 0.0, 1.5, target_ot=1.6)
+    distance, leftover_ot = _sample_dda(extremum, ray, 0.0, 1.5, target_ot=1.6)
 
     assert np.allclose(distance, 1.275)
     assert np.allclose(leftover_ot, 0.1)

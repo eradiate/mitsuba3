@@ -28,7 +28,7 @@ Repeating medium (:monosp:`repeat`)
 
  * - aabb_min, aabb_max
    - |point|
-   - Bounds of the tiled region in world space. Default: infinite.
+   - Bounds of the tiled region in world space. Required.
 
 This plugin periodically tiles an inner medium (which may itself be an
 aggregate, e.g. :ref:`multicomponent <medium-multicomponent>`) over a
@@ -97,14 +97,8 @@ public:
             Throw("repeat: the tile %s does not fit inside a lattice period %s",
                   tile, m_lattice);
 
-        if (props.has_property("aabb_min") && props.has_property("aabb_max")) {
-            m_aabb = ScalarBoundingBox3f(props.get<ScalarPoint3f>("aabb_min"),
-                                         props.get<ScalarPoint3f>("aabb_max"));
-        } else {
-            m_aabb = ScalarBoundingBox3f(
-                ScalarPoint3f(-dr::Infinity<ScalarFloat>),
-                ScalarPoint3f(dr::Infinity<ScalarFloat>));
-        }
+        m_aabb = ScalarBoundingBox3f(props.get<ScalarPoint3f>("aabb_min"),
+                                     props.get<ScalarPoint3f>("aabb_max"));
 
         for (auto &entry : m_extrema) {
             ScalarPoint3f cell_min = entry.structure->bbox().min;
