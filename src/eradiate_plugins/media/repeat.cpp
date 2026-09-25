@@ -41,20 +41,21 @@ translation lattice:
         0 & \text{otherwise}
     \end{cases}
 
-All folding happens in this plugin; the inner medium and the integrator are
-unaware of the tiling. The extremum structure of the inner medium is wrapped
-into an :ref:`extremum_repeat <extremum-extremum_repeat>` structure.
+Point queries are folded into the canonical tile by this plugin. The inner
+medium's extremum structures are traversed tile by tile over the lattice, so
+the inner medium and the integrator are unaware of the tiling. The canonical
+tile must fit inside one lattice period, and the inner medium must not itself
+contain a :monosp:`repeat`.
 */
 template <typename Float, typename Spectrum>
 class RepeatMedium final : public Medium<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
-                    m_phase_function, m_extremum_structure,
+                    m_phase_function, m_extrema,
                     m_ddis_phase_function, m_ddis_threshold,
                     ddis_phase_function, ddis_threshold
                 )
-    MI_IMPORT_TYPES(Scene, Sampler, ExtremumStructure, PhaseFunction,
-                    PhaseFunctionPtr)
+    MI_IMPORT_TYPES(Scene, Sampler, PhaseFunction, PhaseFunctionPtr)
 
     using MediumSample = MediumSample<Float, Spectrum>;
 
@@ -74,40 +75,42 @@ public:
         m_has_spectral_extinction = m_inner->has_spectral_extinction();
         m_phase_function = m_inner->phase_function();
 
-        ExtremumStructure *inner_structure = m_inner->extremum_structure();
-        if (!inner_structure)
+        m_extrema = m_inner->dda_entries();
+        if (m_extrema.empty())
             Throw("repeat: the nested medium has no extremum structure");
 
-        ScalarBoundingBox3f tile = inner_structure->bbox();
+        ScalarBoundingBox3f tile;
+        for (const auto &entry : m_extrema) {
+            if (entry.tiling)
+                Throw("repeat: the nested medium is already tiled");
+            tile.expand(entry.structure->bbox());
+        }
         if (!tile.valid() ||
             !dr::all(dr::isfinite(tile.min) && dr::isfinite(tile.max)))
             Throw("repeat: the nested medium must have a finite domain (one "
                   "tile), got %s", tile);
         m_origin = tile.min;
 
-        // The lattice frame is stated once, here, and shared with the
-        // extremum structure
-        Properties props_repeat("extremum_repeat");
-        props_repeat.set("structure", (Object *) inner_structure);
-
         m_lattice = props.get<ScalarVector3f>("lattice", tile.extents());
         m_lattice_rcp = 1.f / m_lattice;
-        props_repeat.set("lattice", m_lattice);
+        if (dr::any(tile.extents() > m_lattice))
+            Throw("repeat: the tile %s does not fit inside a lattice period %s",
+                  tile, m_lattice);
 
         if (props.has_property("aabb_min") && props.has_property("aabb_max")) {
             m_aabb = ScalarBoundingBox3f(props.get<ScalarPoint3f>("aabb_min"),
                                          props.get<ScalarPoint3f>("aabb_max"));
-            props_repeat.set("aabb_min", ScalarPoint3f(m_aabb.min));
-            props_repeat.set("aabb_max", ScalarPoint3f(m_aabb.max));
         } else {
             m_aabb = ScalarBoundingBox3f(
                 ScalarPoint3f(-dr::Infinity<ScalarFloat>),
                 ScalarPoint3f(dr::Infinity<ScalarFloat>));
         }
 
-        m_extremum_structure =
-            PluginManager::instance()->create_object<ExtremumStructure>(
-                props_repeat);
+        for (auto &entry : m_extrema) {
+            ScalarPoint3f cell_min = entry.structure->bbox().min;
+            entry.tiling = { ScalarBoundingBox3f(cell_min, cell_min + m_lattice),
+                             m_aabb };
+        }
 
         m_ddis_threshold = m_inner->ddis_threshold();
         m_ddis_phase_function =

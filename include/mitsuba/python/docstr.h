@@ -2031,6 +2031,14 @@ static const char *__doc_mitsuba_DDAState_pi =
 R"doc(Current cell index. Sentinel values (-1, resolution) mark the
 exterior.)doc";
 
+static const char *__doc_mitsuba_DDAStateList =
+R"doc(Traversal state of a medium's extremum structures, one DDAState per
+structure.)doc";
+
+static const char *__doc_mitsuba_DDAStateList_maxt = R"doc(End of the traversal range.)doc";
+
+static const char *__doc_mitsuba_DDAStateList_mint = R"doc(Cursor: entry distance of the next segment.)doc";
+
 static const char *__doc_mitsuba_DateTimeRecord = R"doc()doc";
 
 static const char *__doc_mitsuba_DateTimeRecord_DateTimeRecord = R"doc()doc";
@@ -4880,6 +4888,13 @@ static const char *__doc_mitsuba_Medium_create_ddis_phase_function =
 R"doc(Create the tabphase irregular plugin used as DDIS phase function.
 
 This method is an helper function for child classes.)doc";
+
+static const char *__doc_mitsuba_Medium_dda_init =
+R"doc(Set up a DDA traversal of the medium's extremum structures along
+``ray``.
+
+One DDAState per structure: a plain medium has one, a medium assembled
+from overlapping components one per component, up to MAX_DDA_OVERLAP.)doc";
 
 static const char *__doc_mitsuba_Medium_ddis_phase_function =
 R"doc(Return the ddis phase function of this medium. Can be null for medium

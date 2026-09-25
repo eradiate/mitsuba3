@@ -98,14 +98,6 @@ public:
     virtual std::pair<ExtremumSegment, DDAState>
     dda_next(const DDAState &state, Mask active = true) const = 0;
 
-    /**
-     * \brief Affine map from world space to the frame of <tt>DDAState::o</tt>
-     * and <tt>DDAState::d</tt>, as set up by ``dda_init``.
-     *
-     * Lets a wrapping structure recover the world ray from a traversal state.
-     * Valid once the structure is built.
-     */
-    virtual ScalarAffineTransform4f dda_to_local() const = 0;
 
     /**
      * \brief Traverse the extremum along a ray and applies a callback at each

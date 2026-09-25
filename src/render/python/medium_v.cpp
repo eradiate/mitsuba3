@@ -194,6 +194,18 @@ MI_PY_EXPORT(Medium) {
     bind_medium_generic<Medium *>(medium);
 // #ERADIATE_CHANGE_BEGIN: DDA support
     // Host pointer only: `dda_init` / `dda_step` are not in the vcall block.
+    medium.def("dda_init", &Medium::dda_init, "ray"_a, "mint"_a, "maxt"_a,
+               "active"_a = true, D(Medium, dda_init));
+    medium.def("dda_step",
+            [](Medium *ptr, DDAStateList state, const Ray3f &ray,
+               Mask active) {
+                ExtremumSegment segment = ptr->dda_step(state, ray, active);
+                dr::eval(segment, state);
+                return std::make_pair(segment, state);
+            },
+            "state"_a, "ray"_a, "active"_a = true,
+            "Test utility: ``dda_step`` on a copy of ``state``. Returns "
+            "(segment, advanced state), both evaluated.");
     medium.def("sample_test_dda",
             [](Medium *ptr, const Ray3f &ray, Float mint, Float maxt,
                Float target_ot, Mask active) {

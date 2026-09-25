@@ -182,7 +182,7 @@ public:
             m_extremum_structure =
                 PluginManager::instance()->create_object<ExtremumStructure>(Properties("extremum_global"));
         }
-        m_extrema = { m_extremum_structure };
+        m_extrema = { { m_extremum_structure, std::nullopt } };
 
         m_extremum_structure->update_extremum(
             m_sigmat->bbox(), m_sigmat.get(), m_scale);

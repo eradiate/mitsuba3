@@ -51,7 +51,7 @@ coefficient.
 
 No combined majorant structure is built: the medium traverses its
 components' extremum structures side by side and sums their segments. At
-most four components are supported.
+most four extremum structures are supported, counted over all components.
 */
 template <typename Float, typename Spectrum>
 class OverlappingMedium final : public Medium<Float, Spectrum> {
@@ -83,8 +83,6 @@ public:
         if(m_components.empty())
             Throw("Must have at least one medium component.");
 
-        if (m_components.size() > MAX_DDA_OVERLAP)
-            Throw("overlapping medium: too many components (%zu > %zu)", m_components.size(), MAX_DDA_OVERLAP);
 
         std::vector<const PhaseFunction *> phase_functions;
         phase_functions.reserve(m_components.size());
@@ -99,13 +97,19 @@ public:
 
         ScalarBoundingBox3f domain;
         for (auto &component : m_components) {
-            ExtremumStructure *structure = component->extremum_structure();
-            if (!structure)
+            if (component->dda_entries().empty())
                 Throw("overlapping medium: component %s has no extremum structure",
                       component->to_string());
-            m_extrema.push_back(structure);
-            domain.expand(structure->bbox());
+            for (const auto &entry : component->dda_entries()) {
+                m_extrema.push_back(entry);
+                domain.expand(entry.tiling ? entry.tiling->region
+                                           : entry.structure->bbox());
+            }
         }
+
+        if (m_extrema.size() > MAX_DDA_OVERLAP)
+            Throw("overlapping medium: too many extremum structures (%zu > %zu)",
+                  m_extrema.size(), MAX_DDA_OVERLAP);
 
         m_ddis_threshold = props.get<ScalarFloat>("ddis_threshold", 0.1f);
 

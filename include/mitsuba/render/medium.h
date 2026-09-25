@@ -9,6 +9,8 @@
 #include <mitsuba/render/eradiate/extremum_segment.h>
 #include <mitsuba/render/eradiate/tracking.h>
 #include <drjit/while_loop.h>
+#include <mitsuba/core/bbox.h>
+#include <optional>
 // #ERADIATE_CHANGE_END
 #include <drjit/call.h>
 
@@ -245,6 +247,28 @@ public:
 
 // #ERADIATE_CHANGE_BEGIN: DDA support
     /**
+     * \brief Periodic tiling of an extremum structure, as set by a \c repeat
+     * medium.
+     *
+     * The structure's own bounding box is one tile. It is repeated over the
+     * lattice of \c cell translates, whose extents are the lattice period, and
+     * only inside \c region.
+     */
+    struct DDATiling {
+        ScalarBoundingBox3f cell;
+        ScalarBoundingBox3f region;
+    };
+
+    /// One extremum structure traversed by the DDA route. Host-only.
+    struct DDAEntry {
+        ref<ExtremumStructure> structure;
+        std::optional<DDATiling> tiling;
+    };
+
+    /// Extremum structures traversed by the DDA route, one per component.
+    const std::vector<DDAEntry> &dda_entries() const { return m_extrema; }
+
+    /**
      * \brief Set up a DDA traversal of the medium's extremum structures along
      * \c ray.
      *
@@ -264,7 +288,9 @@ public:
      * Structures contribute zero outside their domain. Segments are half-open
      * and tile exactly: <tt>segment.maxt</tt> is the new <tt>state.mint</tt>.
      *
-     * \c ray is the one \c state was set up with. Unused for now.
+     * \c ray is the one \c state was set up with. A tiled entry holds the
+     * part of the ray inside one lattice cell at a time and moves to the next
+     * cell when that runs out.
      */
     ExtremumSegment dda_step(DDAStateList &state, const Ray3f &ray,
                              Mask active = true) const;
@@ -365,6 +391,19 @@ protected:
     Medium();
     Medium(const Properties &props);
 
+// #ERADIATE_CHANGE_BEGIN: DDA support
+    /**
+     * \brief State of a tiled entry moved to the lattice cell the ray is in
+     * just after \c t0, clipped to that cell, the entry's region and \c maxt.
+     *
+     * A point on a cell face belongs to the cell the ray is heading into. An
+     * entry left with no segment in the cell is parked at the cell's exit,
+     * or at \c maxt once the ray has left the region.
+     */
+    DDAState dda_enter_cell(const DDAEntry &entry, const Ray3f &ray, Float t0,
+                            Float maxt, Mask active) const;
+// #ERADIATE_CHANGE_END
+
 protected:
     ref<PhaseFunction> m_phase_function;
     bool m_sample_emitters;
@@ -373,7 +412,7 @@ protected:
 // #ERADIATE_CHANGE_BEGIN: Extremum structure support
     ref<ExtremumStructure> m_extremum_structure;
     /// Extremum structures traversed by the DDA route, one per component.
-    std::vector<ref<ExtremumStructure>> m_extrema;
+    std::vector<DDAEntry> m_extrema;
     bool m_use_rrt;
 // #ERADIATE_CHANGE_END
 

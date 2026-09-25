@@ -171,8 +171,8 @@ def _sum(walks, mint, maxt):
     out = []
     for lo, hi in zip(bounds[:-1], bounds[1:]):
         t = 0.5 * (lo + hi)
-        majorant = sum(s[3] for w in walks for s in w if s[0] <= t < s[1])
-        out.append((lo, hi, 0.0, majorant))
+        inside = [s for w in walks for s in w if s[0] <= t < s[1]]
+        out.append((lo, hi, sum(s[2] for s in inside), sum(s[3] for s in inside)))
     return out
 
 
@@ -331,23 +331,8 @@ def test_dda_track_vcall_matches_traverse_extremum(variants_vec_rgb, ratio):
             assert np.allclose(np.array(e), np.array(a), rtol=1e-5, atol=1e-6)
 
 
-def _repeat_cases():
-    """``(name, inner, lattice, aabb)``: tiles that abut and tiles with gaps,
-    over an infinite and a finite tiled region."""
-    grid = _extremum(_grid_volume((4, 5, 3)), "extremum_grid", (2, 3, 3))
-    radial = _extremum(_spherical_volume((4, 4, 4)), "extremum_spherical", (4, 1, 1))
-    glob = _extremum(_grid_volume((4, 4, 4)), "extremum_global", None)
-    return [
-        ("grid", grid, None, None),
-        ("grid_gaps", grid, (1.5, 1.25, 1.0), None),
-        ("grid_aabb", grid, (1.5, 1.0, 2.0), ((-1.2, -0.3, -2.0), (2.7, 3.1, 1.6))),
-        ("radial_gaps", radial, (2.5, 3.0, 2.0), None),
-        ("global_gaps", glob, (1.25, 1.5, 1.75), None),
-    ]
-
-
-def _repeat(inner, lattice, aabb):
-    d = {"type": "extremum_repeat", "inner": inner}
+def _repeat(inner, lattice=None, aabb=None):
+    d = {"type": "repeat", "inner": inner}
     if lattice is not None:
         d["lattice"] = mi.ScalarVector3f(*lattice)
     if aabb is not None:
@@ -356,11 +341,66 @@ def _repeat(inner, lattice, aabb):
     return mi.load_dict(d)
 
 
-def _repeat_rays(tile_min, extents):
-    """Long rays crossing several cells, axis-aligned ones through a tile and
-    through a gap."""
+def _bbox(structure):
+    bbox = structure.bbox()
+    return np.array(bbox.min).reshape(-1), np.array(bbox.extents()).reshape(-1)
+
+
+def _repeat_cases():
+    """``(name, medium, entries, domain)``. ``entries`` are the medium's
+    structures as ``(structure, tiling)``, ``tiling`` being ``(cell_min,
+    lattice, region)`` or None; ``domain`` is the box the rays aim at."""
+    grid = (_grid_volume((4, 5, 3)), "extremum_grid", (2, 3, 3))
+    radial = (_spherical_volume((4, 4, 4)), "extremum_spherical", (4, 1, 1))
+    glob = (_grid_volume((4, 4, 4), seed=3), "extremum_global", None)
+    aabb = ((-1.2, -0.3, -2.0), (2.7, 3.1, 1.6))
+
+    def tiled(part, lattice=None, aabb=None):
+        structure = _extremum(*part)
+        cell_min, extents = _bbox(structure)
+        lattice = extents if lattice is None else np.array(lattice)
+        medium = _repeat(_component(*part), lattice, aabb)
+        return medium, (structure, (cell_min, lattice, aabb))
+
+    cases = []
+    for name, part, lattice, region in [
+        ("grid", grid, None, None),
+        ("grid_gaps", grid, (1.5, 1.25, 1.0), None),
+        ("grid_aabb", grid, (1.5, 1.0, 2.0), aabb),
+        ("radial_gaps", radial, (2.5, 3.0, 2.0), None),
+        ("global_gaps", glob, (1.25, 1.5, 1.75), None),
+    ]:
+        medium, entry = tiled(part, lattice, region)
+        cases.append((name, medium, [entry], _bbox(entry[0])))
+
+    medium, entry = tiled(grid, (1.5, 1.25, 1.0), aabb)
+    cases.append(
+        (
+            "overlap_repeat",
+            _overlap([medium, _component(*glob)]),
+            [entry, (_extremum(*glob), None)],
+            _bbox(entry[0]),
+        )
+    )
+
+    lattice = np.array([2.5, 2.25, 2.0])
+    structures = [_extremum(*grid), _extremum(*radial)]
+    cases.append(
+        (
+            "repeat_overlap",
+            _repeat(_overlap([_component(*grid), _component(*radial)]), lattice),
+            [(s, (_bbox(s)[0], lattice, None)) for s in structures],
+            _bbox(structures[1]),
+        )
+    )
+    return cases
+
+
+def _repeat_rays(domain):
+    """Long rays crossing several cells; axis-aligned ones through a tile,
+    through a gap and beside a finite region."""
+    tile_min, extents = domain
     rng = np.random.default_rng(4)
-    tile_min, extents = np.array(tile_min), np.array(extents)
     out = []
     for _ in range(8):
         o = tile_min + extents * (rng.random(3) * 3.0 - 1.0)
@@ -369,60 +409,89 @@ def _repeat_rays(tile_min, extents):
     for axis in range(3):
         d = np.zeros(3)
         d[axis] = 1.0 if axis != 1 else -1.0
-        out.append((tile_min + extents * np.array([0.3, 0.6, 0.4]), d))
-        out.append((tile_min + extents * np.array([1.1, 1.05, 1.02]), d))
+        for offset in ([0.3, 0.6, 0.4], [1.1, 1.05, 1.02], [0.3, -0.8, 0.4]):
+            out.append((tile_min + extents * np.array(offset), d))
     return [
         mi.Ray3f(o=mi.Point3f(*map(float, o)), d=mi.Vector3f(*map(float, d)))
         for o, d in out
     ]
 
 
-def _walk_repeat(inner, ray, mint, maxt, lattice):
-    """Oracle: split ``[mint, maxt]`` at the world lattice planes, walk the
-    inner structure over each cell on the ray shifted into the tile, and fill
-    each stretch of a cell outside the tile with one zero segment."""
-    tile = inner.bbox()
-    origin = np.array(tile.min).reshape(-1)
-    lattice = np.array(lattice).reshape(-1)
+def _slab(o, d, lo, hi):
+    lo, hi = np.array(lo), np.array(hi)
+    inside = (lo <= o) & (o <= hi)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        t0, t1 = (lo - o) / d, (hi - o) / d
+    near = np.where(d == 0.0, np.where(inside, -np.inf, np.inf), np.minimum(t0, t1))
+    far = np.where(d == 0.0, np.where(inside, np.inf, -np.inf), np.maximum(t0, t1))
+    return near.max(), far.min()
+
+
+def _walk_entry(structure, tiling, ray, mint, maxt):
+    """Oracle for one entry: split its part of ``[mint, maxt]`` at the world
+    lattice planes, walk the structure over each cell on the ray shifted into
+    the tile, and fill each stretch without a segment with one zero segment."""
     o = np.array(ray.o).reshape(-1).astype(np.float64)
     d = np.array(ray.d).reshape(-1).astype(np.float64)
+    ts, cell_min, lattice = {mint, maxt}, np.zeros(3), np.full(3, np.inf)
+    if tiling is not None:
+        cell_min, lattice, region = tiling
+        start, end = mint, maxt
+        if region is not None:
+            r0, r1 = _slab(o, d, *region)
+            start, end = max(mint, r0), min(maxt, r1)
+        if start >= end:
+            return [(mint, maxt, 0.0, 0.0)]
+        ts = {start, end}
+        for i in range(3):
+            if d[i] == 0.0:
+                continue
+            n0, n1 = sorted(
+                (o[i] + d[i] * t - cell_min[i]) / lattice[i] for t in (start, end)
+            )
+            for n in range(int(np.ceil(n0)), int(np.floor(n1)) + 1):
+                t = (cell_min[i] + n * lattice[i] - o[i]) / d[i]
+                if start < t < end:
+                    ts.add(float(t))
 
-    ts = {mint, maxt}
-    for i in range(3):
-        if d[i] == 0.0:
-            continue
-        n0, n1 = sorted(
-            (o[i] + d[i] * t - origin[i]) / lattice[i] for t in (mint, maxt)
-        )
-        for n in range(int(np.ceil(n0)), int(np.floor(n1)) + 1):
-            t = (origin[i] + n * lattice[i] - o[i]) / d[i]
-            if mint < t < maxt:
-                ts.add(float(t))
-
-    out = []
-    bounds = sorted(ts)
-    for lo, hi in zip(bounds[:-1], bounds[1:]):
-        cell = np.floor((o + d * 0.5 * (lo + hi) - origin) / lattice)
-        shifted = mi.Ray3f(o=mi.Point3f(*map(float, o - cell * lattice)), d=ray.d)
-        cursor = lo
-        for segment in _walk_dda(inner, shifted, lo, hi):
+    out, cursor = [], mint
+    for lo, hi in zip(sorted(ts)[:-1], sorted(ts)[1:]):
+        cell = np.floor((o + d * 0.5 * (lo + hi) - cell_min) / lattice)
+        shifted = o - np.nan_to_num(cell) * np.where(np.isinf(lattice), 0, lattice)
+        shifted = mi.Ray3f(o=mi.Point3f(*map(float, shifted)), d=ray.d)
+        for segment in _walk_dda(structure, shifted, lo, hi):
             if segment[0] > cursor:
                 out.append((cursor, segment[0], 0.0, 0.0))
             out.append(segment)
             cursor = segment[1]
         if cursor < hi:
             out.append((cursor, hi, 0.0, 0.0))
+            cursor = hi
+    if cursor < maxt:
+        out.append((cursor, maxt, 0.0, 0.0))
     return out
 
 
-def _repeat_walks():
-    for name, inner, lattice, aabb in _repeat_cases():
-        tile = inner.bbox()
-        extents = np.array(tile.extents()).reshape(-1)
-        lattice = extents if lattice is None else np.array(lattice)
-        repeat = _repeat(inner, lattice, aabb)
-        rays = _repeat_rays(np.array(tile.min).reshape(-1), extents)
-        yield name, inner, lattice, repeat, rays, 6.0 * float(extents.max())
+def _walk_medium(medium, ray, mint, maxt):
+    state = medium.dda_init(ray, mint, maxt)
+    out = []
+    for _ in range(MAX_STEPS):
+        if not _f(state.mint) < _f(state.maxt):
+            return out
+        segment, state = medium.dda_step(state, ray)
+        out.append(
+            (
+                _f(segment.mint),
+                _f(segment.maxt),
+                _f(segment.minorant()),
+                _f(segment.majorant()),
+            )
+        )
+    pytest.fail("dda traversal did not terminate")
+
+
+def _t_max(domain):
+    return 6.0 * float(domain[1].max())
 
 
 def _solid(segments, eps=1e-5):
@@ -431,30 +500,24 @@ def _solid(segments, eps=1e-5):
 
 
 def test_repeat_segments_tile(variant_scalar_rgb):
-    for name, _, _, repeat, rays, t_max in _repeat_walks():
-        for ray in rays:
-            state = repeat.dda_init(ray, 0.0, t_max)
-            mint, maxt = _f(state.mint), _f(state.maxt)
-            segments = _walk_dda(repeat, ray, 0.0, t_max)
-            if mint >= maxt:
-                assert not segments, (name, ray)
-                continue
-            assert segments[0][0] == mint, (name, ray)
-            assert segments[-1][1] == maxt, (name, ray)
+    for name, medium, _, domain in _repeat_cases():
+        t_max = _t_max(domain)
+        for ray in _repeat_rays(domain):
+            segments = _walk_medium(medium, ray, 0.0, t_max)
+            assert segments[0][0] == 0.0, (name, ray)
+            assert segments[-1][1] == t_max, (name, ray)
             for before, after in zip(segments[:-1], segments[1:]):
-                assert before[1] == after[0], (name, ray)
+                assert before[0] <= before[1] == after[0], (name, ray)
 
 
-def test_repeat_matches_shifted_inner(variant_scalar_rgb):
+def test_repeat_matches_shifted_structures(variant_scalar_rgb):
     gaps = {}
-    for name, inner, lattice, repeat, rays, t_max in _repeat_walks():
-        for ray in rays:
-            state = repeat.dda_init(ray, 0.0, t_max)
-            mint, maxt = _f(state.mint), _f(state.maxt)
-            if mint >= maxt:
-                continue
-            expected = _solid(_walk_repeat(inner, ray, mint, maxt, lattice))
-            actual = _solid(_walk_dda(repeat, ray, mint, maxt))
+    for name, medium, entries, domain in _repeat_cases():
+        t_max = _t_max(domain)
+        for ray in _repeat_rays(domain):
+            walks = [_walk_entry(s, tiling, ray, 0.0, t_max) for s, tiling in entries]
+            expected = _solid(_sum(walks, 0.0, t_max))
+            actual = _solid(_walk_medium(medium, ray, 0.0, t_max))
             assert len(expected) == len(actual), (name, ray)
             assert np.allclose(expected, actual, rtol=1e-5, atol=1e-5), (name, ray)
             gaps[name] = gaps.get(name, False) or any(s[3] == 0.0 for s in actual)
@@ -464,7 +527,17 @@ def test_repeat_matches_shifted_inner(variant_scalar_rgb):
         "grid_aabb": True,
         "radial_gaps": True,
         "global_gaps": True,
+        "overlap_repeat": True,
+        "repeat_overlap": True,
     }
+
+
+def test_repeat_rejects_invalid_tiling(variant_scalar_rgb):
+    grid = (_grid_volume((4, 5, 3)), "extremum_grid", (2, 3, 3))
+    with pytest.raises(RuntimeError, match="already tiled"):
+        _repeat(_repeat(_component(*grid)))
+    with pytest.raises(RuntimeError, match="does not fit"):
+        _repeat(_component(*grid), (1.5, 0.5, 1.0))
 
 
 def test_repeat_wide_matches_scalar(variants_vec_backends_once_rgb):
@@ -473,23 +546,29 @@ def test_repeat_wide_matches_scalar(variants_vec_backends_once_rgb):
     variant = mi.variant()
     mi.set_variant("scalar_rgb")
     expected = {
-        name: [_solid(_walk_dda(repeat, ray, 0.0, t_max)) for ray in rays]
-        for name, _, _, repeat, rays, t_max in _repeat_walks()
+        name: [
+            _solid(_walk_medium(medium, ray, 0.0, _t_max(domain)))
+            for ray in _repeat_rays(domain)
+        ]
+        for name, medium, _, domain in _repeat_cases()
     }
     mi.set_variant(variant)
 
-    for name, _, _, repeat, rays, t_max in _repeat_walks():
+    for name, medium, _, domain in _repeat_cases():
+        rays = _repeat_rays(domain)
         o = np.array([np.array(r.o).reshape(-1) for r in rays]).T
         d = np.array([np.array(r.d).reshape(-1) for r in rays]).T
         ray = mi.Ray3f(o=mi.Point3f(o), d=mi.Vector3f(d))
-        state = repeat.dda_init(ray, 0.0, t_max)
+        n = len(rays)
+        state = medium.dda_init(
+            ray, dr.zeros(mi.Float, n), dr.full(mi.Float, _t_max(domain), n)
+        )
         actual = [[] for _ in rays]
         for _ in range(MAX_STEPS):
             active = state.mint < state.maxt
             if not dr.any(active):
                 break
-            segment, state = repeat.dda_next(state, active)
-            dr.eval(segment, state)
+            segment, state = medium.dda_step(state, ray, active)
             columns = [
                 np.array(x)
                 for x in (
@@ -509,5 +588,4 @@ def test_repeat_wide_matches_scalar(variants_vec_backends_once_rgb):
                 assert before[1] == after[0], name
             a = _solid(a)
             assert len(e) == len(a), name
-            if e:
-                assert np.allclose(e, a, rtol=1e-5, atol=1e-5), name
+            assert np.allclose(e, a, rtol=1e-5, atol=1e-5), name

@@ -175,20 +175,66 @@ Medium<Float, Spectrum>::prepare_medium_traversal(const Ray3f& ray, Mask active)
 
 // #ERADIATE_CHANGE_BEGIN: DDA support
 MI_VARIANT
+typename Medium<Float, Spectrum>::DDAState
+Medium<Float, Spectrum>::dda_enter_cell(const DDAEntry &entry,
+                                        const Ray3f &ray, Float t0, Float maxt,
+                                        Mask active) const {
+    const DDATiling &tiling = *entry.tiling;
+    ScalarVector3f lattice  = tiling.cell.extents();
+
+    auto [in_region, region_mint, region_maxt] =
+        tiling.region.ray_intersect(ray);
+    t0 = dr::maximum(t0, region_mint);
+
+    Vector3f exit_face = dr::select(ray.d > 0.f, 1.f, 0.f);
+    auto cell_exit = [&](const Vector3f &cell) {
+        Vector3f t = (tiling.cell.min + (cell + exit_face) * lattice - ray.o) /
+                     ray.d;
+        return dr::select(ray.d == 0.f, dr::Infinity<Float>, t);
+    };
+
+    Vector3f cell = dr::floor(
+        (dr::fmadd(ray.d, t0, ray.o) - tiling.cell.min) / lattice);
+    Vector3f t_exit = cell_exit(cell);
+    auto behind     = t_exit <= t0;
+    cell += dr::select(behind, dr::sign(ray.d), 0.f);
+    t_exit = dr::select(behind, cell_exit(cell), t_exit);
+
+    Float end = dr::minimum(dr::min(t_exit), dr::minimum(region_maxt, maxt));
+    Mask entered = in_region && t0 < end && active;
+
+    Ray3f shifted = ray;
+    shifted.o     = ray.o - cell * lattice;
+    DDAState state = entry.structure->dda_init(shifted, t0, end, entered);
+
+    Float park = dr::select(entered, end, maxt);
+    Mask empty = !(state.mint < state.maxt);
+    dr::masked(state.mint, empty) = park;
+    dr::masked(state.maxt, empty) = park;
+    return state;
+}
+
+MI_VARIANT
 typename Medium<Float, Spectrum>::DDAStateList
 Medium<Float, Spectrum>::dda_init(const Ray3f &ray, Float mint, Float maxt,
                                   Mask active) const {
     DDAStateList state = dr::zeros<DDAStateList>();
     state.mint = mint;
     state.maxt = maxt;
-    for (size_t i = 0; i < m_extrema.size(); ++i)
-        state.entries[i] = m_extrema[i]->dda_init(ray, mint, maxt, active);
+    for (size_t i = 0; i < m_extrema.size(); ++i) {
+        const DDAEntry &entry = m_extrema[i];
+        if (entry.tiling)
+            state.entries[i] = dda_enter_cell(entry, ray, mint, maxt, active);
+        else
+            state.entries[i] =
+                entry.structure->dda_init(ray, mint, maxt, active);
+    }
     return state;
 }
 
 MI_VARIANT
 typename Medium<Float, Spectrum>::ExtremumSegment
-Medium<Float, Spectrum>::dda_step(DDAStateList &state, const Ray3f & /*ray*/,
+Medium<Float, Spectrum>::dda_step(DDAStateList &state, const Ray3f &ray,
                                   Mask active) const {
     Float cursor   = state.mint;
     Float maxt     = state.maxt;
@@ -198,12 +244,25 @@ Medium<Float, Spectrum>::dda_step(DDAStateList &state, const Ray3f & /*ray*/,
     for (size_t i = 0; i < m_extrema.size(); ++i) {
         DDAState &entry = state.entries[i];
 
-        Mask stale   = cursor >= entry.mint;
-        Mask more    = entry.mint < entry.maxt;
+        Mask stale = cursor >= entry.mint;
+        Mask more  = entry.mint < entry.maxt;
+
+        if (m_extrema[i].tiling) {
+            Mask move = stale && !more && entry.maxt < maxt && active;
+            if (dr::any_or<true>(move)) {
+                dr::masked(entry, move) =
+                    dda_enter_cell(m_extrema[i], ray, entry.maxt, maxt, move);
+                dr::masked(state.values[i], move) = 0.f;
+                stale = cursor >= entry.mint;
+                more  = entry.mint < entry.maxt;
+            }
+        }
+
         Mask refresh = stale && more && active;
 
         if (dr::any_or<true>(refresh)) {
-            auto [segment, advanced] = m_extrema[i]->dda_next(entry, refresh);
+            auto [segment, advanced] =
+                m_extrema[i].structure->dda_next(entry, refresh);
             dr::masked(state.values[i], refresh) = segment.value;
             dr::masked(entry, refresh)           = advanced;
         }
@@ -212,8 +271,7 @@ Medium<Float, Spectrum>::dda_step(DDAStateList &state, const Ray3f & /*ray*/,
         dr::masked(state.values[i], spent) = 0.f;
         value += state.values[i];
 
-        Float boundary = dr::select(entry.mint < entry.maxt, entry.mint, maxt);
-        seg_maxt = dr::minimum(seg_maxt, boundary);
+        seg_maxt = dr::minimum(seg_maxt, dr::select(spent, maxt, entry.mint));
     }
 
     Float next_mint = dr::maximum(seg_maxt, cursor);

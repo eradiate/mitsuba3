@@ -52,6 +52,10 @@ MI_PY_EXPORT(DDAState) {
         .def_field(DDAState, maxt, D(DDAState, maxt));
 
     MI_PY_DRJIT_STRUCT(ds, DDAState, o, d, pi, mint, maxt);
+
+    nb::class_<DDAStateList>(m, "DDAStateList", D(DDAStateList))
+        .def_field(DDAStateList, mint, D(DDAStateList, mint))
+        .def_field(DDAStateList, maxt, D(DDAStateList, maxt));
 }
 
 /// Trampoline for derived types implemented in Python
@@ -84,10 +88,6 @@ public:
     std::pair<ExtremumSegment, DDAState>
     dda_next(const DDAState &state, Mask active) const override {
         NB_OVERRIDE_PURE(dda_next, state, active);
-    }
-
-    ScalarAffineTransform4f dda_to_local() const override {
-        NB_OVERRIDE_PURE(dda_to_local);
     }
 
     std::string to_string() const override {

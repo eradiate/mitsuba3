@@ -119,7 +119,7 @@ public:
             m_extremum_structure =
                 PluginManager::instance()->create_object<ExtremumStructure>(Properties("extremum_global"));
         }
-        m_extrema = { m_extremum_structure };
+        m_extrema = { { m_extremum_structure, std::nullopt } };
 
         m_ddis_threshold = props.get<ScalarFloat>("ddis_threshold", 0.1f);
 
