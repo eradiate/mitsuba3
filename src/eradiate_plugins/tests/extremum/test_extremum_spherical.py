@@ -33,14 +33,9 @@ def generate_extremum_spherical(
         }
     )
     extremum_struct = mi.load_dict(
-        {
-            "type": "extremum_spherical",
-            "volume": volume,
-            "resolution": extremum_res,
-            "rmin": rmin,
-            "rmax": rmax,
-        }
+        {"type": "extremum_spherical", "resolution": extremum_res}
     )
+    extremum_struct.update_extremum(volume.bbox(), volume)
 
     extremum_grid = mi.traverse(extremum_struct)["data"].numpy()
     extremum_grid = extremum_grid.reshape(
@@ -128,29 +123,16 @@ def test_update_on_sigma_t_change(variant_scalar_mono_double, medium_type):
     after = [5.0, 6.0, 7.0, 8.0]
 
     volume = _make_spherical_volume(before, n, rmin, rmax)
-    extremum = mi.load_dict(
-        {
-            "type": "extremum_spherical",
-            "volume": volume,
-            "resolution": resolution,
-            "rmin": rmin,
-            "rmax": rmax,
-        }
-    )
+    extremum = mi.load_dict({"type": "extremum_spherical", "resolution": resolution})
     medium = _make_medium(medium_type, volume, extremum)
 
     # Ground truth: an extremum structure built directly from the "after"
     # data, independently of the update mechanism under test.
     ref_volume = _make_spherical_volume(after, n, rmin, rmax)
     ref_extremum = mi.load_dict(
-        {
-            "type": "extremum_spherical",
-            "volume": ref_volume,
-            "resolution": resolution,
-            "rmin": rmin,
-            "rmax": rmax,
-        }
+        {"type": "extremum_spherical", "resolution": resolution}
     )
+    ref_extremum.update_extremum(ref_volume.bbox(), ref_volume)
     expected = np.array(mi.traverse(ref_extremum)["data"])
 
     params = mi.eradiate.traverse(medium)
