@@ -81,8 +81,9 @@ def test_radial_build_half_res(variant_scalar_rgb):
     assert np.allclose(data[1::2, 1::2, 1::2], extremum_grid[:, :, :, 1])
 
 
-def _make_spherical_volume(values, n, rmin, rmax):
-    data = np.array(values, dtype=float).reshape(n, 1, 1)
+def _make_spherical_volume(values, n, rmin, rmax, fillmin=1.0, fillmax=0.0):
+    # Radial resolution must be the grid's fastest (last) axis.
+    data = np.array(values, dtype=float).reshape(1, 1, n)
     grid = mi.load_dict(
         {
             "type": "gridvolume",
@@ -97,10 +98,18 @@ def _make_spherical_volume(values, n, rmin, rmax):
             "volume": grid,
             "rmin": rmin,
             "rmax": rmax,
-            "fillmin": 1.0,
-            "fillmax": 0.0,
+            "fillmin": fillmin,
+            "fillmax": fillmax,
         }
     )
+
+
+def _make_extremum(volume, n):
+    extremum = mi.load_dict(
+        {"type": "extremum_spherical", "resolution": mi.ScalarVector3i(n, 1, 1)}
+    )
+    extremum.update_extremum(volume.bbox(), volume)
+    return extremum
 
 
 def _make_medium(medium_type, volume, extremum):
@@ -115,7 +124,7 @@ def _make_medium(medium_type, volume, extremum):
 
 
 @pytest.mark.parametrize("medium_type", ["heterogeneous", "eoheterogeneous"])
-def test_update_on_sigma_t_change(variant_scalar_mono_double, medium_type):
+def test_update_on_sigma_t_change(variant_scalar_mono, medium_type):
     n = 4
     rmin, rmax = 0.5, 1.0
     resolution = mi.ScalarVector3i(n, 1, 1)
@@ -141,3 +150,68 @@ def test_update_on_sigma_t_change(variant_scalar_mono_double, medium_type):
 
     got = np.array(mi.traverse(medium.extremum_structure())["data"])
     assert np.allclose(got, expected)
+
+
+def test_sample_multi_layer(variant_scalar_mono):
+    # Radial ray entering exactly at rmax, heading to the center. 4 shells of
+    # width 0.2, values [1, 2, 3, 4] from rmin=0.2 outward. Sampled inside the
+    # 3rd layer (COT per layer: 0.8, 1.4, 1.8) at mid-distance.
+    volume = _make_spherical_volume([1.0, 2.0, 3.0, 4.0], 4, rmin=0.2, rmax=1.0)
+    extremum = _make_extremum(volume, 4)
+
+    ray = mi.Ray3f(o=[1, 0, 0], d=[-1, 0, 0])
+    distance, leftover_ot = extremum.sample_test(ray, 0.0, 2.0, target_ot=1.6)
+
+    assert np.allclose(distance, 0.5)
+    assert np.allclose(leftover_ot, 0.2)
+
+
+def test_sample_escapes(variant_scalar_mono):
+    # Same setup as `test_sample_mutli_layer`, but the ray escapes the structure.
+    volume = _make_spherical_volume([1.0, 2.0, 3.0, 4.0], 4, rmin=0.2, rmax=1.0)
+    extremum = _make_extremum(volume, 4)
+
+    ray = mi.Ray3f(o=[1, 0, 0], d=[-1, 0, 0])
+    distance, leftover_ot = extremum.sample_test(ray, 0.0, 3.0, target_ot=6.0)
+
+    assert np.isinf(distance)
+    assert np.allclose(leftover_ot, 1.6)
+
+
+def test_sample_tangent_shell(variant_scalar_mono):
+    # Single shell [0.6, 1.0] (value 2.0). Ray tangent to rmin. Samples past
+    # tangent point.
+    volume = _make_spherical_volume([2.0], 1, rmin=0.6, rmax=1.0)
+    extremum = _make_extremum(volume, 1)
+
+    ray = mi.Ray3f(o=[0.6, 0, -3], d=[0, 0, 1])
+    distance, leftover_ot = extremum.sample_test(ray, 0.0, 10.0, target_ot=2.4)
+
+    assert np.allclose(distance, 3.4, rtol=0.001)
+    assert np.allclose(leftover_ot, 0.8)
+
+
+def test_sample_through_origin(variant_scalar_mono):
+    # Ray straight through the origin is tangent to the degenerate r=0
+    # boundary. Sampled past the origin.
+    volume = _make_spherical_volume([5.0], 1, rmin=0.0, rmax=1.0)
+    extremum = _make_extremum(volume, 1)
+
+    ray = mi.Ray3f(o=[0, 0, -3], d=[0, 0, 1])
+    distance, leftover_ot = extremum.sample_test(ray, 0.0, 10.0, target_ot=7.5)
+
+    assert np.allclose(distance, 3.5)
+    assert np.allclose(leftover_ot, 7.5)
+
+
+def test_sample_fillmax_sampled(variant_scalar_mono):
+    # fillmax=0.5: the region outside rmax is not vacuum, so an interaction
+    # can be sampled there before the ray ever reaches the shell.
+    volume = _make_spherical_volume([2.0], 1, rmin=0.5, rmax=1.0, fillmax=0.5)
+    extremum = _make_extremum(volume, 1)
+
+    ray = mi.Ray3f(o=[3, 0, 0], d=[-1, 0, 0])
+    distance, leftover_ot = extremum.sample_test(ray, 0.0, 10.0, target_ot=0.6)
+
+    assert np.allclose(distance, 1.2)
+    assert np.allclose(leftover_ot, 0.6)
