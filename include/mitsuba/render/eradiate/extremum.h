@@ -38,7 +38,10 @@ struct ExtremumState {
     /// End of the traversal range.
     Float maxt;
 
-    DRJIT_STRUCT(ExtremumState, o, d, pi, mint, maxt)
+    /// End of the inner structure's traversal (nested structures).
+    Float inner_maxt;
+
+    DRJIT_STRUCT(ExtremumState, o, d, pi, mint, maxt, inner_maxt)
 };
 
 /**

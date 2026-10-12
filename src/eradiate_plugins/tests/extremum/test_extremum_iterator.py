@@ -5,7 +5,7 @@ import mitsuba as mi
 import numpy as np
 import pytest
 
-from .utils import walk_iter
+from .utils import FAR, walk_iter
 
 
 def _grid_volume(resolution, seed=0):
@@ -267,6 +267,16 @@ def test_track_component_frequencies(variants_vec_rgb):
         assert dr.allclose(weight, albedo[i], rtol=1e-5)
 
 
+def _repeat(inner, lattice=None, aabb=FAR):
+    d = {"type": "repeat", "inner": inner}
+    if lattice is not None:
+        d["lattice"] = mi.ScalarVector3f(*lattice)
+    if aabb is not None:
+        d["aabb_min"] = mi.ScalarPoint3f(*aabb[0])
+        d["aabb_max"] = mi.ScalarPoint3f(*aabb[1])
+    return mi.load_dict(d)
+
+
 def _step_grid(**props):
     """sigma_t 1 on x in [0, 0.5] and 2 on [0.5, 1] (y, z in [0, 1]), under
     a global majorant of 2: null collisions on the first half. ``props`` are
@@ -324,6 +334,13 @@ TRACKING_CASES = {
         ),
         (-1.0, 0.5, 0.5),
         [(1.25, 0.25), (1.5, 0.625), (2.0, 1.875), (2.25, 2.0)],
+    ),
+    "repeat": (
+        lambda: _repeat(
+            _step_grid(), (1.5,) * 3, ((-0.5, -1.0, -1.0), (2.75, 2.0, 2.0))
+        ),
+        (-1.0, 0.5, 0.5),
+        [(1.5, 0.5), (2.0, 1.5), (3.0, 2.0), (3.5, 3.0)],
     ),
     "shells": (
         _shells,
