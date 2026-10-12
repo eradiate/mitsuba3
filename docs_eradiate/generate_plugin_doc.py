@@ -29,6 +29,7 @@ EXTREMUM_ORDERING = [
     "extremum_grid",
     "extremum_spherical",
     "extremum_global",
+    "extremum_repeat",
 ]
 
 INTEGRATOR_ORDERING = [
