@@ -310,7 +310,9 @@ template <typename Point_> struct BoundingBox {
         */
 
         // Ensure that the ray either has a nonzero slope on each axis
-        auto active = dr::any(ray.d != dr::zeros<Vector>());
+// #ERADIATE_CHANGE_BEGIN: Flat-axis miss
+        auto active = dr::all(ray.d != 0.f || (ray.o >= min && ray.o <= max));
+// #ERADIATE_CHANGE_END
 
         Vector d_rcp = dr::rcp(ray.d);
 
