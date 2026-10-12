@@ -30,3 +30,6 @@ def sample_iter(structure, ray, mint, maxt, target_ot):
             return lo + target_ot / max(majorant, 1e-7), target_ot
         target_ot -= ot
     return dr.inf, target_ot
+
+
+FAR = ((-20.0,) * 3, (20.0,) * 3)

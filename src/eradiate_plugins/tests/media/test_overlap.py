@@ -48,5 +48,12 @@ def test_phase_function_per_component(variants_vec_rgb, g):
 
 def test_overlap_rejects_nested_overlap(variant_scalar_rgb):
     inner = {"type": "overlap", "a": _component(0.0), "b": _component(0.0)}
-    with pytest.raises(RuntimeError, match="nested overlaps"):
-        mi.load_dict({"type": "overlap", "a": inner, "b": _component(0.0)})
+    repeat = {
+        "type": "repeat",
+        "inner": inner,
+        "aabb_min": mi.ScalarPoint3f(-20.0),
+        "aabb_max": mi.ScalarPoint3f(20.0),
+    }
+    for nested in (inner, repeat):
+        with pytest.raises(RuntimeError, match="nested overlaps"):
+            mi.load_dict({"type": "overlap", "a": nested, "b": _component(0.0)})
