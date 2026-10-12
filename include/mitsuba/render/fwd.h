@@ -49,6 +49,11 @@ template <typename Float, typename Shape>    struct PreliminaryIntersection;
 template <typename Float, typename Spectrum> class ExtremumStructure;
 
 template <typename Float, typename Spectrum> struct ExtremumSegment;
+
+template <typename Float, typename Spectrum> struct ExtremumState;
+
+template <typename Float, typename Spectrum> struct MediumSample3;
+
 // #ERADIATE_CHANGE_END
 
 /// Shape type bit flags driving GPU intersection-function dispatch.
@@ -163,10 +168,9 @@ template <typename Float_, typename Spectrum_> struct RenderAliases {
 
 // #ERADIATE_CHANGE_BEGIN: Local extremum support
     using ExtremumStructure      = mitsuba::ExtremumStructure<Float, Spectrum>;
-    
-    using ExtremumStructurePtr   = dr::replace_scalar_t<Float, const ExtremumStructure *>;
-    
     using ExtremumSegment        = mitsuba::ExtremumSegment<Float, Spectrum>;
+    using ExtremumState          = mitsuba::ExtremumState<Float, Spectrum>;
+    using MediumSample3f         = MediumSample3<Float, Spectrum>;
 // #ERADIATE_CHANGE_END
 
 };
@@ -219,6 +223,8 @@ template <typename Float_, typename Spectrum_> struct RenderAliases {
     using SilhouetteSample3f        = typename RenderAliases::SilhouetteSample3f;                  \
 /* #ERADIATE_CHANGE_BEGIN: Local extremum support */                                               \
     using ExtremumSegment           = typename RenderAliases::ExtremumSegment;                     \
+    using ExtremumState             = typename RenderAliases::ExtremumState;                       \
+    using MediumSample3f            = typename RenderAliases::MediumSample3f;                      \
 /* #ERADIATE_CHANGE_END */                                                                         \
     DRJIT_MAP(MI_IMPORT_TYPES_MACRO, __VA_ARGS__)
 
@@ -256,6 +262,5 @@ template <typename Float_, typename Spectrum_> struct RenderAliases {
     using SensorPtr              = typename RenderAliases::SensorPtr;                              \
 /* #ERADIATE_CHANGE_BEGIN: Local extremum support */                                               \
     using ExtremumStructure      = typename RenderAliases::ExtremumStructure;                      \
-    using ExtremumStructurePtr   = typename RenderAliases::ExtremumStructurePtr;                   \
-/* #ERADIATE_CHANGE_END */                                                                         
+/* #ERADIATE_CHANGE_END */
 NAMESPACE_END(mitsuba)

@@ -23,9 +23,6 @@ public:
     MI_IMPORT_BASE(ExtremumStructure, m_bbox, m_scale)
     MI_IMPORT_TYPES(Volume)
 
-    using TrackingStateType    = TrackingState<Float, Spectrum>;
-    using TrackingFunctionType = TrackingFunction<Float, Spectrum>;
-
     ExtremumGlobal(const Properties &props) : Base(props) {}
 
     void build(const Volume *volume) override {
@@ -33,41 +30,27 @@ public:
         m_majorant = volume->max();
     }
 
-    TrackingStateType traverse_extremum(
-        const Ray3f &/*ray*/,
-        Float mint,
-        Float maxt,
-        UInt32 channel,
-        TrackingStateType state,
-        TrackingFunctionType* func,
-        Mask active
-    ) const override {
-        ExtremumSegment segment(mint, maxt, m_scale*m_minorant, m_scale*m_majorant);
+    ExtremumState begin(const Ray3f &ray, Float mint, Float maxt,
+                        Mask active) const override {
+        auto [hit, d0, d1] = m_bbox.ray_intersect(ray);
 
-        struct LoopState {
-            ExtremumSegment segment;
-            TrackingStateType state;
-            Mask advance;
-            Mask active;
+        ExtremumState state = dr::zeros<ExtremumState>();
+        state.o    = ray.o;
+        state.d    = ray.d;
+        state.mint = dr::select(hit, dr::maximum(mint, d0), mint);
+        state.maxt = dr::select(hit && active, dr::minimum(maxt, d1),
+                                state.mint);
+        return state;
+    }
 
-            DRJIT_STRUCT(LoopState, segment, state, advance, active)
-        } ls {
-            segment,
-            state,
-            /*advance =*/true,
-            active
-        };
+    ExtremumSegment next(ExtremumState &state, const Ray3f &,
+                         Mask active) const override {
+        Float maxt = dr::select(active, state.maxt, state.mint);
 
-        dr::tie(ls) = dr::while_loop(
-        dr::make_tuple(ls),
-        [](const LoopState &ls){ return ls.active; },
-        [func, channel](LoopState &ls){
-            std::tie(ls.advance, ls.active) =
-                func(ls.segment, ls.state, channel, ls.active);
-            ls.active &= !ls.advance;
-        });
-
-        return ls.state;
+        ExtremumSegment segment(state.mint, maxt, m_scale * m_minorant,
+                                m_scale * m_majorant);
+        dr::masked(state.mint, active) = maxt;
+        return segment;
     }
 
     std::tuple<Float, Float> eval_1(const Interaction3f &/*it*/,
