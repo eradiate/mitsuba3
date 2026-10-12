@@ -3832,15 +3832,6 @@ R"doc(Mark the extremum segment as invalid.
 This operation sets segment's minimum and maximum distances to
 :math:`\infty` and :math:`-\infty`, respectively.)doc";
 
-static const char *__doc_mitsuba_ExtremumSegment_valid =
-R"doc(Check whether this is a valid segment
-
-A segment is considered valid when
-
-```
-segment.mint < segment.maxt
-```)doc";
-
 static const char *__doc_mitsuba_ExtremumSegment_value = R"doc(Extremum data stored as [minorant, majorant])doc";
 
 static const char *__doc_mitsuba_ExtremumSegment_zero =
@@ -3848,6 +3839,47 @@ R"doc(This callback method is invoked by dr::zeros<>, and takes care of
 fields that deviate from the standard zero-initialization convention.
 In ExtremumSegment, the ``mint`` and ``maxt`` fields are set to + and
 - infinity respectively to to mark invalid intersection records.)doc";
+
+static const char *__doc_mitsuba_ExtremumState =
+R"doc(Traversal state carried between successive ``next`` calls of an
+``ExtremumStructure``.
+
+Holds what a structure cannot cheaply recover per segment: local ray
+information, current visited index and traversal distance. The
+traversal is over once mint >= maxt.
+
+Ray information are stored as origin and direction to keep the struct
+lean.)doc";
+
+static const char *__doc_mitsuba_ExtremumState_2 = R"doc()doc";
+
+static const char *__doc_mitsuba_ExtremumState_ExtremumState = R"doc()doc";
+
+static const char *__doc_mitsuba_ExtremumState_ExtremumState_2 = R"doc()doc";
+
+static const char *__doc_mitsuba_ExtremumState_ExtremumState_3 = R"doc()doc";
+
+static const char *__doc_mitsuba_ExtremumState_d = R"doc(Ray direction in structure-local coordinates, never renormalised.)doc";
+
+static const char *__doc_mitsuba_ExtremumState_fields = R"doc()doc";
+
+static const char *__doc_mitsuba_ExtremumState_fields_2 = R"doc()doc";
+
+static const char *__doc_mitsuba_ExtremumState_labels = R"doc()doc";
+
+static const char *__doc_mitsuba_ExtremumState_maxt = R"doc(End of the traversal range.)doc";
+
+static const char *__doc_mitsuba_ExtremumState_mint = R"doc(Entry distance of the next segment. Exact in ``t``.)doc";
+
+static const char *__doc_mitsuba_ExtremumState_name = R"doc()doc";
+
+static const char *__doc_mitsuba_ExtremumState_o = R"doc(Ray origin in structure-local coordinates.)doc";
+
+static const char *__doc_mitsuba_ExtremumState_operator_assign = R"doc()doc";
+
+static const char *__doc_mitsuba_ExtremumState_operator_assign_2 = R"doc()doc";
+
+static const char *__doc_mitsuba_ExtremumState_pi = R"doc(Current cell index.)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure =
 R"doc(Abstract base class for extremum structures
@@ -3857,9 +3889,9 @@ that store local extrema (majorant/minorant) of volumetric extinction
 coefficients. This enables efficient use of tracking algorithms with
 locally-adaptive majorants and minorants.
 
-To minimize virtual function overhead, the ``traverse_extremum()``
-method encapsulates the entire traversal loop internally, requiring
-only a single virtual call per distance sample.
+Structures follow the pattern of an iterator: the traversal is
+initialized with ``begin``, and segments are served in order with
+``next``.
 
 The extremum structure needs to be built using the ``update_extremum``
 function, it is **not** called automatically in the constructor. The
@@ -3889,6 +3921,29 @@ static const char *__doc_mitsuba_ExtremumStructure_ExtremumStructure = R"doc(//!
 static const char *__doc_mitsuba_ExtremumStructure_ExtremumStructure_2 = R"doc()doc";
 
 static const char *__doc_mitsuba_ExtremumStructure_bbox = R"doc(//! @{ \name Non-virtual query methods)doc";
+
+static const char *__doc_mitsuba_ExtremumStructure_begin =
+R"doc(Set up a stateful traversal along ``ray``.
+
+Transforms the ray to structure-local coordinates, locates the entry
+cell and clips ``[mint, maxt]`` to the structure's domain. Called once
+per ray; the returned state is then advanced with ``next`` until
+``state.mint >= state.maxt``.
+
+Parameter ``ray``:
+    The ray along which the structure is traversed.
+
+Parameter ``mint``:
+    The minimum traversal distance.
+
+Parameter ``maxt``:
+    The maximum traversal distance.
+
+Returns:
+    The initalized ``ExtremumState``. Call ``next`` to get the first
+    and subsequent segment starting from mint.
+
+Not a vcall method, called on scalar pointers only.)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure_build =
 R"doc(Build the extremum structure of ``volume``.
@@ -3922,49 +3977,31 @@ static const char *__doc_mitsuba_ExtremumStructure_m_bbox = R"doc(The bbox over 
 
 static const char *__doc_mitsuba_ExtremumStructure_m_scale = R"doc(Scale by which to multiply the extremum values.)doc";
 
+static const char *__doc_mitsuba_ExtremumStructure_next =
+R"doc(Return the segment starting at ``state.mint`` and advance ``state``
+past it.
+
+This function traverses the Extremum structure, serving Extremum
+segments, and advancing the ``state``, much like an iterator. The
+traversal is over when ``state.mint >= state.maxt``.
+
+Parameter ``state``:
+    State that tracks traversal through the structure. Should be
+    initialized from ``begin``.
+
+Parameter ``ray``:
+    The world ray ``begin`` was called with.
+
+Returns:
+    The Exrtemum segment with ``segment.mint`` the old ``state.mint``
+    and ``segment.maxt`` the new one. A structure with internal gaps
+    returns zero-valued segments for them.
+
+Not a vcall method, called on scalar pointers only.)doc";
+
 static const char *__doc_mitsuba_ExtremumStructure_set_bbox = R"doc(Setter for the bbox over which the structure must be valid.)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure_set_scale = R"doc(Setter for the scale by which to multiply the extremum values.)doc";
-
-static const char *__doc_mitsuba_ExtremumStructure_traverse_extremum =
-R"doc(Traverse the extremum along a ray and applies a callback at each
-encountered segment.
-
-This method traverses the extremum structure segment by segment. At
-each segment, the callback ``func`` is called to advance the
-``state``. This is useful for example to implement Delta Tracking,
-Ratio Tracking, and Residual Ratio Tracking. The callback is typically
-defined in the integrator.
-
-Parameter ``ray``:
-    Ray along which to sample
-
-Parameter ``mint``:
-    Minimum distance to consider
-
-Parameter ``maxt``:
-    Maximum distance to consider
-
-Parameter ``channel``:
-    Channel from which to sample
-
-Parameter ``state``:
-    Mutable tracking state carried through the traversal loop
-
-Parameter ``func``:
-    Callback function called at every segment.
-
-Parameter ``active``:
-    Mask for active lanes
-
-Returns:
-    The final tracking state, that includes the medium interaction if
-    a real scattering event was sampled, and the throughput and pdfs
-    accumulated throughout the traversal.
-
-Note that this function cannot be made abstract because of it would
-force the requirement for bindings, which are incompatible with
-function types.)doc";
 
 static const char *__doc_mitsuba_ExtremumStructure_type = R"doc()doc";
 
@@ -5697,11 +5734,43 @@ static const char *__doc_mitsuba_MediumInteraction_zero =
 R"doc(This callback method is invoked by dr::zeros<>, and takes care of
 fields that deviate from the standard zero-initialization convention.)doc";
 
+static const char *__doc_mitsuba_MediumSample3 = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample3_2 = R"doc(Data structure holding the result of real interaction sampling.)doc";
+
+static const char *__doc_mitsuba_MediumSample3_MediumSample3 = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample3_MediumSample3_2 = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample3_MediumSample3_3 = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample3_component = R"doc(Medium component of the collision)doc";
+
+static const char *__doc_mitsuba_MediumSample3_fields = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample3_fields_2 = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample3_labels = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample3_mei = R"doc(Real collision, ``mei``.t is infinite if none occurred)doc";
+
+static const char *__doc_mitsuba_MediumSample3_name = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample3_operator_assign = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample3_operator_assign_2 = R"doc()doc";
+
+static const char *__doc_mitsuba_MediumSample3_pdf_ratio = R"doc(Sampling densities of all channels relative to the hero channel)doc";
+
 static const char *__doc_mitsuba_Medium_Medium = R"doc()doc";
 
 static const char *__doc_mitsuba_Medium_Medium_2 = R"doc()doc";
 
+static const char *__doc_mitsuba_Medium_TrackingRecord = R"doc(Loop state of track, defined in medium.cpp)doc";
+
 static const char *__doc_mitsuba_Medium_class_name = R"doc()doc";
+
+static const char *__doc_mitsuba_Medium_component_count = R"doc(Number of components this medium is comprised of.)doc";
 
 static const char *__doc_mitsuba_Medium_create_ddis_phase_function =
 R"doc(Create the tabphase irregular plugin used as DDIS phase function.
@@ -5714,19 +5783,27 @@ that don't specify such phase function.)doc";
 
 static const char *__doc_mitsuba_Medium_ddis_threshold = R"doc()doc";
 
-static const char *__doc_mitsuba_Medium_extremum_structure = R"doc(Returns the extremum structure for local extremum acceleration.)doc";
+static const char *__doc_mitsuba_Medium_eval_component =
+R"doc(Scattering and extinction coefficients of one medium component.
+
+Evaluate the coefficients of ``component`` alone, and evals zero where
+that component is undefined. The default, for a single-component
+medium, is ``get_scattering_coefficients``.
+
+Returns:
+    A pair (sigma_s, sigma_t).)doc";
+
+static const char *__doc_mitsuba_Medium_extrema = R"doc(Extremum structures, one per component.)doc";
 
 static const char *__doc_mitsuba_Medium_get_majorant = R"doc(Returns the medium's majorant used for delta tracking)doc";
-
-static const char *__doc_mitsuba_Medium_get_minorant = R"doc(Returns the medium's minorant used for residual ratio tracking)doc";
 
 static const char *__doc_mitsuba_Medium_get_scattering_coefficients =
 R"doc(Returns the medium coefficients Sigma_s, Sigma_n and Sigma_t evaluated
 at a given MediumInteraction mi)doc";
 
-static const char *__doc_mitsuba_Medium_has_extremum_structure = R"doc(Check if medium uses extremum structure)doc";
-
 static const char *__doc_mitsuba_Medium_has_spectral_extinction = R"doc(Returns whether this medium has a spectrally varying extinction)doc";
+
+static const char *__doc_mitsuba_Medium_in_aabb = R"doc(Checks if a point is contained by the medium's bounding box)doc";
 
 static const char *__doc_mitsuba_Medium_intersect_aabb = R"doc(Intersects a ray with the medium's bounding box)doc";
 
@@ -5736,6 +5813,8 @@ static const char *__doc_mitsuba_Medium_m_ddis_phase_function = R"doc()doc";
 
 static const char *__doc_mitsuba_Medium_m_ddis_threshold = R"doc()doc";
 
+static const char *__doc_mitsuba_Medium_m_extrema = R"doc(Extremum structures, one per component.)doc";
+
 static const char *__doc_mitsuba_Medium_m_extremum_structure = R"doc()doc";
 
 static const char *__doc_mitsuba_Medium_m_has_spectral_extinction = R"doc()doc";
@@ -5743,6 +5822,8 @@ static const char *__doc_mitsuba_Medium_m_has_spectral_extinction = R"doc()doc";
 static const char *__doc_mitsuba_Medium_m_is_homogeneous = R"doc()doc";
 
 static const char *__doc_mitsuba_Medium_m_phase_function = R"doc()doc";
+
+static const char *__doc_mitsuba_Medium_m_rr_threshold = R"doc(Ratio tracking Russian roulette threshold, disabled if not positive.)doc";
 
 static const char *__doc_mitsuba_Medium_m_sample_emitters = R"doc()doc";
 
@@ -5752,18 +5833,13 @@ static const char *__doc_mitsuba_Medium_phase_function = R"doc(Return the phase 
 
 static const char *__doc_mitsuba_Medium_phase_function_2 = R"doc(Return the phase function of this medium, non const)doc";
 
-static const char *__doc_mitsuba_Medium_prepare_medium_traversal =
-R"doc(Intersects ray with the medium bbox and creates a medium interaction.
+static const char *__doc_mitsuba_Medium_phase_function_3 =
+R"doc(Phase function of ``component``, and the interaction at which to
+evaluate it.
 
-Parameter ``ray``:
-    The ray that is used to test the medium bbox.
-
-Returns:
-    A tuple (mei, mint, maxt): ``mei`` is a ``MediumInteraction3f``
-    object initialized with the current ray and medium data. ``mint``
-    and ``maxt`` represent the minimum and maximum intersection
-    distances of the ray with the medium's bbox. In case there are no
-    valid intersection, the range defaults to [0, +Inf].)doc";
+The interaction is ``mei`` by default. A medium that maps space onto
+its components (a periodic tiling, say) moves the position into the
+component's own space; directions and ``t`` are unchanged.)doc";
 
 static const char *__doc_mitsuba_Medium_sample_interaction =
 R"doc(Sample a free-flight distance in the medium.
@@ -5816,7 +5892,58 @@ Returns:
     transmittance and PDF are both computed for all channels even if
     the sampling operation is performed on one channel.)doc";
 
+static const char *__doc_mitsuba_Medium_sample_real_interaction =
+R"doc(Sample a real collision along ``ray``, over its part inside the
+medium's bounding box and ``[0, ray.maxt]``.
+
+The default implementation uses delta tracking. Free flights are
+sampled at the hero channel's combined majorant. At a tentative
+collision, component ``i`` is picked with probability proportional to
+its majorant and the event type (null or real) is sample using the
+components coefficients (eval_component). Tracking stops at the first
+real collision. A ray that misses that range returns no collision.
+
+Parameter ``sample``:
+    Uniform sample in ``[0, 1)`` that draws the first free flight and
+    seeds the generator of the later free flights and of the collision
+    choices.
+
+Parameter ``channel``:
+    Hero channel, along which free flights are sampled.
+
+Returns:
+    A pair (sample, weight): the collision and path throughput weight.)doc";
+
+static const char *__doc_mitsuba_Medium_sample_transmittance =
+R"doc(Estimate the transmittance along ``ray``.
+
+The default implementation uses (residual) ratio tracking: as
+sample_real_interaction, except that every collision is null and the
+traversal runs to the end of the range. The property ``use_rrt``
+specifies whether the minorant is used as control extinction tracking,
+the minorants are a control extinction, accounted for analytically,
+and free flights are sampled at the residual majorants.
+
+Traversal stops as soon as the transmittance estimate reaches zero. If
+the medium's ``rr_threshold`` is positive, estimates falling below it
+undergo Russian roulette.)doc";
+
+static const char *__doc_mitsuba_Medium_sample_transmittance_pdf =
+R"doc(Estimate the transmittance, path throughput, and pdf ratio along
+``ray``.
+
+As sample_transmittance, but also returns the path throughput weight
+and the sampling densities of all channels relative to the hero
+channel. Cannot use residual ratio tracking.
+
+Returns:
+    A tuple (transmittance, throughput, pdf_ratio).)doc";
+
 static const char *__doc_mitsuba_Medium_to_string = R"doc(Return a human-readable representation of the Medium)doc";
+
+static const char *__doc_mitsuba_Medium_track =
+R"doc(Tracking loop shared by sample_real_interaction, sample_transmittance
+and sample_transmittance_pdf: ``Ratio`` makes every collision null.)doc";
 
 static const char *__doc_mitsuba_Medium_transmittance_eval_analytical =
 R"doc(Compute the analytical transmittance along a ray to an interaction.
@@ -5867,8 +5994,6 @@ its phase function is modified. The default implementation is a no-op;
 subclasses that maintain a DDIS phase function override it.)doc";
 
 static const char *__doc_mitsuba_Medium_use_emitter_sampling = R"doc(Returns whether this specific medium instance uses emitter sampling)doc";
-
-static const char *__doc_mitsuba_Medium_use_rrt = R"doc()doc";
 
 static const char *__doc_mitsuba_Medium_variant_name = R"doc()doc";
 
@@ -11844,47 +11969,6 @@ static const char *__doc_mitsuba_Timer_start = R"doc()doc";
 
 static const char *__doc_mitsuba_Timer_value = R"doc()doc";
 
-static const char *__doc_mitsuba_TrackingState =
-R"doc(State carried through extremum traversal to accumulate the throughput
-and its PDF.
-
-Can be used to for delta tracking, ratio tracking, and residual ratio
-tracking. Note: Since the number of required dimensions is different
-for all pixel samples, ``rng`` is used to sample distances and event
-types.)doc";
-
-static const char *__doc_mitsuba_TrackingState_TrackingState = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingState_TrackingState_2 = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingState_TrackingState_3 = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingState_fields = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingState_fields_2 = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingState_has_spectral_extinction = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingState_labels = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingState_mei = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingState_name = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingState_operator_assign = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingState_operator_assign_2 = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingState_ray = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingState_rng = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingState_target_ot = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingState_throughput = R"doc()doc";
-
-static const char *__doc_mitsuba_TrackingState_use_rrt = R"doc()doc";
-
 static const char *__doc_mitsuba_Transform =
 R"doc(Unified homogeneous coordinate transformation
 
@@ -13114,8 +13198,6 @@ static const char *__doc_mitsuba_hash_combine = R"doc()doc";
 static const char *__doc_mitsuba_hasher = R"doc()doc";
 
 static const char *__doc_mitsuba_hasher_operator_call = R"doc()doc";
-
-static const char *__doc_mitsuba_index_spectrum = R"doc(Helper function to index the channel of an ``UnpolarizedSpectrum``.)doc";
 
 static const char *__doc_mitsuba_ior_from_file = R"doc()doc";
 
