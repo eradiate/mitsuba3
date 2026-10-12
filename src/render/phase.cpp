@@ -14,7 +14,7 @@ MI_VARIANT PhaseFunction<Float, Spectrum>::PhaseFunction(const Properties &props
 MI_VARIANT typename PhaseFunction<Float, Spectrum>::FloatStorage
 PhaseFunction<Float, Spectrum>::get_envelope_nodes() const {
     FloatStorage i = dr::arange<FloatStorage>(m_node_count);
-    return -1.f + 2.f * i / ScalarFloat(m_node_count - 1);
+    return dr::clip(-1.f + 2.f * i / ScalarFloat(m_node_count - 1), -1.f, 1.f);
 }
 
 MI_VARIANT void
