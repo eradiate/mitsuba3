@@ -108,6 +108,11 @@ def test04_ray_intersect(variant_scalar_rgb):
     hit, mint, maxt = bbox.ray_intersect(mi.Ray3f([-2, 0, 0], [0, 1, 0]))
     assert not hit
 
+# #ERADIATE_CHANGE_BEGIN: Flat-axis miss
+    hit, mint, maxt = bbox.ray_intersect(mi.Ray3f([0, -2, 0], [0, 0, 1]))
+    assert not hit
+# #ERADIATE_CHANGE_END
+
     for dir in [[1, 0, 0], [0, 1, 0], [0, 0, 1]]:
         hit, mint, maxt = bbox.ray_intersect(mi.Ray3f([-1, -1, -1], dir))
         assert hit and dr.allclose(mint, 0.0) and dr.allclose(maxt, 2.0)
