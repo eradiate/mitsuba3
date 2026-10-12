@@ -14,17 +14,42 @@
 #include <nanobind/stl/vector.h>
 #include <drjit/python.h>
 
+// #ERADIATE_CHANGE_BEGIN: Extremum tracking
+MI_PY_EXPORT(MediumSample) {
+    MI_PY_IMPORT_TYPES()
+
+    auto ms = nb::class_<MediumSample3f>(m, "MediumSample3f", D(MediumSample3))
+        .def(nb::init<>())
+        .def(nb::init<const MediumSample3f &>(), "ms"_a, "Copy constructor")
+        .def_rw("mei", &MediumSample3f::mei, D(MediumSample3, mei))
+        .def_rw("component", &MediumSample3f::component,
+                D(MediumSample3, component))
+        .def_rw("pdf_ratio", &MediumSample3f::pdf_ratio,
+                D(MediumSample3, pdf_ratio));
+
+    MI_PY_DRJIT_STRUCT(ms, MediumSample3f, mei, component, pdf_ratio);
+}
+// #ERADIATE_CHANGE_END
+
 /// Trampoline for derived types implemented in Python
 MI_VARIANT class PyMedium : public Medium<Float, Spectrum> {
 public:
     MI_IMPORT_TYPES(Medium, Sampler, Scene)
-    NB_TRAMPOLINE(Medium, 6);
+// #ERADIATE_CHANGE_BEGIN: Overlapping Media
+    NB_TRAMPOLINE(Medium, 7);
+// #ERADIATE_CHANGE_END
 
     PyMedium(const Properties &props) : Medium(props) {}
 
     std::tuple<Mask, Float, Float> intersect_aabb(const Ray3f &ray) const override {
         NB_OVERRIDE_PURE(intersect_aabb, ray);
     }
+
+// #ERADIATE_CHANGE_BEGIN: Overlapping media
+    Mask in_aabb(const Point3f &pos) const override {
+        NB_OVERRIDE_PURE(in_aabb, pos);
+    }
+// #ERADIATE_CHANGE_END
 
     UnpolarizedSpectrum get_majorant(const MediumInteraction3f &mi, Mask active = true) const override {
         NB_OVERRIDE_PURE(get_majorant, mi, active);
@@ -81,6 +106,19 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
                 return ptr->intersect_aabb(ray); },
             "ray"_a,
             D(Medium, intersect_aabb))
+// #ERADIATE_CHANGE_BEGIN: Overlapping media
+        .def("in_aabb",
+            [](Ptr ptr, const Point3f &pos) {
+                return ptr->in_aabb(pos); },
+            "pos"_a,
+            D(Medium, in_aabb))
+        .def("phase_function",
+            [](Ptr ptr, const MediumInteraction3f &mei,
+               const UInt32 &component, Mask active) {
+                return ptr->phase_function(mei, component, active); },
+            "mei"_a, "component"_a, "active"_a = true,
+            D(Medium, phase_function, 3))
+// #ERADIATE_CHANGE_END
        .def("sample_interaction",
             [](Ptr ptr, const Ray3f &ray, Float sample, UInt32 channel, Mask active) {
                 return ptr->sample_interaction(ray, sample, channel, active); },
@@ -110,6 +148,29 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
                 return ptr->get_scattering_coefficients(mi, active); },
             "mi"_a, "active"_a=true,
             D(Medium, get_scattering_coefficients));
+// #ERADIATE_CHANGE_BEGIN: Extremum tracking
+    cls.def("sample_real_interaction",
+            [](Ptr ptr, const Ray3f &ray, Float sample,
+               const UInt32 &channel, Mask active) {
+                return ptr->sample_real_interaction(ray, sample, channel, active);
+            },
+            "ray"_a, "sample"_a, "channel"_a, "active"_a = true,
+            D(Medium, sample_real_interaction));
+    cls.def("sample_transmittance",
+            [](Ptr ptr, const Ray3f &ray, Float sample,
+               const UInt32 &channel, Mask active) {
+                return ptr->sample_transmittance(ray, sample, channel, active);
+            },
+            "ray"_a, "sample"_a, "channel"_a, "active"_a = true,
+            D(Medium, sample_transmittance));
+    cls.def("sample_transmittance_pdf",
+            [](Ptr ptr, const Ray3f &ray, Float sample,
+               const UInt32 &channel, Mask active) {
+                return ptr->sample_transmittance_pdf(ray, sample, channel, active);
+            },
+            "ray"_a, "sample"_a, "channel"_a, "active"_a = true,
+            D(Medium, sample_transmittance_pdf));
+// #ERADIATE_CHANGE_END
 }
 
 MI_PY_EXPORT(Medium) {
@@ -123,15 +184,24 @@ MI_PY_EXPORT(Medium) {
         .def_field(PyMedium, m_is_homogeneous, D(Medium, m_is_homogeneous))
         .def_field(PyMedium, m_has_spectral_extinction, D(Medium, m_has_spectral_extinction))
 // #ERADIATE_CHANGE_BEGIN: Local extremum structure
-        .def("extremum_structure",
-             [](Medium *ptr) { return ptr->extremum_structure(); },
-             D(Medium, extremum_structure))
+        .def("extrema",
+             [](Medium *ptr) {
+                 std::vector<const Medium::ExtremumStructure *> out;
+                 for (const auto &structure : ptr->extrema())
+                     out.push_back(structure.get());
+                 return out;
+             },
+             D(Medium, extrema))
 // #ERADIATE_CHANGE_END
         .def("__repr__", &Medium::to_string, D(Medium, to_string));
 
     drjit::bind_traverse(medium);
 
     bind_medium_generic<Medium *>(medium);
+// #ERADIATE_CHANGE_BEGIN: Extremum tracking
+    medium.def("eval_component", &Medium::eval_component, "mei"_a,
+               "component"_a, "active"_a = true, D(Medium, eval_component));
+// #ERADIATE_CHANGE_END
 
     if constexpr (dr::is_array_v<MediumPtr>) {
         dr::ArrayBinding b;

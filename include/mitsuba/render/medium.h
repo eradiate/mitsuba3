@@ -4,14 +4,39 @@
 #include <mitsuba/core/spectrum.h>
 #include <mitsuba/core/traits.h>
 #include <mitsuba/render/fwd.h>
+// #ERADIATE_CHANGE_BEGIN: Extremum tracking
+#include <mitsuba/render/eradiate/extremum_segment.h>
+#include <mitsuba/core/bbox.h>
+// #ERADIATE_CHANGE_END
 #include <drjit/call.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
+// #ERADIATE_CHANGE_BEGIN: Extremum tracking
+/// Data structure holding the result of real interaction sampling.
+template <typename Float, typename Spectrum> struct MediumSample3 {
+    MI_IMPORT_TYPES()
+
+    /// Real collision, \c mei.t is infinite if none occurred
+    MediumInteraction3f mei;
+
+    /// Medium component of the collision
+    UInt32 component;
+
+    /// Sampling densities of all channels relative to the hero channel
+    UnpolarizedSpectrum pdf_ratio;
+
+    DRJIT_STRUCT(MediumSample3, mei, component, pdf_ratio)
+};
+// #ERADIATE_CHANGE_END
+
 template <typename Float, typename Spectrum>
 class MI_EXPORT_LIB Medium : public JitObject<Medium<Float, Spectrum>> {
 public:
-    MI_IMPORT_TYPES(PhaseFunction, Sampler, Scene, Texture, ExtremumStructure);
+// #ERADIATE_CHANGE_BEGIN: Extremum support && Overlapping Media
+    MI_IMPORT_TYPES(PhaseFunction, PhaseFunctionContext, Sampler, Scene,
+                    Texture, ExtremumStructure, PhaseFunctionPtr);
+// #ERADIATE_CHANGE_END
 
     /// Destructor
     ~Medium();
@@ -25,17 +50,30 @@ public:
     get_majorant(const MediumInteraction3f &mi,
                  Mask active = true) const = 0;
 
-    /// Returns the medium's minorant used for residual ratio tracking
-     virtual UnpolarizedSpectrum
-     get_minorant(const MediumInteraction3f &/*mi*/,
-                  Mask /*active*/ = true) const { return UnpolarizedSpectrum(0.f); }
-
     /// Returns the medium coefficients Sigma_s, Sigma_n and Sigma_t evaluated
     /// at a given MediumInteraction mi
     virtual std::tuple<UnpolarizedSpectrum, UnpolarizedSpectrum,
                        UnpolarizedSpectrum>
     get_scattering_coefficients(const MediumInteraction3f &mi,
                                 Mask active = true) const = 0;
+
+    // #ERADIATE_CHANGE_BEGIN: Overlapping media
+    /// Checks if a point is contained by the medium's bounding box
+    virtual Mask in_aabb(const Point3f &pos) const = 0;
+
+    /**
+     * \brief Scattering and extinction coefficients of one medium component.
+     *
+     * Evaluate the coefficients of \c component alone, and evals zero where
+     * that component is undefined. The default, for a single-component medium,
+     * is ``get_scattering_coefficients``.
+     *
+     * \return A pair (sigma_s, sigma_t).
+     */
+    virtual std::pair<UnpolarizedSpectrum, UnpolarizedSpectrum>
+    eval_component(const MediumInteraction3f &mei, const UInt32 &component,
+                   Mask active = true) const;
+    // #ERADIATE_CHANGE_END
 
     /**
      * \brief Sample a free-flight distance in the medium.
@@ -78,7 +116,7 @@ public:
                            const SurfaceInteraction3f &si,
                            Mask active) const;
 
-// #ERADIATE_CHANGE_BEGIN, NM 05/06/2024 : add function that calculates the transmittance and pdf
+// #ERADIATE_CHANGE_BEGIN: Piecewise Traversal & RRT
     /**
      * \brief Sample a free-flight distance in the medium analytically.
      *
@@ -121,17 +159,86 @@ public:
     virtual UnpolarizedSpectrum
     transmittance_eval_analytical(const Ray3f &ray, const Interaction3f &it,
                                   Mask active) const;
+
+    /**
+     * \brief Sample a real collision along \c ray, over its part inside the
+     * medium's bounding box and <tt>[0, ray.maxt]</tt>.
+     *
+     * The default implementation uses delta tracking. Free flights are
+     * sampled at the hero channel's combined majorant. At a tentative
+     * collision, component \c i is picked with probability proportional to
+     * its majorant and the event type (null or real) is sample using the
+     * components coefficients (\ref eval_component). Tracking stops at the
+     * first real collision. A ray that misses that range returns no collision.
+     *
+     * \param sample
+     *      Uniform sample in <tt>[0, 1)</tt> that draws the first free flight
+     *      and seeds the generator of the later free flights and of the
+     *      collision choices.
+     * \param channel
+     *      Hero channel, along which free flights are sampled.
+     *
+     * \return A pair (sample, weight): the collision and path throughput weight.
+     */
+    virtual std::pair<MediumSample3f, UnpolarizedSpectrum>
+    sample_real_interaction(const Ray3f &ray, Float sample,
+                            const UInt32 &channel, Mask active = true) const;
+
+    /**
+     * \brief Estimate the transmittance along \c ray.
+     *
+     * The default implementation uses (residual) ratio tracking: as
+     * \ref sample_real_interaction, except that every collision is null and
+     * the traversal runs to the end of the range. The property \c use_rrt
+     * specifies whether the minorant is used as control extinction tracking,
+     * the minorants are a control extinction, accounted for analytically,
+     * and free flights are sampled at the residual majorants.
+     *
+     * Traversal stops as soon as the transmittance estimate reaches zero.
+     * If the medium's \c rr_threshold is positive, estimates falling below
+     * it undergo Russian roulette.
+     */
+    virtual UnpolarizedSpectrum
+    sample_transmittance(const Ray3f &ray, Float sample, const UInt32 &channel,
+                         Mask active = true) const;
+
+    /**
+     * \brief Estimate the transmittance, path throughput, and pdf ratio
+     * along \c ray.
+     *
+     * As \ref sample_transmittance, but also returns the path throughput
+     * weight and the sampling densities of all channels relative to the hero
+     * channel. Cannot use residual ratio tracking.
+     *
+     * \return A tuple (transmittance, throughput, pdf_ratio).
+     */
+    virtual
+    std::tuple<UnpolarizedSpectrum, UnpolarizedSpectrum, UnpolarizedSpectrum>
+    sample_transmittance_pdf(const Ray3f &ray, Float sample,
+                             const UInt32 &channel, Mask active = true) const;
 // #ERADIATE_CHANGE_END
 
     /// Return the phase function of this medium
     MI_INLINE const PhaseFunction *phase_function() const {
         return m_phase_function.get();
     }
-// #ERADIATE_CHANGE_BEGIN: DDIS
+// #ERADIATE_CHANGE_BEGIN: DDIS && Overlapping media
     /// Return the phase function of this medium, non const
     MI_INLINE PhaseFunction *phase_function() {
         return m_phase_function.get();
     }
+
+    /**
+     * \brief Phase function of \c component, and the interaction at which
+     * to evaluate it.
+     *
+     * The interaction is \c mei by default. A medium that maps space onto
+     * its components (a periodic tiling, say) moves the position into the
+     * component's own space; directions and \c t are unchanged.
+     */
+    virtual std::pair<PhaseFunctionPtr, MediumInteraction3f>
+    phase_function(const MediumInteraction3f &mei, const UInt32 &component,
+                   Mask active = true) const;
 // #ERADIATE_CHANGE_END
 
     /// Returns whether this specific medium instance uses emitter sampling
@@ -145,38 +252,15 @@ public:
         return m_has_spectral_extinction;
     }
 
-// #ERADIATE_CHANGE_BEGIN: Extremum Structure accessor and traversal helpers
-    /**
-     * \brief Intersects ray with the medium bbox and creates a medium interaction.
-     *
-     * \param ray   The ray that is used to test the medium bbox.
-     *
-     * \return
-     *      A tuple (mei, mint, maxt): ``mei`` is a  ``MediumInteraction3f``
-     *      object initialized with the current ray and medium data. ``mint``
-     *      and ``maxt`` represent the minimum and maximum intersection
-     *      distances of the ray with the medium's bbox. In case there are no
-     *      valid intersection, the range defaults to [0, +Inf].
-     */
-    std::tuple<MediumInteraction3f, Float, Float>
-    prepare_medium_traversal(const Ray3f& ray, Mask active) const;
-
-    /// Returns the extremum structure for local extremum acceleration.
-    MI_INLINE const ExtremumStructure *extremum_structure() const {
-        return m_extremum_structure.get();
+// #ERADIATE_CHANGE_BEGIN: Extremum Structure & DDIS
+    /// Extremum structures, one per component.
+    const std::vector<ref<ExtremumStructure>> &extrema() const {
+        return m_extrema;
     }
 
-    /// Check if medium uses extremum structure
-    MI_INLINE bool has_extremum_structure() const {
-        return m_extremum_structure.get() != nullptr;
-    }
+    /// Number of components this medium is comprised of.
+    size_t component_count() const { return m_extrema.size(); }
 
-    MI_INLINE bool use_rrt() const {
-        return m_use_rrt;
-    }
-// #ERADIATE_CHANGE_END
-
-// #ERADIATE_CHANGE_BEGIN: DDIS
     /**
      * \brief Return the ddis phase function of this medium. Can be null for
      * medium that don't specify such phase function.
@@ -188,7 +272,6 @@ public:
     MI_INLINE ScalarFloat ddis_threshold() const {
         return m_ddis_threshold;
     }
-
 
     /**
      * \brief Rebuild any DDIS-related derived data when the phase function has
@@ -206,7 +289,7 @@ protected:
      *
      * This method is an helper function for child classes.
      */
-    ref<PhaseFunction> create_ddis_phase_function();
+    virtual ref<PhaseFunction> create_ddis_phase_function();
 
 public:
 
@@ -222,17 +305,34 @@ protected:
     Medium();
     Medium(const Properties &props);
 
+// #ERADIATE_CHANGE_BEGIN: Extremum tracking
+    /// Loop state of \ref track, defined in medium.cpp
+    struct TrackingRecord;
+
+    /**
+     * \brief Tracking loop shared by \ref sample_real_interaction,
+     * \ref sample_transmittance and \ref sample_transmittance_pdf:
+     * \c Ratio makes every collision null.
+     */
+    template <bool Ratio>
+    TrackingRecord track(const Ray3f &ray, Float sample, const UInt32 &channel,
+                         Mask rrt, Mask active) const;
+// #ERADIATE_CHANGE_END
+
 protected:
     ref<PhaseFunction> m_phase_function;
     bool m_sample_emitters;
     bool m_is_homogeneous;
     bool m_has_spectral_extinction;
-// #ERADIATE_CHANGE_BEGIN: Extremum structure support
-    ref<ExtremumStructure> m_extremum_structure;
-    bool m_use_rrt;
-// #ERADIATE_CHANGE_END
 
-// #ERADIATE_CHANGE_BEGIN: DDIS
+// #ERADIATE_CHANGE_BEGIN: Extremum structure support & DDIS
+    ref<ExtremumStructure> m_extremum_structure;
+    /// Extremum structures, one per component.
+    std::vector<ref<ExtremumStructure>> m_extrema;
+    bool m_use_rrt;
+    /// Ratio tracking Russian roulette threshold, disabled if not positive.
+    ScalarFloat m_rr_threshold = 0.f;
+
     ref<PhaseFunction> m_ddis_phase_function = nullptr;
     ScalarFloat m_ddis_threshold = 0.f;
 
@@ -257,17 +357,21 @@ DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::Medium)
     DRJIT_CALL_METHOD(intersect_aabb)
     DRJIT_CALL_METHOD(sample_interaction)
     DRJIT_CALL_METHOD(transmittance_eval_pdf)
-// #ERADIATE_CHANGE_BEGIN: Add function that calculates the transmittance and pdf
+    DRJIT_CALL_METHOD(get_scattering_coefficients)
+// #ERADIATE_CHANGE_BEGIN
+    // Piecewise
     DRJIT_CALL_METHOD(sample_interaction_analytical)
     DRJIT_CALL_METHOD(transmittance_eval_analytical)
-// #ERADIATE_CHANGE_END
-    DRJIT_CALL_METHOD(get_scattering_coefficients)
-// #ERADIATE_CHANGE_BEGIN: Extremum Support && Residual Ratio Tracking && DDIS
+    // Overlapping Media
+    DRJIT_CALL_METHOD(phase_function)
+    DRJIT_CALL_METHOD(in_aabb)
+    // DDIS
     DRJIT_CALL_GETTER(ddis_phase_function)
     DRJIT_CALL_GETTER(ddis_threshold)
-    DRJIT_CALL_GETTER(use_rrt)
-    DRJIT_CALL_GETTER(extremum_structure)
-    DRJIT_CALL_METHOD(prepare_medium_traversal)
+    // Extremum Support
+    DRJIT_CALL_METHOD(sample_real_interaction)
+    DRJIT_CALL_METHOD(sample_transmittance)
+    DRJIT_CALL_METHOD(sample_transmittance_pdf)
 // #ERADIATE_CHANGE_END
 DRJIT_CALL_END()
 
