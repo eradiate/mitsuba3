@@ -5552,10 +5552,7 @@ Parameter ``alpha_u``:
     The surface roughness in the tangent direction
 
 Parameter ``alpha_v``:
-    The surface roughness in the bitangent direction
-
-Parameter ``alpha_v``:
-    The angle of rotation of the anisotropic distribution)doc";
+    The surface roughness in the bitangent direction)doc";
 
 static const char *__doc_mitsuba_MicrofacetDistribution_MicrofacetDistribution_3 = R"doc(Create a microfacet distribution from a Property data structure)doc";
 
@@ -5564,8 +5561,6 @@ static const char *__doc_mitsuba_MicrofacetDistribution_alpha = R"doc(Return the
 static const char *__doc_mitsuba_MicrofacetDistribution_alpha_u = R"doc(Return the roughness along the tangent direction)doc";
 
 static const char *__doc_mitsuba_MicrofacetDistribution_alpha_v = R"doc(Return the roughness along the bitangent direction)doc";
-
-static const char *__doc_mitsuba_MicrofacetDistribution_angle = R"doc(Return the angle of anisotropy)doc";
 
 static const char *__doc_mitsuba_MicrofacetDistribution_configure = R"doc()doc";
 
@@ -5581,15 +5576,7 @@ static const char *__doc_mitsuba_MicrofacetDistribution_is_isotropic = R"doc(Is 
 
 static const char *__doc_mitsuba_MicrofacetDistribution_m_alpha_u = R"doc()doc";
 
-static const char *__doc_mitsuba_MicrofacetDistribution_m_alpha_up = R"doc()doc";
-
 static const char *__doc_mitsuba_MicrofacetDistribution_m_alpha_v = R"doc()doc";
-
-static const char *__doc_mitsuba_MicrofacetDistribution_m_alpha_vp = R"doc()doc";
-
-static const char *__doc_mitsuba_MicrofacetDistribution_m_angle = R"doc()doc";
-
-static const char *__doc_mitsuba_MicrofacetDistribution_m_correlation = R"doc()doc";
 
 static const char *__doc_mitsuba_MicrofacetDistribution_m_sample_visible = R"doc()doc";
 
@@ -5641,10 +5628,7 @@ static const char *__doc_mitsuba_MicrofacetDistribution_smith_lambda =
 R"doc(Smith's shadowing-masking lambda function for a single direction
 
 Parameter ``v``:
-    An arbitrary direction
-
-Parameter ``m``:
-    The microfacet normal)doc";
+    An arbitrary direction)doc";
 
 static const char *__doc_mitsuba_MicrofacetDistribution_type = R"doc(Return the distribution type)doc";
 
@@ -11266,17 +11250,25 @@ R"doc(Write an encoded form of the volume grid to a stream
 Parameter ``stream``:
     Target stream that will receive the encoded output)doc";
 
-static const char *__doc_mitsuba_VolumeParametrization = R"doc(Frame parameters of radially parameterized volumes in world space.)doc";
+static const char *__doc_mitsuba_VolumeParametrization =
+R"doc(Describes a volume's parametrization, including its coordinate
+representation and transform.)doc";
 
 static const char *__doc_mitsuba_VolumeParametrization_VolumeParametrization = R"doc()doc";
 
 static const char *__doc_mitsuba_VolumeParametrization_VolumeParametrization_2 = R"doc()doc";
 
-static const char *__doc_mitsuba_VolumeParametrization_flag = R"doc()doc";
+static const char *__doc_mitsuba_VolumeParametrization_flag = R"doc(The volume coordinate flag, default to grid.)doc";
 
-static const char *__doc_mitsuba_VolumeParametrization_to_world = R"doc()doc";
+static const char *__doc_mitsuba_VolumeParametrization_to_world = R"doc(The volume transform)doc";
 
-static const char *__doc_mitsuba_VolumeParametrization_uv_range = R"doc()doc";
+static const char *__doc_mitsuba_VolumeParametrization_uv_range =
+R"doc(The local space range spanned by the volume e.g. dim 0 -> [rmin, rmax]
+in spherical coords.)doc";
+
+static const char *__doc_mitsuba_VolumeParametrization_wrap = R"doc(Specifies if the volume wraps.)doc";
+
+static const char *__doc_mitsuba_VolumeParametrization_wrap_mode = R"doc(The wrapping behaviour when exiting the volume boundaries.)doc";
 
 static const char *__doc_mitsuba_Volume_PinGuard =
 R"doc(A Scoped Guard that pins the reference count of the volume.
@@ -14291,7 +14283,7 @@ static const char *__doc_mitsuba_warp_uniform_triangle_to_square = R"doc(Inverse
 
 static const char *__doc_mitsuba_warp_von_mises_fisher_to_square = R"doc(Inverse of the mapping von_mises_fisher_to_square)doc";
 
-static const char *__doc_mitsuba_wrap = R"doc(Applies the configured texture wrapping mode to an integer position)doc";
+static const char *__doc_mitsuba_wrap = R"doc(Applies the configured texture wrapping mode to an integer position,)doc";
 
 static const char *__doc_mitsuba_xyz_to_srgb = R"doc(Convert XYZ tristimulus values to ITU-R Rec. BT.709 linear RGB)doc";
 
