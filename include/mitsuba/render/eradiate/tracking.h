@@ -1,76 +1,44 @@
 #pragma once
 
 #include <mitsuba/render/fwd.h>
-#include <mitsuba/render/eradiate/extremum_segment.h>
-#include <drjit/random.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
 /**
- * \brief State carried through extremum traversal to accumulate the throughput 
- * and its PDF.
- * 
- * Can be used to for delta tracking, ratio tracking, and residual ratio tracking.
- * Note: Since the number of required dimensions is different for all pixel 
- * samples, ``rng`` is used to sample distances and event types.
- * 
+ * \brief Result of one tracking traversal, as returned by
+ * ``Medium::delta_track`` and ``Medium::ratio_track``.
+ *
+ * Every event of the traversal (a free flight, a null or a real collision)
+ * has a contribution \c f (a spectrum), a sampling density \c p (a spectrum:
+ * the density with which each channel's majorants would have sampled it) and
+ * a channel-independent probability \c P of the null / real decision. With
+ * \c p_c the density of the hero channel, the record holds the products over
+ * all events of <tt>f / (p_c P)</tt>, <tt>f / p_c</tt> and <tt>p / p_c</tt>.
  */
-template< typename Float, typename Spectrum >
-struct TrackingState {
+template <typename Float, typename Spectrum>
+struct TrackingRecord {
     MI_IMPORT_TYPES()
 
-    Ray3f ray;
-    dr::PCG32<UInt32> rng;
+    /// Interaction of the real collision. Valid only if one occurred.
     MediumInteraction3f mei;
-    Float target_ot;
-    Mask use_rrt;
-    Mask has_spectral_extinction;
-
-    // Note that ``throughput`` is shared between algorithm and should be accumulated
-    // accordingly. If used for volpathmis, new members and data types will need to 
-    // be introduced.
+    /// Medium component of the real collision.
+    UInt32 component;
+    /// Product of <tt>f / (p_c P)</tt>: the path throughput weight.
     UnpolarizedSpectrum throughput;
+    /// Product of <tt>f / p_c</tt>: the transmittance estimate.
+    UnpolarizedSpectrum transmittance;
+    /// Product of <tt>p / p_c</tt>: the densities relative to the hero channel.
+    UnpolarizedSpectrum pdf_ratio;
 
-    DRJIT_STRUCT(TrackingState, ray, rng, mei, target_ot, use_rrt, \
-        has_spectral_extinction, throughput)
+    DRJIT_STRUCT(TrackingRecord, mei, component, throughput, transmittance,
+                 pdf_ratio)
 };
 
-/**
- * \brief Signature of the tracking function callback accepted by 
- * ``ExtremumStructures::traverse_extremum``.
- * 
- * \param segment
- *      An extremum segment along a ray.
- * \param state
- *      The tracking state that holds interaction information and accumulates 
- *      throughput and pdfs.
- * \param channel
- *      The channel to use for sampling.
- * \param active
- *      Represents the active lanes.
- * 
- * 
- * \return A pair (advance, active):
- *      advance:    If true, tracking has exited the segment and requires a
- *                  new one. If false, repeat the loop with the same segment.
- *      active:     Represent active lanes. Lanes that have sampled a real 
- *                  interaction or terminated for other reasons will return 
- *                  ``false``, prompting the termination of the traversal.
- */
-template< typename Float, typename Spectrum >
-using TrackingFunction = 
-    std::pair<dr::mask_t<Float>, dr::mask_t<Float>>(
-    const ExtremumSegment<Float, Spectrum>& /*segment*/,
-    TrackingState<Float, Spectrum>& /*state*/,
-    const dr::uint32_array_t<Float>& /*channel*/, 
-    dr::mask_t<Float> /*active*/
-);
-
-/// Helper function to index the channel of an ``UnpolarizedSpectrum``. 
+/// Helper function to index the channel of an ``UnpolarizedSpectrum``.
 template< typename Float, typename Spectrum >
 MI_INLINE
 Float index_spectrum(
-    const unpolarized_spectrum_t<Spectrum> &spec, 
+    const unpolarized_spectrum_t<Spectrum> &spec,
     const dr::uint32_array_t<Float> &idx
 ) {
     Float m = spec[0];

@@ -6,6 +6,9 @@
 #include <mitsuba/render/texture.h>
 #include <mitsuba/render/eradiate/extremum.h>
 #include <mitsuba/render/eradiate/extremum_segment.h>
+// #ERADIATE_CHANGE_BEGIN: Extremum tracking
+#include <drjit/while_loop.h>
+// #ERADIATE_CHANGE_END
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -26,6 +29,7 @@ MI_VARIANT Medium<Float, Spectrum>::Medium(const Properties &props)
     }
 // #ERADIATE_CHANGE_BEGIN: tracking property.
     m_use_rrt = props.get<bool>("use_rrt", true);
+    m_rr_threshold = props.get<ScalarFloat>("rr_threshold", 0.f);
 // #ERADIATE_CHANGE_END
 
     if (!m_phase_function) {
@@ -104,7 +108,7 @@ Medium<Float, Spectrum>::transmittance_eval_pdf(const MediumInteraction3f &mi,
     return { tr, pdf };
 }
 
-// #ERADIATE_CHANGE_BEGIN, NM 05/06/2024 : add function that calculates the transmittance and pdf
+// #ERADIATE_CHANGE_BEGIN: Piecewise Traversal & Extremum Traversal & Overlapping Media & DDIS
 MI_VARIANT
 std::tuple<typename Medium<Float, Spectrum>::MediumInteraction3f,
            typename Medium<Float, Spectrum>::UnpolarizedSpectrum,
@@ -124,36 +128,282 @@ Medium<Float, Spectrum>::transmittance_eval_analytical(const Ray3f &/*ray*/,
     // PiecewiseVolPathIntegrator should only be used with piecewise medium
     NotImplementedError("transmittance_eval_analytical");
 }
-// #ERADIATE_CHANGE_END
 
-// #ERADIATE_CHANGE_BEGIN: Extremum structure accessor
 MI_VARIANT
-std::tuple<typename Medium<Float, Spectrum>::MediumInteraction3f, Float, Float>
-Medium<Float, Spectrum>::prepare_medium_traversal(const Ray3f& ray, Mask active) const {
-    // Initialize basic medium interaction fields
-    MediumInteraction3f mei = dr::zeros<MediumInteraction3f>();
-    mei.wi          = -ray.d;
-    mei.sh_frame    = Frame3f(mei.wi);
-    mei.time        = ray.time;
-    mei.wavelengths = ray.wavelengths;
-    mei.medium      = this;
-
-    // Intersect AABB
-    auto [aabb_its, mint, maxt] = intersect_aabb(ray);
-    aabb_its &= (dr::isfinite(mint) || dr::isfinite(maxt));
-    active &= aabb_its;
-    dr::masked(mint, !active) = 0.f;
-    dr::masked(maxt, !active) = dr::Infinity<Float>;
-
-    dr::masked(mint, active) = dr::maximum(0.f, mint);
-    dr::masked(maxt, active) = dr::minimum(ray.maxt, maxt);
-    mei.mint = mint;
-
-    return {mei, mint, maxt};
+typename Medium<Float, Spectrum>::TrackingRecord
+Medium<Float, Spectrum>::delta_track(const Ray3f &ray, Float sample,
+                                     dr::PCG32<UInt64> rng,
+                                     const UInt32 &channel,
+                                     Mask active) const {
+    return track<false>(ray, sample, rng, channel, false, active);
 }
-// #ERADIATE_CHANGE_END
 
-// #ERADIATE_CHANGE_BEGIN: DDIS
+MI_VARIANT
+typename Medium<Float, Spectrum>::TrackingRecord
+Medium<Float, Spectrum>::ratio_track(const Ray3f &ray, Float sample,
+                                     dr::PCG32<UInt64> rng,
+                                     const UInt32 &channel, Mask rrt,
+                                     Mask active) const {
+    return track<true>(ray, sample, rng, channel, rrt, active);
+}
+
+MI_VARIANT template <bool Ratio>
+typename Medium<Float, Spectrum>::TrackingRecord
+Medium<Float, Spectrum>::track(const Ray3f &ray, Float sample,
+                               dr::PCG32<UInt64> rng, const UInt32 &channel,
+                               Mask rrt, Mask active) const {
+    using ExtremumStateArray = std::array<ExtremumState, MI_MAX_OVERLAPPING_MEDIA>;
+    using Vector2fArray      = std::array<Vector2f, MI_MAX_OVERLAPPING_MEDIA>;
+    using USpectrumArray     = std::array<UnpolarizedSpectrum, MI_MAX_OVERLAPPING_MEDIA>;
+
+    auto [hit, mint, maxt] = intersect_aabb(ray);
+    mint = dr::maximum(0.f, mint);
+    maxt = dr::minimum(ray.maxt, maxt);
+    active &= hit && mint < maxt;
+
+    TrackingRecord rec  = dr::zeros<TrackingRecord>();
+    rec.mei.t           = dr::Infinity<Float>;
+    rec.mei.mint        = mint;
+    rec.mei.wi          = -ray.d;
+    rec.mei.sh_frame    = Frame3f(rec.mei.wi);
+    rec.mei.time        = ray.time;
+    rec.mei.wavelengths = ray.wavelengths;
+    rec.mei.medium      = this;
+    rec.throughput      = 1.f;
+    rec.transmittance   = 1.f;
+    rec.pdf_ratio       = 1.f;
+
+    const std::vector<ref<ExtremumStructure>> &structures = m_extrema;
+    size_t n = structures.size();
+
+    struct LoopState {
+        ExtremumStateArray states;
+        Vector2fArray values;
+        Float segment_maxt;
+        TrackingRecord rec;
+        dr::PCG32<UInt64> rng;
+        Float target_ot;
+        UnpolarizedSpectrum flight_ot;
+        UnpolarizedSpectrum control_ot;
+        Float t;
+        Mask advance;
+        Mask active;
+
+        DRJIT_STRUCT(LoopState, states, values, segment_maxt, rec, rng,
+                     target_ot, flight_ot, control_ot, t, advance, active)
+    };
+
+    LoopState ls = dr::zeros<LoopState>();
+    ls.segment_maxt = maxt;
+    ls.rec          = rec;
+    ls.rng          = rng;
+    ls.target_ot    = -dr::log(1.f - sample);
+    ls.t            = mint;
+    ls.advance      = active;
+    ls.active       = active;
+    for (size_t i = 0; i < n; ++i)
+        ls.states[i] = structures[i]->begin(ray, mint, maxt, active);
+
+    auto step =
+    [this, &structures, &ray, &channel, &rrt, maxt = maxt, n]
+    (LoopState &ls) {
+
+        TrackingRecord& rec   = ls.rec;
+        Vector2fArray& values = ls.values;
+
+        // copy active state
+        Mask active = ls.active;
+
+        // Get next structure segment.
+        if (dr::any_or<true>(ls.advance)) {
+            Mask advance   = ls.advance;
+            Float seg_maxt = maxt;
+
+            for (size_t i = 0; i < n; ++i) {
+                ExtremumState &state = ls.states[i];
+
+                Mask stale   = ls.t >= state.mint;
+                Mask more    = state.mint < state.maxt;
+                Mask refresh = stale && more && advance;
+
+                if (dr::any_or<true>(refresh))
+                    dr::masked(values[i], refresh) =
+                        structures[i]->next(state, ray, refresh).value;
+
+                Mask spent = stale && !more && advance;
+                dr::masked(values[i], spent) = 0.f;
+                seg_maxt = dr::minimum(
+                    seg_maxt, dr::select(spent, maxt, state.mint));
+            }
+            dr::masked(ls.segment_maxt, advance) = dr::maximum(seg_maxt, ls.t);
+        }
+
+        USpectrumArray majorant, residual;
+        UnpolarizedSpectrum control_sum(0.f), residual_sum(0.f);
+        for (size_t i = 0; i < n; ++i) {
+            UnpolarizedSpectrum control = values[i].x();
+            majorant[i]   = values[i].y();
+            residual[i]   = majorant[i] - dr::select(rrt, control, 0.f);
+            control_sum += control;
+            residual_sum += residual[i];
+        }
+
+        // Sample distance in current segment.
+        Float residual_c = index_spectrum<Float, Spectrum>(residual_sum, channel);
+        Float segment_ot = (ls.segment_maxt - ls.t) * residual_c;
+        Mask sampled     = (ls.target_ot < segment_ot) && active;
+        Float t_next     = ls.segment_maxt;
+
+        Float event_prob = 1.f;
+        UnpolarizedSpectrum p(1.f), f(1.f);
+
+        if (dr::any_or<true>(sampled)) {
+            dr::masked(t_next, sampled) =
+                ls.t + ls.target_ot / dr::maximum(residual_c, dr::Epsilon<Float>);
+
+            // Sample the medium component.
+            UInt32 component = 0;
+            if (n > 1) {
+                Float u = ls.rng.template next_float<Float>(sampled) * residual_c;
+                Float cdf    = 0.f,
+                      next_c = 0.f;
+
+                for (size_t i = 0; i + 1 < n; ++i) {
+                    cdf   += index_spectrum<Float, Spectrum>(residual[i], channel);
+                    next_c = index_spectrum<Float, Spectrum>(residual[i + 1], channel);
+                    dr::masked(component, u >= cdf && next_c > 0.f) =
+                        (uint32_t) (i + 1);
+                }
+            }
+
+            UnpolarizedSpectrum majorant_i = majorant[0],
+                                residual_i = residual[0];
+            for (size_t i = 1; i < n; ++i) {
+                Mask picked = component == (uint32_t) i;
+                dr::masked(majorant_i, picked) = majorant[i];
+                dr::masked(residual_i, picked) = residual[i];
+            }
+
+            // Retrieve optical properties at sampled distance
+            MediumInteraction3f mei_c = rec.mei;
+            mei_c.t = t_next;
+            mei_c.p = ray(t_next);
+            auto [sigma_s, sigma_t] = eval_component(mei_c, component, sampled);
+
+            UnpolarizedSpectrum sigma_n = majorant_i - sigma_t;
+            Float null_prob = dr::mean(
+                dr::select(residual_i > 0.f, sigma_n / residual_i, 0.f));
+
+            dr::masked(p, sampled) *= residual_i;
+
+            if constexpr (Ratio) {
+                dr::masked(f, sampled)         *= sigma_n;
+                dr::masked(event_prob, sampled) = null_prob;
+            } else {
+                // Event sampling
+                Float u = ls.rng.template next_float<Float>(sampled);
+                Mask null_scatter = sampled &&  u < null_prob;
+                Mask real_scatter = sampled && !null_scatter;
+
+                if (dr::any_or<true>(null_scatter)) {
+                    dr::masked(f, null_scatter)         *= sigma_n;
+                    dr::masked(event_prob, null_scatter) = null_prob;
+                }
+
+                if (dr::any_or<true>(real_scatter)) {
+                    dr::masked(f, real_scatter)            *= sigma_s;
+                    dr::masked(event_prob, real_scatter)    = 1.f - null_prob;
+                    dr::masked(rec.mei, real_scatter)       = mei_c;
+                    dr::masked(rec.component, real_scatter) = component;
+                }
+
+                ls.active &= !real_scatter;
+            }
+
+            dr::masked(ls.target_ot, sampled) =
+                -dr::log(1.f - ls.rng.template next_float<Float>(sampled));
+        }
+
+        Float dt = t_next - ls.t;
+        // Accumulate residual excess optical thickness over the sampled channel
+        dr::masked(ls.flight_ot, active) += dt * (residual_sum - residual_c);
+        // Accumulate the control optical thickness
+        if constexpr (Ratio)
+            dr::masked(ls.control_ot, active) += dt * control_sum;
+
+        Float p_c     = index_spectrum<Float, Spectrum>(p, channel);
+        Float inv_p   = dr::select(p_c > 0.f, dr::rcp(p_c), 0.f);
+        Float inv_evt = dr::select(event_prob != 0.f, dr::rcp(event_prob), 0.f);
+        dr::masked(rec.transmittance, active) *= f * inv_p;
+        dr::masked(rec.throughput, active)    *= f * inv_p * inv_evt;
+        dr::masked(rec.pdf_ratio, active)     *= p * inv_p;
+
+        if constexpr (Ratio) {
+            // Russian roulette based on transmittance weight
+            if (m_rr_threshold > 0.f) {
+                UnpolarizedSpectrum control_ot = dr::select(rrt, ls.control_ot, 0.f);
+                UnpolarizedSpectrum estimate   =
+                    rec.transmittance * dr::exp(-(control_ot + ls.flight_ot));
+
+                // Detached: survivors must keep the gradient of their estimate
+                Float q = dr::max(dr::detach(estimate)) / m_rr_threshold;
+                Mask roulette = active && q < 1.f;
+
+                if (dr::any_or<true>(roulette)) {
+                    Mask survive = ls.rng.template next_float<Float>(roulette) < q;
+                    Float scale  = dr::select(survive, dr::rcp(q), 0.f);
+                    dr::masked(rec.transmittance, roulette) *= scale;
+                    dr::masked(rec.throughput, roulette)    *= scale;
+                }
+            }
+        }
+
+        dr::masked(ls.target_ot, !sampled && active) -= segment_ot;
+        dr::masked(ls.t, active) = t_next;
+        ls.advance = !sampled && active;
+        ls.active &= p_c > 0.f && (!ls.advance || (ls.t < maxt));
+
+        if constexpr (Ratio)
+            ls.active &= dr::any(rec.transmittance > 0.f);
+    };
+
+    dr::tie(ls) = dr::while_loop(
+        dr::make_tuple(ls), [](const LoopState &ls) { return ls.active; },
+        step, "Medium::track");
+
+    if constexpr (Ratio) {
+        UnpolarizedSpectrum control_tr =
+            dr::exp(-dr::select(rrt, ls.control_ot, 0.f));
+        ls.rec.transmittance *= control_tr;
+        ls.rec.throughput *= control_tr;
+    }
+
+    UnpolarizedSpectrum flight_tr = dr::exp(-ls.flight_ot);
+    ls.rec.transmittance *= flight_tr;
+    ls.rec.throughput *= flight_tr;
+    ls.rec.pdf_ratio *= flight_tr;
+    return ls.rec;
+}
+
+MI_VARIANT
+auto Medium<Float, Spectrum>::phase_function(const MediumInteraction3f &mei,
+                                             const UInt32 & /*component*/,
+                                             Mask /*active*/) const
+    -> std::pair<PhaseFunctionPtr, MediumInteraction3f> {
+    return { m_phase_function.get(), mei };
+}
+
+MI_VARIANT
+std::pair<typename Medium<Float, Spectrum>::UnpolarizedSpectrum,
+          typename Medium<Float, Spectrum>::UnpolarizedSpectrum>
+Medium<Float, Spectrum>::eval_component(const MediumInteraction3f &mei,
+                                        const UInt32 & /*component*/,
+                                        Mask active) const {
+    auto [sigma_s, sigma_n, sigma_t] = get_scattering_coefficients(mei, active);
+    DRJIT_MARK_USED(sigma_n);
+    return { sigma_s, sigma_t };
+}
+
 MI_VARIANT
 ref<typename Medium<Float, Spectrum>::PhaseFunction>
 Medium<Float, Spectrum>::create_ddis_phase_function() {
