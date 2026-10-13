@@ -48,9 +48,11 @@ MI_PY_EXPORT(ExtremumState) {
         .def_field(ExtremumState, d,    D(ExtremumState, d))
         .def_field(ExtremumState, pi,   D(ExtremumState, pi))
         .def_field(ExtremumState, mint, D(ExtremumState, mint))
-        .def_field(ExtremumState, maxt, D(ExtremumState, maxt));
+        .def_field(ExtremumState, maxt, D(ExtremumState, maxt))
+        .def_field(ExtremumState, inner_maxt,
+                   D(ExtremumState, inner_maxt));
 
-    MI_PY_DRJIT_STRUCT(ds, ExtremumState, o, d, pi, mint, maxt);
+    MI_PY_DRJIT_STRUCT(ds, ExtremumState, o, d, pi, mint, maxt, inner_maxt);
 }
 
 /// Trampoline for derived types implemented in Python
