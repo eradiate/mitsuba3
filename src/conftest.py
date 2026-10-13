@@ -258,6 +258,13 @@ def pytest_addoption(parser, pluginmanager):
         "--collect-metrics",
         help="Comma-separated metrics to collect: memory,time,launches",
     )
+    # #ERADIATE_CHANGE_BEGIN: JIT flags
+    parser.addoption(
+        "--all-jit-flags",
+        action="store_true",
+        help="Run eradiate render tests with every JIT flag option (very slow)",
+    )
+    # #ERADIATE_CHANGE_END
 
 
 def pytest_configure(config):
