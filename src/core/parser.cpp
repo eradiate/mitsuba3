@@ -142,6 +142,9 @@ static std::pair<TagType, ObjectType> interpret_tag(std::string_view str) {
             break;
         case 'e':
             if (str == "emitter") return {TagType::Object, ObjectType::Emitter};
+// #ERADIATE_CHANGE_BEGIN: Extremum tag
+            if (str == "extremum") return {TagType::Object, ObjectType::ExtremumStructure};
+// #ERADIATE_CHANGE_END
             break;
         case 'f':
             if (str == "float") return {TagType::Float, ObjectType::Unknown};
