@@ -287,13 +287,21 @@ public:
 
     // === Splitting interface ===
 
-    /// Push ps onto the stack at stack_counter+1.
-    /// Returns the mask of lanes that successfully pushed (stack was not full).
+    /// Push ps onto the stack at stack_counter+1, or overwrite the top entry if
+    /// its count is one. Returns the mask of lanes that successfully pushed
+    /// (stack was not full).
     Mask push(LoopState &ls, const PathState &ps, UInt32 count, Mask active) const {
-        Mask can_push = active && (ls.stack_counter < Int32(LS_STACK_SIZE) - 1);
-        Int32 new_sc = ls.stack_counter + 1;
-        write(new_sc, ls, ps, count, can_push);
-        dr::masked(ls.stack_counter, can_push) += 1;
+        Mask reuse = false;
+        if constexpr (!dr::is_jit_v<Float>) {
+            reuse = ls.stack_counter >= 0 && ls.counts[ls.stack_counter] == 1u;
+        } else {
+            for (size_t i = 0; i < LS_STACK_SIZE; ++i)
+                reuse |= (Int32(i) == ls.stack_counter) && (ls.counts[i] == 1u);
+        }
+        Int32 index = dr::select(reuse, ls.stack_counter, ls.stack_counter + 1);
+        Mask can_push = active && (index < Int32(LS_STACK_SIZE));
+        write(index, ls, ps, count, can_push);
+        dr::masked(ls.stack_counter, can_push) = index;
         return can_push;
     }
 
@@ -732,7 +740,7 @@ public:
                     mps.throughput                  *= phase_weight;
                     mps.last_scatter_direction_pdf  = phase_pdf;
                     // Requires a count of two to account for the continuing clone.
-                    write(Int32(0), ls, mps, 2, create_clone);
+                    push(ls, mps, UInt32(2), create_clone);
 
                     dr::masked(path_flag,   create_clone) = +PathTypeFlag::Clone;
                     dr::masked(local_depth, create_clone) = UInt32(0);
@@ -857,6 +865,8 @@ public:
                 Mask perform_ddis = m_ddis_enable_surface
                                     && (medium != nullptr)
                                     && (ddis_threshold > 0.f)
+                                    && !has_flag(bsdf->flags(), BSDFFlags::Delta)
+                                    && !has_flag(bsdf->flags(), BSDFFlags::Null)
                                     && active_e;
                 Mask active_nee = active_e;
 
@@ -937,7 +947,7 @@ public:
                     Mask has_medium_trans = create_clone && active_surface && si.is_medium_transition();
                     dr::masked(mps.medium, has_medium_trans) = si.target_medium(si.spawn_ray(si.to_world(bs.wo)).d);
 
-                    write(Int32(0), ls, mps, UInt32(2), create_clone);
+                    push(ls, mps, UInt32(2), create_clone);
 
                     dr::masked(path_flag,      create_clone) = (uint32_t)PathTypeFlag::Clone;
                     dr::masked(local_depth,    create_clone) = UInt32(0);
@@ -953,12 +963,6 @@ public:
                     Spectrum natural_val = bsdf_val * bs.pdf;
                     Float natural_pdf = bs.pdf;
 
-                    // DDIS is active if the emitter is in the same lobe as the ray,
-                    // and that the BSDF is neither Null or Delta.
-                    perform_ddis &= dr::dot(-ray.d, -ddis_mei.wi) > 0.f
-                                    && !has_flag(bs.sampled_type, BSDFFlags::Null)
-                                    && !has_flag(bs.sampled_type, BSDFFlags::Delta);
-
                     Float eps = sampler->next_1d(perform_ddis);
                     Mask active_ddis = (eps < ddis_threshold) && perform_ddis;
 
@@ -973,12 +977,8 @@ public:
                         dr::masked(bs.wo, active_ddis)  = si.to_local(wo);
                         dr::masked(bs.eta, active_ddis) = 1.f;
 
-                        BSDFContext ddis_ctx;
-                        ddis_ctx.type_mask = +BSDFFlags::Reflection;
-
-                        // Update the bsdf value with the evalutation from the new outgoing direction
                         auto [new_natural_val, new_natural_pdf] =
-                            bsdf->eval_pdf(ddis_ctx, si , bs.wo, active_ddis);
+                            bsdf->eval_pdf(ctx, si, bs.wo, active_ddis);
                         dr::masked(natural_val, active_ddis) = new_natural_val;
                         dr::masked(natural_pdf, active_ddis) = new_natural_pdf;
                     }
@@ -1007,7 +1007,8 @@ public:
                 dr::masked(ray, active_surface) = bsdf_ray;
 
                 dr::masked(depth, non_null_bsdf) += 1;
-                dr::masked(local_depth, non_null_bsdf) += 1;
+                // skip surface creation event to start at local depth 0
+                dr::masked(local_depth, non_null_bsdf && !create_clone) += 1;
 
                 // update the last scatter PDF event if we encountered a non-null scatter event
                 dr::masked(last_scatter_event, non_null_bsdf) = si;
@@ -1025,7 +1026,10 @@ public:
             Mask pbs_enable = (active_surface || active_medium) && m_pbs_enable
                               && ((is_mother && depth < m_nle_first_clone_depth) || !is_mother);
             Mask split = pbs_enable && split_weight_rr > m_pbs_min_split_threshold;
-            split &= ls.stack_counter < Int32(LS_STACK_SIZE) - 1;
+            // Under NLE, mother paths keep one free slot for clone path push.
+            split &= ls.stack_counter < dr::select(m_nle_enable && is_mother,
+                                                   Int32(LS_STACK_SIZE) - 2,
+                                                   Int32(LS_STACK_SIZE) - 1);
 
             if (dr::any_or<true>(split)) {
                 UInt32 split_count = dr::minimum(m_pbs_max_split_count, UInt32(split_weight_rr));
