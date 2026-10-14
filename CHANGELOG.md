@@ -10,6 +10,11 @@ strive to document breaking API changes in the release notes below.
 
 ### New features
 
+- **Upstream Mitsuba rebase**: The base Mitsuba version is bumped from 3.7.1 to
+  3.9.1. The two-version leap bring major upgrades listed in the Mitsuba
+  [release notes](https://mitsuba.readthedocs.io/en/stable/release_notes.html).
+  This, in particular, unlocks support for Python 3.14 and higher
+  (PR [#56](https://github.com/eradiate/mitsuba3/pull/56)).
 - **`eoheterogeneous` medium**: A new heterogeneous that replicates and extends
   the upstream `heterogeneous` medium. Introduces a separate bounding box
   parametrization that allows the medium to have a different bounding box to
