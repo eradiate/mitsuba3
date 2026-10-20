@@ -61,22 +61,22 @@ EO Volumetric path tracer (:monosp:`eovolpath`)
    - Specifies the maximum probability to keep a path when russian roulette is evaluated.
      (Default: 0.97)
 
- * - ddis_enable
+ * - use_ddis
    - |bool|
    - Activate the DDIS variance reduction method. The ``ddis_threshold`` used to determine the
      probability of sampling using the emitter direction is set in the media plugins.
      (Default: false)
 
- * - ddis_enable_surface
+ * - use_ddis_surface
    - |bool|
-   - Activate ddis for surfaces when ``ddis_enable`` is true. (Default: |true|).
+   - Activate ddis for surfaces when ``use_ddis`` is true. (Default: |true|).
 
- * - pbs_enable
+ * - use_pbs
    - |bool|
    - Enable prediction-based path splitting (PBS). At each volumetric event,
      the predicted contribution of the ddis scattered direction is used to determine whether
      to split the path into multiple independent copies or to perform russian rouletter.
-     Each split path has a proportionally reduced weight. Requires ``ddis_enable=true``.
+     Each split path has a proportionally reduced weight. Requires ``use_ddis=true``.
      (Default: |false|)
 
  * - pbs_min_split_threshold
@@ -104,11 +104,11 @@ EO Volumetric path tracer (:monosp:`eovolpath`)
      ``1 - pbs_min_rr_threshold`` and that surviving paths are not reweighted above their pre-split
      weight. (Default: 0.2)
 
- * - nle_enable
+ * - use_nle
    - |bool|
    - Enable the N-tuple Local Estimate (NLE) variance reduction method. Each primary ray is traced as
      a *mother* path. At regular intervals along the mother's trajectory, a *clone* path is forked
-     and traced independently to perform additional next-event estimation. Requires ``ddis_enable=true``.
+     and traced independently to perform additional next-event estimation. Requires ``use_ddis=true``.
      (Default: |false|)
 
  * - nle_first_clone_depth
@@ -208,41 +208,41 @@ public:
         if (m_rr_factor < 0.f || m_rr_factor > 1.f)
             Throw("`rr_factor` is outside range [0.,1.].");
 
-        m_ddis_enable = props.get<bool>("ddis_enable", false);
-        m_ddis_enable_surface = props.get<bool>("ddis_enable_surface", true);
+        m_use_ddis = props.get<bool>("use_ddis", false);
+        m_use_ddis_surface = props.get<bool>("use_ddis_surface", true);
 
         // Prediction Based Splitting (PBS) Properties
-        m_pbs_enable           = props.get<bool>("pbs_enable", false);
+        m_use_pbs                   = props.get<bool>("use_pbs", false);
         m_pbs_max_split_count       = props.get<ScalarUInt32>("pbs_max_split_count", 50);
         m_pbs_min_split_threshold   = props.get<ScalarFloat>("pbs_min_split_threshold", 3.f);
         m_pbs_crit_rr_threshold     = props.get<ScalarFloat>("pbs_crit_rr_threshold", 0.33f);
         m_pbs_min_rr_threshold      = props.get<ScalarFloat>("pbs_min_rr_threshold", 0.2f);
 
-        if (m_pbs_enable && !m_ddis_enable)
-            Throw("`pbs_enable=True` requires `ddis_enable=True`");
+        if (m_use_pbs && !m_use_ddis)
+            Throw("`use_pbs=True` requires `use_ddis=True`");
 
-        if (m_pbs_enable && (m_pbs_crit_rr_threshold <  0.f || m_pbs_crit_rr_threshold >= 1.f))
+        if (m_use_pbs && (m_pbs_crit_rr_threshold <  0.f || m_pbs_crit_rr_threshold >= 1.f))
             Throw("`pbs_crit_rr_threshold` must be between 0 and 1.");
 
-        if (m_pbs_enable && (m_pbs_min_rr_threshold <  0.f || m_pbs_min_rr_threshold >= 1.f))
+        if (m_use_pbs && (m_pbs_min_rr_threshold <  0.f || m_pbs_min_rr_threshold >= 1.f))
             Throw("`pbs_min_rr_threshold` must be between 0 and 1.");
 
-        if (m_pbs_enable && (m_pbs_min_split_threshold < 1.f))
+        if (m_use_pbs && (m_pbs_min_split_threshold < 1.f))
             Throw("`pbs_min_split_threshold` must be greater than 1.");
 
         // N-tuple Local Estimate (NLE) Properties
-        m_nle_enable         = props.get<bool>("nle_enable", false);
+        m_use_nle                = props.get<bool>("use_nle", false);
         m_nle_first_clone_depth  = props.get<ScalarUInt32>("nle_first_clone_depth", 5);
         m_nle_max_clone_depth    = props.get<ScalarUInt32>("nle_max_clone_depth", 12);
         m_nle_nee_per_clone      = props.get<ScalarUInt32>("nle_nee_per_clone", 11);
 
-        if (m_nle_enable && !m_ddis_enable)
-            Throw("`nle_enable=True` requires `ddis_enable=True`");
+        if (m_use_nle && !m_use_ddis)
+            Throw("`use_nle=True` requires `use_ddis=True`");
 
-        if (m_nle_enable && (m_nle_max_clone_depth <= 1 || m_nle_nee_per_clone <= 1))
+        if (m_use_nle && (m_nle_max_clone_depth <= 1 || m_nle_nee_per_clone <= 1))
             Throw("`nle_max_clone_depth` and `nle_nee_per_clone` must be larger than one");
 
-        if (m_nle_enable && m_nle_max_clone_depth < m_nle_nee_per_clone )
+        if (m_use_nle && m_nle_max_clone_depth < m_nle_nee_per_clone )
             Throw("`nle_max_clone_depth` must be larger or equal to `nle_nee_per_clone`.");
     }
 
@@ -376,7 +376,7 @@ public:
 
         // VROOM variables
         UInt32 path_flag =
-            dr::select(m_nle_enable, +PathTypeFlag::Mother, +PathTypeFlag::Standard);
+            dr::select(m_use_nle, +PathTypeFlag::Mother, +PathTypeFlag::Standard);
         Float split_weight_rr = 1.f;
 
         /* Set up a Dr.Jit loop (optimizes away to a normal loop in scalar mode,
@@ -456,15 +456,15 @@ public:
             // Try to keep path weights equal to one, while accounting for the
             // solid angle compression at refractive index boundaries. Stop with at least some
             // probability to avoid getting stuck (e.g. due to total internal reflection)
-            dr::masked(q, !m_pbs_enable) =
+            dr::masked(q, !m_use_pbs) =
                 dr::minimum(dr::max(unpolarized_spectrum(throughput)) * dr::square(eta), m_rr_factor);
-            dr::masked(perform_rr, !m_pbs_enable) =
+            dr::masked(perform_rr, !m_use_pbs) =
                 (depth > (uint32_t) m_rr_depth);
 
             // PBS Russian Roulette:
             // Eliminate path that are predicted to have a small contribution.
-            // Mask do_pbs_rr = m_pbs_enable && (is_clone || has_flag(path_flag, PathTypeFlag::Split));
-            Mask do_pbs_rr = m_pbs_enable; // always apply
+            // Mask do_pbs_rr = m_use_pbs && (is_clone || has_flag(path_flag, PathTypeFlag::Split));
+            Mask do_pbs_rr = m_use_pbs; // always apply
             // Comparison to the current throughut to avoid values larger than one.
             dr::masked(q, do_pbs_rr) =
                 dr::minimum(dr::maximum(dr::maximum(split_weight_rr, m_pbs_min_rr_threshold),
@@ -504,7 +504,7 @@ public:
                 is_spectral &= medium->has_spectral_extinction();
                 not_spectral = !is_spectral && active_medium;
 
-                dr::masked(ddis_threshold, active_medium && m_ddis_enable) =
+                dr::masked(ddis_threshold, active_medium && m_use_ddis) =
                     medium->ddis_threshold();
             }
 
@@ -663,7 +663,7 @@ public:
                 auto ddis_phase = mei.medium->ddis_phase_function();
 
                 // --------------------- NLE setup ---------------------
-                Mask nle_enable = act_medium_scatter && m_nle_enable;
+                Mask use_nle = act_medium_scatter && m_use_nle;
 
                 // Clone creation: mother at/past nle_first_clone_depth, spaced by nle_nee_per_clone
                 Mask create_clone = active && is_mother
@@ -680,9 +680,9 @@ public:
                 Mask perform_ddis = ddis_threshold > 0.f && active_e;
                 Mask active_nee = active_e;
 
-                if (dr::any_or<true>(nle_enable)) {
+                if (dr::any_or<true>(use_nle)) {
                     // DDIS: restrict to create_clone or existing clone when NLE is on
-                    dr::masked(perform_ddis, nle_enable) &=
+                    dr::masked(perform_ddis, use_nle) &=
                         (depth <= (uint32_t)m_nle_first_clone_depth) || (create_clone || is_clone);
 
                     // NEE gating:
@@ -690,7 +690,7 @@ public:
                     //  First clone (creation_depth == nle_first_clone_depth): always NEE
                     //  Subsequent clones: last nle_nee_per_clone scatters only
                     // local_depth is already incremented → 1-indexed at NEE time
-                    dr::masked(active_nee, nle_enable) &=
+                    dr::masked(active_nee, use_nle) &=
                         (depth <= (uint32_t)m_nle_first_clone_depth)
                         || (is_clone
                         && ( (depth - local_depth) == (uint32_t) m_nle_first_clone_depth
@@ -779,7 +779,7 @@ public:
                         ((1.f - ddis_threshold) * natural_pdf + ddis_threshold * ddis_pdf);
                     dr::masked(phase_weight, perform_ddis) = natural_val / phase_pdf;
 
-                    // split_weight computed for all perform_ddis lanes; pbs_enable gates PBS below
+                    // split_weight computed for all perform_ddis lanes; use_pbs gates PBS below
                     dr::masked(split_weight_rr, perform_ddis) =
                         dr::max(unpolarized_spectrum(ddis_val * throughput));
                     dr::masked(split_weight_rr, perform_ddis) *=
@@ -848,11 +848,11 @@ public:
             if (dr::any_or<true>(active_surface)) {
 
                 // --------------------- NLE setup (surface) ---------------------
-                Mask nle_enable = active_surface && m_nle_enable;
+                Mask use_nle = active_surface && m_use_nle;
 
 
                 // Tentative clone creation (non_null_bsdf not yet known)
-                Mask create_clone = nle_enable
+                Mask create_clone = use_nle
                     && is_mother
                     && (depth + 1) >= (uint32_t)m_nle_first_clone_depth
                     && ((depth + 1 - (uint32_t)m_nle_first_clone_depth) % (uint32_t)m_nle_nee_per_clone == 0);
@@ -862,7 +862,7 @@ public:
                 BSDFPtr bsdf  = si.bsdf(ray);
 
                 Mask active_e = active_surface && has_flag(bsdf->flags(), BSDFFlags::Smooth) && (depth + 1 < (uint32_t) m_max_depth);
-                Mask perform_ddis = m_ddis_enable_surface
+                Mask perform_ddis = m_use_ddis_surface
                                     && (medium != nullptr)
                                     && (ddis_threshold > 0.f)
                                     && !has_flag(bsdf->flags(), BSDFFlags::Delta)
@@ -870,11 +870,11 @@ public:
                                     && active_e;
                 Mask active_nee = active_e;
 
-                if (dr::any_or<true>(nle_enable)) {
-                    dr::masked(perform_ddis, nle_enable) &=
+                if (dr::any_or<true>(use_nle)) {
+                    dr::masked(perform_ddis, use_nle) &=
                         ((depth+1) <= (uint32_t)m_nle_first_clone_depth) || (create_clone || is_clone);
 
-                    dr::masked(active_nee, nle_enable) &=
+                    dr::masked(active_nee, use_nle) &=
                         ((depth + 1) <= (uint32_t)m_nle_first_clone_depth)
                         || (is_clone
                             && ( (depth - local_depth) == (uint32_t) m_nle_first_clone_depth
@@ -1023,11 +1023,11 @@ public:
             }
 
             // --------------- Prediction Based Splitting ------------------
-            Mask pbs_enable = (active_surface || active_medium) && m_pbs_enable
+            Mask use_pbs = (active_surface || active_medium) && m_use_pbs
                               && ((is_mother && depth < m_nle_first_clone_depth) || !is_mother);
-            Mask split = pbs_enable && split_weight_rr > m_pbs_min_split_threshold;
+            Mask split = use_pbs && split_weight_rr > m_pbs_min_split_threshold;
             // Under NLE, mother paths keep one free slot for clone path push.
-            split &= ls.stack_counter < dr::select(m_nle_enable && is_mother,
+            split &= ls.stack_counter < dr::select(m_use_nle && is_mother,
                                                    Int32(LS_STACK_SIZE) - 2,
                                                    Int32(LS_STACK_SIZE) - 1);
 
@@ -1305,16 +1305,16 @@ public:
 private:
     ScalarFloat m_rr_factor;
 
-    bool m_ddis_enable;
-    bool m_ddis_enable_surface;
+    bool m_use_ddis;
+    bool m_use_ddis_surface;
 
-    bool m_pbs_enable;
+    bool m_use_pbs;
     ScalarUInt32 m_pbs_max_split_count;
     ScalarFloat m_pbs_min_split_threshold;
     ScalarFloat m_pbs_crit_rr_threshold;
     ScalarFloat m_pbs_min_rr_threshold;
 
-    bool m_nle_enable;
+    bool m_use_nle;
     ScalarUInt32 m_nle_first_clone_depth;
     ScalarUInt32 m_nle_max_clone_depth;
     ScalarUInt32 m_nle_nee_per_clone;
