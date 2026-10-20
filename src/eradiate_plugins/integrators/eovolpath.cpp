@@ -1287,11 +1287,30 @@ public:
     // =============================================================
 
     std::string to_string() const override {
-        return tfm::format("EOVolumetricPathIntegrator[\n"
-                           "  max_depth = %i,\n"
-                           "  rr_depth = %i\n"
-                           "]",
-                           m_max_depth, m_rr_depth);
+        std::ostringstream oss;
+        oss << std::boolalpha
+            << "EOVolumetricPathIntegrator[" << std::endl
+            << "  max_depth = " << m_max_depth << "," << std::endl
+            << "  rr_depth = " << m_rr_depth << "," << std::endl
+            << "  rr_factor = " << m_rr_factor << "," << std::endl
+            << "  hide_emitters = " << m_hide_emitters << "," << std::endl
+            << "  use_ddis = " << m_use_ddis << "," << std::endl;
+        if (m_use_ddis)
+            oss << "  use_ddis_surface = " << m_use_ddis_surface << "," << std::endl;
+        oss << "  use_pbs = " << m_use_pbs << "," << std::endl;
+        if (m_use_pbs)
+            oss << "  pbs_max_split_count = " << m_pbs_max_split_count << "," << std::endl
+                << "  pbs_min_split_threshold = " << m_pbs_min_split_threshold << "," << std::endl
+                << "  pbs_crit_rr_threshold = " << m_pbs_crit_rr_threshold << "," << std::endl
+                << "  pbs_min_rr_threshold = " << m_pbs_min_rr_threshold << "," << std::endl;
+        oss << "  use_nle = " << m_use_nle;
+        if (m_use_nle)
+            oss << "," << std::endl
+                << "  nle_first_clone_depth = " << m_nle_first_clone_depth << "," << std::endl
+                << "  nle_max_clone_depth = " << m_nle_max_clone_depth << "," << std::endl
+                << "  nle_nee_per_clone = " << m_nle_nee_per_clone;
+        oss << std::endl << "]";
+        return oss.str();
     }
 
     Float mis_weight(Float pdf_a, Float pdf_b) const {
