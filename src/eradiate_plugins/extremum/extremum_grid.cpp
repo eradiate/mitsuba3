@@ -22,17 +22,6 @@ Extremum grid structure (:monosp:`extremum_grid`)
      the underlying volume. Set to [0,0,0] to trigger an adaptive resolution
      routine. Default: [1,1,1]
 
- * - wrap_mode
-   - |string|
-   - **EXPERIMENTAL** Specifies how to handle extremum queries and traversal
-     outside its data definition. Values should be one of :monosp:`clamp`,
-     :monosp:`repeat`, :monosp:`mirror`. Should match the underlying volume to
-     ensure consistent extremum representation. Note that this is experimental
-     until proper periodic boundary conditions are defined for media.
-     **WARNING**: This is leftover for now, kept for proper function, will
-     soon change.
-     Default: :monosp:`clamp`
-
 This plugin creates a regular grid structure storing local extremum values for
 efficient delta tracking in heterogeneous media. The grid is constructed
 by querying the extinction volume's extrema over each grid cell.
@@ -58,18 +47,6 @@ public:
     using ScalarMask3          = dr::mask_t<ScalarVector3i>;
 
     ExtremumGrid(const Properties &props) : Base(props) {
-
-        std::string_view wrap_mode_str = props.get<std::string_view>("wrap_mode", "clamp");
-        if (wrap_mode_str == "repeat")
-            m_wrap_mode = dr::WrapMode::Repeat;
-        else if (wrap_mode_str == "mirror")
-            m_wrap_mode = dr::WrapMode::Mirror;
-        else if (wrap_mode_str == "clamp")
-            m_wrap_mode = dr::WrapMode::Clamp;
-        else
-            Throw("Invalid wrap_mode \"%s\", must be one of: \"repeat\", "
-                  "\"mirror\", or \"clamp\"!", wrap_mode_str);
-
         // Resolution Parameters
         m_resolution = props.get<ScalarVector3i>("resolution", ScalarVector3i(1,1,1));
 
@@ -77,10 +54,14 @@ public:
     }
 
     void build(const Volume *volume) override {
-
+        // initialize volume specific parameters.
         VolumeParametrization<ScalarFloat> volume_param = volume->parametrization();
+        m_to_local  = volume_param.to_world.inverse();
+        m_wrap      = volume_param.wrap;
+        m_wrap_mode = volume_param.wrap_mode;
 
-        m_to_local = volume_param.to_world.inverse();
+        // enforce wrap mode to clamp if wrap is set to false to assist traversal.
+        dr::masked(m_wrap_mode, !m_wrap) = dr::WrapMode::Clamp;
 
         if (dr::any(m_adaptive_dims))
             m_resolution = find_resolution(volume);
@@ -123,10 +104,12 @@ public:
     std::tuple<Float, Float> eval_1(const Interaction3f &it,
                                     Mask active) const override {
         Point3f po = m_to_local * it.p;
-        Vector3i piw = wrap<Vector3i>(
-            dr::floor2int<Vector3i>(po * m_resolution), m_resolution,
-            m_inv_resolution, m_wrap_mode);
+        Vector3i pi = dr::floor2int<Vector3i>(po * m_resolution);
 
+        active &= m_wrap || !dr::any((pi < 0) || (pi >= m_resolution));
+
+        Vector3i piw = wrap<Vector3i>(pi, m_resolution, m_inv_resolution,
+                                      m_wrap_mode);
         UInt32 idx = dr::fmadd(dr::fmadd(piw.z(), m_resolution.y(), piw.y()),
                                m_resolution.x(), piw.x());
         Vector2f extremum = dr::gather<Vector2f>(m_extremum_grid, idx, active);
@@ -439,6 +422,23 @@ private:
         // Integer grid coordinates
         Vector3i pi = dr::floor2int<Vector3i>(local_ray.o);
 
+        Mask clamped_bounds = !m_wrap || m_wrap_mode == dr::WrapMode::Clamp;
+
+        if (dr::any_or<true>(clamped_bounds)) {
+            auto below    = pi < 0;
+            auto above    = pi >= m_resolution;
+            auto entering = (below && d_pos) || (above && !d_pos);
+
+            // Set position index one unit outside boundary
+            // Forces computation of dt_v to the boundary instead of the next cell.
+            // Also ensures correct traversal when stepping through the DDA.
+            dr::masked(pi, below && clamped_bounds) = -1;
+            dr::masked(pi, above && clamped_bounds) = m_resolution;
+
+            // exiting dimensions set to infinity.
+            inf_t |= clamped_bounds && (below || above) && !entering;
+        }
+
         // Fractional entry position
         Vector3f p0 = local_ray.o - Vector3f(pi);
         // Step size to next interaction
@@ -470,7 +470,7 @@ private:
         dr::tie(ls) = dr::while_loop(
             dr::make_tuple(ls),
             [](const LoopState& ls) { return ls.active; },
-            [this, func, step, abs_rcp_d, t_max, mint, channel](LoopState& ls) {
+            [this, func, step, abs_rcp_d, t_max, mint, channel, clamped_bounds](LoopState& ls) {
 
             ExtremumSegment& segment = ls.segment;
             StateD& state = ls.state;
@@ -485,14 +485,15 @@ private:
             Float dt  = dr::minimum(dr::min(dt_v), t_rem);
             auto mask = dt_v == dt;
 
-            // Note: not multiplying the index by 2 because we gather using
-            // Vector2f.
+            // Not multiplying the index by 2 because we gather using Vector2f.
             Vector3i piw = wrap<Vector3i>(pi, m_resolution, m_inv_resolution, m_wrap_mode);
             UInt32 idx = dr::fmadd(dr::fmadd(piw.z(), m_resolution.y(), piw.y()),
                                    m_resolution.x(), piw.x());
 
+            // Non-wrapping volume evaluates to zero outside [0,res)
+            Mask inside = m_wrap || !dr::any((pi < 0) || (pi >= m_resolution));
             const Vector2f extremum =
-                m_scale * dr::gather<Vector2f>(m_extremum_grid, idx);
+                m_scale * dr::gather<Vector2f>(m_extremum_grid, idx, inside);
 
             // Store segment for lanes that reached target
             Float t_curr = mint + t_max - t_rem;
@@ -504,9 +505,15 @@ private:
 
             std::tie(advance, active) = func( segment, state, channel, active);
 
-            // Advance
-            dr::masked(dt_v, advance) = dr::select(mask, abs_rcp_d, dt_v - dt);
             dr::masked(pi, mask && advance) += step;
+
+            // Dimensions that leave clamped/non_wrapping [0,res] range are set to infinity.
+            Vector3f reset = abs_rcp_d;
+            if (dr::any_or<true>(clamped_bounds))
+                dr::masked(reset, clamped_bounds && ((pi < 0) || (pi >= m_resolution))) =
+                    dr::Infinity<Float>;
+
+            dr::masked(dt_v, advance) = dr::select(mask, reset, dt_v - dt);
             dr::masked(t_rem, advance) -= dt;
 
             active &= t_rem > 0.f;
@@ -523,6 +530,7 @@ private:
     ScalarMask3 m_adaptive_dims;
     ScalarVector3i m_resolution;
     dr::divisor<int32_t> m_inv_resolution[3];
+    bool m_wrap;
     dr::WrapMode m_wrap_mode;
 
     ScalarAffineTransform4f m_to_local;
