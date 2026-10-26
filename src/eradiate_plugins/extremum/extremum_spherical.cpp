@@ -300,7 +300,7 @@ private:
         it.p          = m_center;
         Float fillmin = volume->eval_1(it, true);
 
-        it.p          = m_center + m_rmax + ScalarVector3f(0.f, 0.f, 1.f);
+        it.p          = m_to_local.inverse() * ScalarPoint3f(0.f, 0.f, m_rmax + 1.f);
         Float fillmax = volume->eval_1(it, true);
 
         if constexpr (dr::is_jit_v<Float>) {
