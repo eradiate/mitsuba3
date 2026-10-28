@@ -46,10 +46,9 @@ template <typename Float, typename Spectrum> struct SurfaceInteraction;
 template <typename Float, typename Shape>    struct PreliminaryIntersection;
 
 // #ERADIATE_CHANGE_BEGIN: Local extremum support
-template <typename Float, typename Spectrum> class ExtremumStructure;
+template <typename Float, typename Spectrum> class Extremum;
 
 template <typename Float, typename Spectrum> struct ExtremumSegment;
-
 template <typename Float, typename Spectrum> struct ExtremumState;
 
 template <typename Float, typename Spectrum> struct MediumSample3;
@@ -167,7 +166,7 @@ template <typename Float_, typename Spectrum_> struct RenderAliases {
     using TexturePtr             = dr::replace_scalar_t<Float, const Texture *>;
 
 // #ERADIATE_CHANGE_BEGIN: Local extremum support
-    using ExtremumStructure      = mitsuba::ExtremumStructure<Float, Spectrum>;
+    using Extremum               = mitsuba::Extremum<Float, Spectrum>;
     using ExtremumSegment        = mitsuba::ExtremumSegment<Float, Spectrum>;
     using ExtremumState          = mitsuba::ExtremumState<Float, Spectrum>;
     using MediumSample3f         = MediumSample3<Float, Spectrum>;
@@ -261,6 +260,6 @@ template <typename Float_, typename Spectrum_> struct RenderAliases {
     using EmitterPtr             = typename RenderAliases::EmitterPtr;                             \
     using SensorPtr              = typename RenderAliases::SensorPtr;                              \
 /* #ERADIATE_CHANGE_BEGIN: Local extremum support */                                               \
-    using ExtremumStructure      = typename RenderAliases::ExtremumStructure;                      \
+    using Extremum               = typename RenderAliases::Extremum;                               \
 /* #ERADIATE_CHANGE_END */
 NAMESPACE_END(mitsuba)

@@ -14,7 +14,7 @@ def component(variant_scalar_rgb):
         "albedo": 0.8,
         "aabb_min": mi.ScalarPoint3f(0.0),
         "aabb_max": mi.ScalarPoint3f(1.0),
-        "extremum_structure": {"type": "extremum_global"},
+        "extremum": {"type": "globalextremum"},
     }
 
 

@@ -47,7 +47,7 @@ MI_VARIANT Medium<Float, Spectrum>::~Medium() { }
 MI_VARIANT void Medium<Float, Spectrum>::traverse(TraversalCallback *cb) {
     cb->put("phase_function", m_phase_function, ParamFlags::Differentiable);
 // #ERADIATE_CHANGE_BEGIN: Traverse extremum structure
-    cb->put("extremum_structure", m_extremum_structure, ParamFlags::NonDifferentiable);
+    cb->put("extremum", m_extremum, ParamFlags::NonDifferentiable);
 // #ERADIATE_CHANGE_END
 }
 
@@ -220,7 +220,7 @@ Medium<Float, Spectrum>::track(const Ray3f &ray, Float sample,
     rec.throughput             = 1.f;
     rec.transmittance          = 1.f;
 
-    const std::vector<ref<ExtremumStructure>> &structures = m_extrema;
+    const std::vector<ref<Extremum>> &structures = m_extrema;
     size_t n = structures.size();
 
     struct LoopState {

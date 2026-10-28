@@ -63,7 +63,7 @@ public:
                     m_ddis_phase_function, m_ddis_threshold,
                     create_ddis_phase_function
                 )
-    MI_IMPORT_TYPES(Scene, Sampler, ExtremumStructure,
+    MI_IMPORT_TYPES(Scene, Sampler, Extremum,
                     PhaseFunction, PhaseFunctionPtr)
 
     using FloatStorage = DynamicBuffer<Float>;

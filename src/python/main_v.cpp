@@ -55,7 +55,7 @@ static nb::object caster(Object *o) {
     PY_TRY_CAST(Medium);
 
 // ERADIATE_CHANGE_BEGIN
-    PY_TRY_CAST(ExtremumStructure);
+    PY_TRY_CAST(Extremum);
 // ERADIATE_CHANGE_END
 
     return nb::object();
@@ -124,7 +124,7 @@ MI_PY_DECLARE(VolumeGrid);
 MI_PY_DECLARE(ExtremumSegment);
 MI_PY_DECLARE(ExtremumState);
 MI_PY_DECLARE(MediumSample);
-MI_PY_DECLARE(ExtremumStructure);
+MI_PY_DECLARE(Extremum);
 // ERADIATE_CHANGE_END
 
 using Caster = nb::object(*)(mitsuba::Object *);
@@ -244,7 +244,7 @@ NB_MODULE(MI_VARIANT_NAME, m) {
     MI_PY_IMPORT(ExtremumSegment);
     MI_PY_IMPORT(ExtremumState);
     MI_PY_IMPORT(MediumSample);
-    MI_PY_IMPORT(ExtremumStructure);
+    MI_PY_IMPORT(Extremum);
 // ERADIATE_CHANGE_END
 
 

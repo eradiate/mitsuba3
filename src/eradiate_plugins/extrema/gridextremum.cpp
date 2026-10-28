@@ -9,10 +9,10 @@
 NAMESPACE_BEGIN(mitsuba)
 
 /**!
-.. _extremum-extremum_grid:
+.. _extremum-gridextremum:
 
-Extremum grid structure (:monosp:`extremum_grid`)
--------------------------------------------------
+Grid Extremum (:monosp:`gridextremum`)
+--------------------------------------
 
 .. pluginparameters::
 
@@ -36,15 +36,15 @@ bounds and periodic behaviours.;
 */
 
 template <typename Float, typename Spectrum>
-class ExtremumGrid final : public ExtremumStructure<Float, Spectrum> {
+class GridExtremum final : public Extremum<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(ExtremumStructure, m_bbox, m_scale)
+    MI_IMPORT_BASE(Extremum, m_bbox, m_scale)
     MI_IMPORT_TYPES(Volume)
 
     using FloatStorage         = DynamicBuffer<Float>;
     using ScalarMask3          = dr::mask_t<ScalarVector3i>;
 
-    ExtremumGrid(const Properties &props) : Base(props) {
+    GridExtremum(const Properties &props) : Base(props) {
         // Resolution Parameters
         m_resolution = props.get<ScalarVector3i>("resolution", ScalarVector3i(1,1,1));
 
@@ -67,7 +67,7 @@ public:
         ScalarVector3i clamped  = dr::clip(m_resolution, 1, volume->resolution());
         if (dr::any(clamped != m_resolution)) {
             Log(Info,
-                "ExtremumGrid: requested resolution %s is finer than the "
+                "GridExtremum: requested resolution %s is finer than the "
                 "underlying volume's resolution %s; clamping to %s.",
                 m_resolution, volume->resolution(), clamped);
             m_resolution = clamped;
@@ -136,21 +136,6 @@ public:
         return segment;
     }
 
-    std::tuple<Float, Float> eval_1(const Interaction3f &it,
-                                    Mask active) const override {
-        Point3f po  = m_to_local * it.p;
-        Vector3i pi = dr::floor2int<Vector3i>(po * m_resolution);
-
-        active &= m_wrap || !dr::any((pi < 0) || (pi >= m_resolution));
-
-        Vector3i piw =
-            wrap<Vector3i>(pi, m_resolution, m_inv_resolution, m_wrap_mode);
-        UInt32 idx =
-            dr::fmadd(dr::fmadd(piw.z(), m_resolution.y(), piw.y()), m_resolution.x(), piw.x());
-        Vector2f extremum = dr::gather<Vector2f>(m_extremum_grid, idx, active);
-        return { m_scale * extremum.x(), m_scale * extremum.y() };
-    }
-
     void traverse(TraversalCallback *cb) override {
         cb->put("data", m_extremum_grid, ParamFlags::NonDifferentiable);
         cb->put("resolution", m_resolution, ParamFlags::NonDifferentiable);
@@ -175,7 +160,7 @@ public:
         }
 
         std::ostringstream oss;
-        oss << "ExtremumGrid[" << std::endl
+        oss << "GridExtremum[" << std::endl
             << "  resolution = " << m_resolution << "," << std::endl
             << "  bbox = " << m_bbox << "," << std::endl
             << "  scale = " << m_scale << "," << std::endl
@@ -184,7 +169,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS(ExtremumGrid)
+    MI_DECLARE_CLASS(GridExtremum)
 
 private:
 
@@ -398,5 +383,5 @@ private:
     ScalarAffineTransform4f m_to_local;
 };
 
-MI_EXPORT_PLUGIN(ExtremumGrid)
+MI_EXPORT_PLUGIN(GridExtremum)
 NAMESPACE_END(mitsuba)

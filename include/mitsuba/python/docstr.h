@@ -3759,12 +3759,47 @@ static const char *__doc_mitsuba_Endpoint_traverse_1_cb_rw = R"doc()doc";
 
 static const char *__doc_mitsuba_Endpoint_world_transform = R"doc(Return the local space to world space transformation)doc";
 
+static const char *__doc_mitsuba_Extremum =
+R"doc(Abstract base class for an extremum
+
+Extremum provides an interface for spatial data structures that store
+local extrema (majorant/minorant) of volumetric extinction
+coefficients. This enables efficient use of tracking algorithms with
+locally-adaptive majorants and minorants.
+
+Extrema follow the pattern of an iterator: the traversal is
+initialized with ``begin``, and segments are served in order with
+``next``.
+
+The extremum structure needs to be built using the ``update_extremum``
+function, it is **not** called automatically in the constructor. The
+caller, usually a ``Medium``, passes the volumetric data the extremum
+is derived from.)doc";
+
+static const char *__doc_mitsuba_Extremum_2 = R"doc()doc";
+
+static const char *__doc_mitsuba_Extremum_3 = R"doc()doc";
+
+static const char *__doc_mitsuba_Extremum_4 = R"doc()doc";
+
+static const char *__doc_mitsuba_Extremum_5 = R"doc()doc";
+
+static const char *__doc_mitsuba_Extremum_6 = R"doc()doc";
+
+static const char *__doc_mitsuba_Extremum_7 = R"doc()doc";
+
+static const char *__doc_mitsuba_Extremum_8 = R"doc()doc";
+
+static const char *__doc_mitsuba_Extremum_9 = R"doc()doc";
+
+static const char *__doc_mitsuba_Extremum_10 = R"doc()doc";
+
 static const char *__doc_mitsuba_ExtremumSegment =
 R"doc(Stores the extremum (minorant/majorant) data for a ray segment.
 
-Used as the output type of ExtremumStructure traversal. Tracks the
-segment's entry/exit distances and the local extinction coefficient
-bounds within that interval.)doc";
+Used as the output type of Extremum traversal. Tracks the segment's
+entry/exit distances and the local extinction coefficient bounds
+within that interval.)doc";
 
 static const char *__doc_mitsuba_ExtremumSegment_2 = R"doc()doc";
 
@@ -3842,7 +3877,7 @@ In ExtremumSegment, the ``mint`` and ``maxt`` fields are set to + and
 
 static const char *__doc_mitsuba_ExtremumState =
 R"doc(Traversal state carried between successive ``next`` calls of an
-``ExtremumStructure``.
+``Extremum``.
 
 Holds what a structure cannot cheaply recover per segment: local ray
 information, current visited index and traversal distance. The
@@ -3865,7 +3900,7 @@ static const char *__doc_mitsuba_ExtremumState_fields = R"doc()doc";
 
 static const char *__doc_mitsuba_ExtremumState_fields_2 = R"doc()doc";
 
-static const char *__doc_mitsuba_ExtremumState_inner_maxt = R"doc(End of the inner structure's traversal (nested structures).)doc";
+static const char *__doc_mitsuba_ExtremumState_inner_maxt = R"doc(End of the inner extremum's traversal (nested extrema).)doc";
 
 static const char *__doc_mitsuba_ExtremumState_labels = R"doc()doc";
 
@@ -3883,48 +3918,13 @@ static const char *__doc_mitsuba_ExtremumState_operator_assign_2 = R"doc()doc";
 
 static const char *__doc_mitsuba_ExtremumState_pi = R"doc(Current cell index.)doc";
 
-static const char *__doc_mitsuba_ExtremumStructure =
-R"doc(Abstract base class for extremum structures
+static const char *__doc_mitsuba_Extremum_Extremum = R"doc(//! @})doc";
 
-ExtremumStructure provides an interface for spatial data structures
-that store local extrema (majorant/minorant) of volumetric extinction
-coefficients. This enables efficient use of tracking algorithms with
-locally-adaptive majorants and minorants.
+static const char *__doc_mitsuba_Extremum_Extremum_2 = R"doc()doc";
 
-Structures follow the pattern of an iterator: the traversal is
-initialized with ``begin``, and segments are served in order with
-``next``.
+static const char *__doc_mitsuba_Extremum_bbox = R"doc(//! @{ \name Non-virtual query methods)doc";
 
-The extremum structure needs to be built using the ``update_extremum``
-function, it is **not** called automatically in the constructor. The
-caller, usually a ``Medium``, passes the volumetric data the extremum
-is derived from.)doc";
-
-static const char *__doc_mitsuba_ExtremumStructure_2 = R"doc()doc";
-
-static const char *__doc_mitsuba_ExtremumStructure_3 = R"doc()doc";
-
-static const char *__doc_mitsuba_ExtremumStructure_4 = R"doc()doc";
-
-static const char *__doc_mitsuba_ExtremumStructure_5 = R"doc()doc";
-
-static const char *__doc_mitsuba_ExtremumStructure_6 = R"doc()doc";
-
-static const char *__doc_mitsuba_ExtremumStructure_7 = R"doc()doc";
-
-static const char *__doc_mitsuba_ExtremumStructure_8 = R"doc()doc";
-
-static const char *__doc_mitsuba_ExtremumStructure_9 = R"doc()doc";
-
-static const char *__doc_mitsuba_ExtremumStructure_10 = R"doc()doc";
-
-static const char *__doc_mitsuba_ExtremumStructure_ExtremumStructure = R"doc(//! @})doc";
-
-static const char *__doc_mitsuba_ExtremumStructure_ExtremumStructure_2 = R"doc()doc";
-
-static const char *__doc_mitsuba_ExtremumStructure_bbox = R"doc(//! @{ \name Non-virtual query methods)doc";
-
-static const char *__doc_mitsuba_ExtremumStructure_begin =
+static const char *__doc_mitsuba_Extremum_begin =
 R"doc(Set up a stateful traversal along ``ray``.
 
 Transforms the ray to structure-local coordinates, locates the entry
@@ -3947,7 +3947,7 @@ Returns:
 
 Not a vcall method, called on scalar pointers only.)doc";
 
-static const char *__doc_mitsuba_ExtremumStructure_build =
+static const char *__doc_mitsuba_Extremum_build =
 R"doc(Build the extremum structure of ``volume``.
 
 Implements the logic that constructs the extremum structure from a
@@ -3957,29 +3957,13 @@ the owning ``Medium``
 Parameter ``volume``:
     Volume to compute extremum values from)doc";
 
-static const char *__doc_mitsuba_ExtremumStructure_class_name = R"doc()doc";
+static const char *__doc_mitsuba_Extremum_class_name = R"doc()doc";
 
-static const char *__doc_mitsuba_ExtremumStructure_eval_1 =
-R"doc(Evaluate the minorant and majorant at a medium interaction point.
+static const char *__doc_mitsuba_Extremum_m_bbox = R"doc(The bbox over which the extremum structure must be valid.)doc";
 
-This method performs point evaluation at interaction point specified
-in local space.
+static const char *__doc_mitsuba_Extremum_m_scale = R"doc(Scale by which to multiply the extremum values.)doc";
 
-Parameter ``it``:
-    Interaction interaction point in local space
-
-Parameter ``active``:
-    Mask for active lanes
-
-Returns:
-    The minorant and majorant values at the medium interaction point.
-    Clamped values outside bounds.)doc";
-
-static const char *__doc_mitsuba_ExtremumStructure_m_bbox = R"doc(The bbox over which the extremum structure must be valid.)doc";
-
-static const char *__doc_mitsuba_ExtremumStructure_m_scale = R"doc(Scale by which to multiply the extremum values.)doc";
-
-static const char *__doc_mitsuba_ExtremumStructure_next =
+static const char *__doc_mitsuba_Extremum_next =
 R"doc(Return the segment starting at ``state.mint`` and advance ``state``
 past it.
 
@@ -4001,13 +3985,13 @@ Returns:
 
 Not a vcall method, called on scalar pointers only.)doc";
 
-static const char *__doc_mitsuba_ExtremumStructure_set_bbox = R"doc(Setter for the bbox over which the structure must be valid.)doc";
+static const char *__doc_mitsuba_Extremum_set_bbox = R"doc(Setter for the bbox over which the structure must be valid.)doc";
 
-static const char *__doc_mitsuba_ExtremumStructure_set_scale = R"doc(Setter for the scale by which to multiply the extremum values.)doc";
+static const char *__doc_mitsuba_Extremum_set_scale = R"doc(Setter for the scale by which to multiply the extremum values.)doc";
 
-static const char *__doc_mitsuba_ExtremumStructure_type = R"doc()doc";
+static const char *__doc_mitsuba_Extremum_type = R"doc()doc";
 
-static const char *__doc_mitsuba_ExtremumStructure_update_extremum =
+static const char *__doc_mitsuba_Extremum_update_extremum =
 R"doc(Update the bbox and scale, and rebuild the structure.
 
 The ``bbox`` parameters indicates the domain over which the extremum
@@ -4025,7 +4009,7 @@ Parameter ``volume``:
 Parameter ``scale``:
     The scale by which to multiply the extremum values)doc";
 
-static const char *__doc_mitsuba_ExtremumStructure_variant_name = R"doc()doc";
+static const char *__doc_mitsuba_Extremum_variant_name = R"doc()doc";
 
 static const char *__doc_mitsuba_FileResolver =
 R"doc(Simple class for resolving paths on Linux/Windows/Mac OS
@@ -5817,7 +5801,7 @@ static const char *__doc_mitsuba_Medium_m_ddis_threshold = R"doc()doc";
 
 static const char *__doc_mitsuba_Medium_m_extrema = R"doc(Extremum structures, one per component.)doc";
 
-static const char *__doc_mitsuba_Medium_m_extremum_structure = R"doc()doc";
+static const char *__doc_mitsuba_Medium_m_extremum = R"doc()doc";
 
 static const char *__doc_mitsuba_Medium_m_has_spectral_extinction = R"doc()doc";
 
@@ -6818,7 +6802,7 @@ static const char *__doc_mitsuba_ObjectType_BSDF = R"doc(A bidirectional reflect
 
 static const char *__doc_mitsuba_ObjectType_Emitter = R"doc(Emits radiance, subclasses Emitter)doc";
 
-static const char *__doc_mitsuba_ObjectType_ExtremumStructure = R"doc(A medium acceleration structure.)doc";
+static const char *__doc_mitsuba_ObjectType_Extremum = R"doc(A medium acceleration structure.)doc";
 
 static const char *__doc_mitsuba_ObjectType_Film = R"doc(Storage representation of the sensor)doc";
 

@@ -10,7 +10,7 @@ def _component(g):
         "sigma_t": {"type": "constvolume", "value": 1.0},
         "albedo": 0.8,
         "phase": {"type": "hg", "g": g},
-        "extremum_structure": {"type": "extremum_global"},
+        "extremum": {"type": "globalextremum"},
     }
 
 

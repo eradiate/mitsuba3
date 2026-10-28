@@ -100,7 +100,7 @@ section automatically.
        ],
        "Extremum": [
            r"mitsuba\.ExtremumSegment([\w]*)",
-           r"mitsuba\.ExtremumStructure([\w]*)",
+           r"mitsuba\.Extremum([\w]*)",
        ],
    }
 
