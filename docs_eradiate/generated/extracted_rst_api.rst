@@ -14,13 +14,145 @@
     :type: int
     :value: 0
 
+.. py:class:: mitsuba.Extremum
+
+    Base class: :py:obj:`mitsuba.Object`
+
+    Abstract base class for an extremum
+
+    Extremum provides an interface for spatial data structures that store
+    local extrema (majorant/minorant) of volumetric extinction
+    coefficients. This enables efficient use of tracking algorithms with
+    locally-adaptive majorants and minorants.
+
+    Extrema follow the pattern of an iterator: the traversal is
+    initialized with ``begin``, and segments are served in order with
+    ``next``.
+
+    The extremum structure needs to be built using the ``update_extremum``
+    function, it is **not** called automatically in the constructor. The
+    caller, usually a ``Medium``, passes the volumetric data the extremum
+    is derived from.
+
+    .. py:method:: __init__(self, props)
+
+        Parameter ``props`` (:py:obj:`mitsuba.Properties`):
+            *no description available*
+
+
+    .. py:method:: mitsuba.Extremum.bbox()
+
+        //! @{ \name Non-virtual query methods
+
+        Returns → :py:obj:`mitsuba.BoundingBox3f`:
+            *no description available*
+
+    .. py:method:: mitsuba.Extremum.begin(self, ray, mint, maxt, active=True)
+
+        Set up a stateful traversal along ``ray``.
+
+        Transforms the ray to structure-local coordinates, locates the entry
+        cell and clips ``[mint, maxt]`` to the structure's domain. Called once
+        per ray; the returned state is then advanced with ``next`` until
+        ``state.mint >= state.maxt``.
+
+        Parameter ``ray`` (:py:obj:`mitsuba.Ray3f`):
+            The ray along which the structure is traversed.
+
+        Parameter ``mint`` (float):
+            The minimum traversal distance.
+
+        Parameter ``maxt`` (float):
+            The maximum traversal distance.
+
+        Parameter ``active`` (bool):
+            Mask to specify active lanes.
+
+        Returns → :py:obj:`mitsuba.ExtremumState`:
+            The initalized ``ExtremumState``. Call ``next`` to get the first
+            and subsequent segment starting from mint.
+
+        Not a vcall method, called on scalar pointers only.
+
+    .. py:method:: mitsuba.Extremum.build(self, volume)
+
+        Build the extremum structure of ``volume``.
+
+        Implements the logic that constructs the extremum structure from a
+        ``volume``. Called by ``update_extremum`` which is itself called by
+        the owning ``Medium``
+
+        Parameter ``volume`` (:py:obj:`mitsuba.Volume`):
+            Volume to compute extremum values from
+
+        Returns → None:
+            *no description available*
+
+    .. py:method:: mitsuba.Extremum.next(self, state, ray, active=True)
+
+        Test utility: ``next`` on a copy of ``state``. Returns (segment, advanced state).
+
+        Parameter ``state`` (:py:obj:`mitsuba.ExtremumState`):
+            *no description available*
+
+        Parameter ``ray`` (:py:obj:`mitsuba.Ray3f`):
+            *no description available*
+
+        Parameter ``active`` (bool):
+            Mask to specify active lanes.
+
+        Returns → tuple[:py:obj:`mitsuba.ExtremumSegment`, :py:obj:`mitsuba.ExtremumState`]:
+            *no description available*
+
+    .. py:method:: mitsuba.Extremum.set_bbox(self, bbox)
+
+        Setter for the bbox over which the structure must be valid.
+
+        Parameter ``bbox`` (:py:obj:`mitsuba.BoundingBox3f`):
+            *no description available*
+
+        Returns → None:
+            *no description available*
+
+    .. py:method:: mitsuba.Extremum.set_scale(self, scale)
+
+        Setter for the scale by which to multiply the extremum values.
+
+        Parameter ``scale`` (float):
+            *no description available*
+
+        Returns → None:
+            *no description available*
+
+    .. py:method:: mitsuba.Extremum.update_extremum(self, bbox, volume, scale=None)
+
+        Update the bbox and scale, and rebuild the structure.
+
+        The ``bbox`` parameters indicates the domain over which the extremum
+        structure can be queried. It can be larger or smaller than the
+        underlying volume bbox. It is the extremum's responsibility to be
+        valid over this area. The building implementation is handled in
+        ``build``.
+
+        Parameter ``bbox`` (:py:obj:`mitsuba.BoundingBox3f`):
+            The validity bbox of the extremum structure
+
+        Parameter ``volume`` (:py:obj:`mitsuba.Volume`):
+            The volume from which to derive the extremum structure
+
+        Parameter ``scale`` (float | None):
+            The scale by which to multiply the extremum values
+
+        Returns → None:
+            *no description available*
+
 .. py:class:: mitsuba.ExtremumSegment
 
     Stores the extremum (minorant/majorant) data for a ray segment.
 
-    Used as the output type of ExtremumStructure traversal. Tracks the
-    segment's entry/exit distances and the local extinction coefficient
-    bounds within that interval.
+    Used as the output type of Extremum traversal. Tracks the segment's
+    entry/exit distances and the local extinction coefficient bounds
+    within that interval.
 
     .. py:method:: __init__()
 
@@ -102,20 +234,6 @@
         Returns → None:
             *no description available*
 
-    .. py:method:: mitsuba.ExtremumSegment.valid()
-
-        Check whether this is a valid segment
-
-        A segment is considered valid when
-
-        .. code-block:: c
-
-            segment.mint < segment.maxt
-
-
-        Returns → bool:
-            *no description available*
-
     .. py:property:: mitsuba.ExtremumSegment.value
 
         Extremum data stored as [minorant, majorant]
@@ -140,60 +258,121 @@
         Returns → None:
             *no description available*
 
-.. py:class:: mitsuba.ExtremumStructure
+.. py:class:: mitsuba.ExtremumState
 
-    Base class: :py:obj:`mitsuba.Object`
+    Traversal state carried between successive ``next`` calls of an
+    ``Extremum``.
 
-    Abstract base class for extremum structures
+    Holds what a structure cannot cheaply recover per segment: local ray
+    information, current visited index and traversal distance. The
+    traversal is over once mint >= maxt.
 
-    ExtremumStructure provides an interface for spatial data structures
-    that store local extrema (majorant/minorant) of volumetric extinction
-    coefficients. This enables efficient delta tracking with locally-
-    adaptive majorants.
+    Ray information are stored as origin and direction to keep the struct
+    lean.
 
-    To minimize virtual function overhead, the ``traverse_extremum()``
-    method encapsulates the entire traversal loop internally, requiring
-    only a single virtual call per distance sample.
+    .. py:method:: __init__()
 
-    .. py:method:: __init__(self, props)
+        Overloaded function.
+        
+        1. ``__init__(self) -> None``
+        
+        
+        2. ``__init__(self, other: :py:obj:`mitsuba.ExtremumState`) -> None``
+        
+        Copy constructor
 
-        Parameter ``props`` (:py:obj:`mitsuba.Properties`):
+        
+    .. py:method:: mitsuba.ExtremumState.assign(self, arg)
+
+        Parameter ``arg`` (:py:obj:`mitsuba.ExtremumState`, /):
             *no description available*
 
-
-    .. py:method:: mitsuba.ExtremumStructure.bbox()
-
-        Return the bounding box of the extremum structure
-
-        Returns → :py:obj:`mitsuba.BoundingBox3f`:
+        Returns → None:
             *no description available*
 
-    .. py:method:: mitsuba.ExtremumStructure.eval_1(self, it, active=True)
+    .. py:property:: mitsuba.ExtremumState.d
 
-        Evaluate the minorant and majorant at a medium interaction point.
+        Ray direction in structure-local coordinates, never renormalised.
 
-        This method performs point evaluation at interaction point specified
-        in local space.
+    .. py:property:: mitsuba.ExtremumState.inner_maxt
 
-        Parameter ``it`` (:py:obj:`mitsuba.Interaction3f`):
-            Interaction interaction point in local space
+        End of the inner extremum's traversal (nested extrema).
 
-        Parameter ``active`` (bool):
-            Mask for active lanes
+    .. py:property:: mitsuba.ExtremumState.maxt
 
-        Returns → tuple[float, float]:
-            The minorant and majorant values at the medium interaction point.
-            Clamped values outside bounds.
+        End of the traversal range.
+
+    .. py:property:: mitsuba.ExtremumState.mint
+
+        Entry distance of the next segment. Exact in ``t``.
+
+    .. py:property:: mitsuba.ExtremumState.o
+
+        Ray origin in structure-local coordinates.
+
+    .. py:property:: mitsuba.ExtremumState.pi
+
+        Current cell index.
 
 .. py:class:: mitsuba.Medium
 
     Base class: :py:obj:`mitsuba.Object`
 
-    .. py:method:: mitsuba.Medium.extremum_structure()
+    .. py:method:: mitsuba.Medium.delta_track(self, ray, sample, rng, channel, active=True)
 
-        Returns the extremum structure for local extremum acceleration.
+        Delta tracking along ``ray``, over its part inside the medium's
+        bounding box and ``[0, ray.maxt]``.
 
-        Returns → :py:obj:`mitsuba.ExtremumStructure`:
+        Free flights are sampled at the hero channel's combined majorant. At a
+        tentative collision, component ``i`` is picked with probability
+        proportional to its majorant and only its coefficients are evaluated
+        (eval_component); the collision is then null or real. Tracking stops
+        at the first real collision, recorded in the returned TrackingRecord
+        with its component. A ray that misses that range returns no collision.
+
+        Parameter ``sample`` (float):
+            Uniform sample in ``[0, 1)`` that draws the first free flight.
+
+        Parameter ``rng`` (drjit.scalar.PCG32):
+            Generator of the later free flights and of the collision choices.
+
+        Parameter ``channel`` (int):
+            Hero channel, along which free flights are sampled.
+
+        Parameter ``ray`` (:py:obj:`mitsuba.Ray3f`):
+            *no description available*
+
+        Parameter ``active`` (bool):
+            Mask to specify active lanes.
+
+        Returns → :py:obj:`mitsuba.TrackingRecord`:
+            *no description available*
+
+    .. py:method:: mitsuba.Medium.eval_component(self, mei, component, active=True)
+
+        Scattering and extinction coefficients of one medium component.
+
+        Evaluate the coefficients of ``component`` alone, and evals zero where
+        that component is undefined. The default, for a single-component
+        medium, is ``get_scattering_coefficients``.
+
+        Parameter ``mei`` (:py:obj:`mitsuba.MediumInteraction3f`):
+            *no description available*
+
+        Parameter ``component`` (int):
+            *no description available*
+
+        Parameter ``active`` (bool):
+            Mask to specify active lanes.
+
+        Returns → tuple[:py:obj:`mitsuba.Color3f`, :py:obj:`mitsuba.Color3f`]:
+            A pair (sigma_s, sigma_t).
+
+    .. py:method:: mitsuba.Medium.extrema()
+
+        Extremum structures, one per component.
+
+        Returns → list[:py:obj:`mitsuba.Extremum`]:
             *no description available*
 
     .. py:method:: mitsuba.Medium.get_majorant(self, mi, active=True)
@@ -230,6 +409,16 @@
         Returns → bool:
             *no description available*
 
+    .. py:method:: mitsuba.Medium.in_aabb(self, pos)
+
+        Checks if a point is contained by the medium's bounding box
+
+        Parameter ``pos`` (:py:obj:`mitsuba.Point3f`):
+            *no description available*
+
+        Returns → bool:
+            *no description available*
+
     .. py:method:: mitsuba.Medium.intersect_aabb(self, ray)
 
         Intersects a ray with the medium's bounding box
@@ -261,9 +450,58 @@
 
     .. py:method:: mitsuba.Medium.phase_function()
 
+        Overloaded function.
+
+        1. ``phase_function(self) -> :py:obj:`mitsuba.PhaseFunction```
+
         Return the phase function of this medium
 
+        2. ``phase_function(self, mei: :py:obj:`mitsuba.MediumInteraction3f`, component: int, active: bool = True) -> tuple[:py:obj:`mitsuba.PhaseFunction`, :py:obj:`mitsuba.MediumInteraction3f`]``
+
+        Phase function of ``component``, and the interaction at which to
+        evaluate it.
+
+        The interaction is ``mei`` by default. A medium that maps space onto
+        its components (a periodic tiling, say) moves the position into the
+        component's own space; directions and ``t`` are unchanged.
+
         Returns → :py:obj:`mitsuba.PhaseFunction`:
+            *no description available*
+
+    .. py:method:: mitsuba.Medium.ratio_track(self, ray, sample, rng, channel, rrt, active=True)
+
+        Ratio tracking along ``ray``, residual ratio tracking where ``rrt`` is
+        set.
+
+        As delta_track, except that every collision is null and the traversal
+        runs to the end of the range. With ``rrt``, the minorants are a
+        control extinction, accounted for analytically, and free flights are
+        sampled at the residual majorants. The record's ``throughput`` and
+        ``pdf_ratio`` are meaningful only without ``rrt``.
+
+        Traversal stops as soon as the transmittance estimate reaches zero. If
+        the medium's ``rr_threshold`` is positive, estimates falling below it
+        undergo Russian roulette.
+
+        Parameter ``ray`` (:py:obj:`mitsuba.Ray3f`):
+            *no description available*
+
+        Parameter ``sample`` (float):
+            *no description available*
+
+        Parameter ``rng`` (drjit.scalar.PCG32):
+            *no description available*
+
+        Parameter ``channel`` (int):
+            *no description available*
+
+        Parameter ``rrt`` (bool):
+            *no description available*
+
+        Parameter ``active`` (bool):
+            Mask to specify active lanes.
+
+        Returns → :py:obj:`mitsuba.TrackingRecord`:
             *no description available*
 
     .. py:method:: mitsuba.Medium.sample_interaction(self, ray, sample, channel, active)

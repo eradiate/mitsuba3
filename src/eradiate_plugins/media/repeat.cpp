@@ -31,7 +31,7 @@ Repeating medium (:monosp:`repeat`)
    - Bounds of the tiled region in world space. Required.
 
 This plugin periodically tiles an inner medium (which may itself be an
-aggregate, e.g. :ref:`multicomponent <medium-multicomponent>`) over a
+aggregate, e.g. :ref:`overlap <medium-overlap>`) over a
 translation lattice:
 
 .. math::
@@ -56,7 +56,7 @@ public:
                     ddis_phase_function, ddis_threshold
                 )
     MI_IMPORT_TYPES(Scene, Sampler, PhaseFunction, PhaseFunctionPtr,
-                    ExtremumStructure)
+                    Extremum)
 
     RepeatMedium(const Properties &props) : Base(props) {
         m_is_homogeneous = false;
@@ -84,7 +84,7 @@ public:
         ScalarBoundingBox3f pbox;
         for (const auto &structure : inner_extrema) {
             pbox.expand(structure->bbox());
-            if (structure->class_name() == "ExtremumRepeat")
+            if (structure->class_name() == "RepeatExtremum")
                 Throw("Cannot nest repeat media!");
         }
 
@@ -103,12 +103,12 @@ public:
                                      props.get<ScalarPoint3f>("aabb_max"));
 
         for (const auto &structure : inner_extrema) {
-            Properties props_repeat("extremum_repeat");
+            Properties props_repeat("repeatextremum");
             props_repeat.set("inner", (Object *) structure.get());
             props_repeat.set("lattice", m_lattice);
             props_repeat.set("bbox_min", m_aabb.min);
             props_repeat.set("bbox_max", m_aabb.max);
-            auto extremum = PluginManager::instance()->create_object<ExtremumStructure>(props_repeat);
+            auto extremum = PluginManager::instance()->create_object<Extremum>(props_repeat);
             m_extrema.push_back(extremum);
         }
 

@@ -17,24 +17,28 @@ def _make_grid_volume(values, n):
     )
 
 
+def _bounds(extremum):
+    # The global structure yields its scaled bounds on any segment, so one
+    # `next()` call is enough, even for a ray missing an unbounded bbox.
+    ray = mi.Ray3f(o=[0.5, 0.5, -1.0], d=[0, 0, 1])
+    segment, _ = extremum.next(extremum.begin(ray, 0.0, 10.0), ray)
+    return segment.minorant(), segment.majorant()
+
+
 def test_build(variant_scalar_mono):
     volume = _make_grid_volume([1.0, 2.0, 3.0, 4.0], 4)
-    extremum = mi.load_dict({"type": "extremum_global"})
+    extremum = mi.load_dict({"type": "globalextremum"})
     extremum.update_extremum(volume.bbox(), volume)
 
-    it = mi.Interaction3f()
-    it.p = mi.Point3f(0.0, 0.0, 0.0)
-    assert np.allclose(extremum.eval_1(it), (1.0, 4.0))
+    assert np.allclose(_bounds(extremum), (1.0, 4.0))
 
 
 def test_set_scale(variant_scalar_mono):
     volume = _make_grid_volume([1.0, 2.0, 3.0, 4.0], 4)
-    extremum = mi.load_dict({"type": "extremum_global"})
+    extremum = mi.load_dict({"type": "globalextremum"})
     extremum.update_extremum(volume.bbox(), volume, 2.0)
 
-    it = mi.Interaction3f()
-    it.p = mi.Point3f(0.0, 0.0, 0.0)
-    assert np.allclose(extremum.eval_1(it), (2.0, 8.0))
+    assert np.allclose(_bounds(extremum), (2.0, 8.0))
 
 
 @pytest.mark.parametrize(
@@ -54,15 +58,13 @@ def test_update_on_sigma_t_change(variant_scalar_mono, medium_type):
     ref_medium = mi.load_dict(
         {"type": medium_type, "sigma_t": ref_volume, "albedo": 0.5}
     )
-    it = mi.Interaction3f()
-    it.p = mi.Point3f(0.0, 0.0, 0.0)
-    expected = np.array(ref_medium.extrema()[0].eval_1(it))
+    expected = np.array(_bounds(ref_medium.extrema()[0]))
 
     params = mi.eradiate.traverse(medium)
     params["sigma_t.data"] = mi.TensorXf(np.array(after).reshape(n, 1, 1))
     params.update()
 
-    got = np.array(medium.extrema()[0].eval_1(it))
+    got = np.array(_bounds(medium.extrema()[0]))
     assert np.allclose(got, expected)
 
 
@@ -77,14 +79,11 @@ def test_update_on_scale_change(variant_scalar_mono, medium_type):
         {"type": medium_type, "sigma_t": volume, "albedo": 0.5, "scale": 1.0}
     )
 
-    it = mi.Interaction3f()
-    it.p = mi.Point3f(0.0, 0.0, 0.0)
-
     params = mi.eradiate.traverse(medium)
     params["scale"] = mi.Float(2.0)
     params.update()
 
-    got = np.array(medium.extrema()[0].eval_1(it))
+    got = np.array(_bounds(medium.extrema()[0]))
     assert np.allclose(got, (2.0, 8.0))
 
 
@@ -92,7 +91,7 @@ def test_sample_sampled(variant_scalar_mono):
     # Homogeneous majorant of 3.0 over [1, 4]: segment_ot = 3 * 3 = 9. The
     # domain extends along z to hold the range.
     volume = _make_grid_volume([3.0, 3.0], 2)
-    extremum = mi.load_dict({"type": "extremum_global"})
+    extremum = mi.load_dict({"type": "globalextremum"})
     extremum.update_extremum(mi.BoundingBox3f([0, 0, 0], [1, 1, 5]), volume)
 
     ray = mi.Ray3f(o=[0.5, 0.5, 0], d=[0, 0, 1])
@@ -107,7 +106,7 @@ def test_sample_escapes(variant_scalar_mono):
     # Homogeneous majorant of 3.0 over [1, 4]: segment_ot = 3 * 3 = 9. The
     # domain extends along z to hold the range.
     volume = _make_grid_volume([3.0, 3.0], 2)
-    extremum = mi.load_dict({"type": "extremum_global"})
+    extremum = mi.load_dict({"type": "globalextremum"})
     extremum.update_extremum(mi.BoundingBox3f([0, 0, 0], [1, 1, 5]), volume)
 
     ray = mi.Ray3f(o=[0.5, 0.5, 0], d=[0, 0, 1])

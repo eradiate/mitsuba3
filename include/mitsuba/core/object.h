@@ -69,7 +69,7 @@ enum class ObjectType : uint32_t {
 
 // #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
     /// A medium acceleration structure.
-    ExtremumStructure
+    Extremum
 // #ERADIATE_CHANGE_END
 };
 
@@ -261,6 +261,9 @@ inline constexpr const char* object_type_name(ObjectType ot) {
         case ObjectType::Integrator: return "Integrator";
         case ObjectType::PhaseFunction: return "Phase";
         case ObjectType::ReconstructionFilter: return "ReconstructionFilter";
+// #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
+        case ObjectType::Extremum: return "Extremum";
+// #ERADIATE_CHANGE_END
         default:
             break;
     }

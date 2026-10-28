@@ -3,18 +3,18 @@
 
 NAMESPACE_BEGIN(mitsuba)
 
-MI_VARIANT ExtremumStructure<Float, Spectrum>::ExtremumStructure()
-    : JitObject<ExtremumStructure>(""), m_scale(1.f) {
+MI_VARIANT Extremum<Float, Spectrum>::Extremum()
+    : JitObject<Extremum>(""), m_scale(1.f) {
 }
 
-MI_VARIANT ExtremumStructure<Float, Spectrum>::ExtremumStructure(const Properties &props)
-    : JitObject<ExtremumStructure>(props.id()), m_scale(1.f) {
+MI_VARIANT Extremum<Float, Spectrum>::Extremum(const Properties &props)
+    : JitObject<Extremum>(props.id()), m_scale(1.f) {
 }
 
-MI_VARIANT ExtremumStructure<Float, Spectrum>::~ExtremumStructure() {
+MI_VARIANT Extremum<Float, Spectrum>::~Extremum() {
 }
 
-MI_VARIANT void ExtremumStructure<Float, Spectrum>::update_extremum(
+MI_VARIANT void Extremum<Float, Spectrum>::update_extremum(
     const ScalarBoundingBox3f &bbox, const Volume *volume,
     std::optional<ScalarFloat> scale) {
     // set scale if provided
@@ -24,11 +24,11 @@ MI_VARIANT void ExtremumStructure<Float, Spectrum>::update_extremum(
     set_bbox(bbox);
 
     if (!m_bbox.valid())
-        Throw("ExtremumStructure::update_extremum() called with an invalid bbox.");
+        Throw("Extremum::update_extremum() called with an invalid bbox.");
 
     // rebuild the extremum structure
     build(volume);
 }
 
-MI_INSTANTIATE_CLASS(ExtremumStructure)
+MI_INSTANTIATE_CLASS(Extremum)
 NAMESPACE_END(mitsuba)
