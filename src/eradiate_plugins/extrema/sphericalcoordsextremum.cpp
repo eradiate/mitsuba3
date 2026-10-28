@@ -11,15 +11,16 @@ NAMESPACE_BEGIN(mitsuba)
 enum class SphericalTraversalType { RadialOnly, Full3D };
 
 template <typename Float, typename Spectrum, SphericalTraversalType TraversalType>
-class ExtremumSphericalImpl;
+class SphericalCoordsExtremumImpl;
 
 /**!
-.. _extremum-extremum_spherical:
+.. _extremum-sphericalcoordsextremum:
 
-Extremum spherical structure (:monosp:`extremum_spherical`)
------------------------------------------------------------
+Spherical Coordinates Extremum (:monosp:`sphericalcoordsextremum`)
+------------------------------------------------------------------
 
 .. pluginparameters::
+
  * - resolution
    - |vector|
    - Grid resolution as :math:`(r, \theta, \phi)`. Grids with variations on only
@@ -41,12 +42,12 @@ radially-varying media such as planetary atmospheres.
 */
 
 template <typename Float, typename Spectrum>
-class ExtremumSpherical final : public ExtremumStructure<Float, Spectrum> {
+class SphericalCoordsExtremum final : public Extremum<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(ExtremumStructure, m_bbox, m_scale)
+    MI_IMPORT_BASE(Extremum, m_bbox, m_scale)
     MI_IMPORT_TYPES(Volume)
 
-    ExtremumSpherical(const Properties &props) : Base(props), m_props(props) {
+    SphericalCoordsExtremum(const Properties &props) : Base(props), m_props(props) {
         ScalarVector3i resolution = props.get<ScalarVector3i>("resolution", ScalarVector3i(1, 1, 1));
 
         if (resolution.x() < 1 || resolution.y() < 1 || resolution.z() < 1)
@@ -64,7 +65,7 @@ public:
     }
 
     template <SphericalTraversalType TT>
-    using Impl = ExtremumSphericalImpl<Float, Spectrum, TT>;
+    using Impl = SphericalCoordsExtremumImpl<Float, Spectrum, TT>;
 
     std::vector<ref<Object>> expand() const override {
         ref<Object> result;
@@ -85,11 +86,6 @@ public:
         NotImplementedError("build");
     }
 
-    std::tuple<Float, Float> eval_1(const Interaction3f &,
-                                    Mask) const override {
-        NotImplementedError("eval_1");
-    }
-
     ExtremumState begin(const Ray3f &, Float, Float,
                                Mask) const override {
         NotImplementedError("begin");
@@ -100,7 +96,7 @@ public:
         NotImplementedError("next");
     }
 
-    MI_DECLARE_CLASS(ExtremumSpherical)
+    MI_DECLARE_CLASS(SphericalCoordsExtremum)
 
 protected:
     Properties m_props;
@@ -113,14 +109,14 @@ protected:
 // ---------------------------------------------------------------------------
 
 template <typename Float, typename Spectrum, SphericalTraversalType TraversalType>
-class ExtremumSphericalImpl final : public ExtremumStructure<Float, Spectrum> {
+class SphericalCoordsExtremumImpl final : public Extremum<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(ExtremumStructure, m_bbox, m_scale)
+    MI_IMPORT_BASE(Extremum, m_bbox, m_scale)
     MI_IMPORT_TYPES(Volume)
 
     using FloatStorage         = DynamicBuffer<Float>;
 
-    ExtremumSphericalImpl(const Properties &props) : Base(props) {
+    SphericalCoordsExtremumImpl(const Properties &props) : Base(props) {
         m_resolution =
             props.get<ScalarVector3i>("resolution", ScalarVector3i(1, 1, 1));
     }
@@ -130,7 +126,7 @@ public:
         VolumeParametrization<ScalarFloat> volume_param = volume->parametrization();
 
         if (volume_param.flag != VolumeCoordFlag::Spherical)
-            Throw("ExtremumSpherical only compatible with volumes that have a spherical parametrization.");
+            Throw("SphericalCoordsExtremum only compatible with volumes that have a spherical parametrization.");
 
         m_center   = volume_param.to_world.translation();
         m_to_local = volume_param.to_world.inverse();
@@ -321,36 +317,6 @@ public:
         return segment;
     }
 
-    std::tuple<Float, Float> eval_1(const Interaction3f &it,
-                                    Mask active) const override {
-        Point3f po = m_to_local * it.p;
-        Float r = dr::norm(po);
-
-        Float fillval = -1.f;
-        dr::masked(fillval, r < m_rmin) = m_fillmin;
-        dr::masked(fillval, r > m_rmax) = m_fillmax;
-        Mask fill = fillval >= 0.f;
-        Vector2f extremum = dr::zeros<Vector2f>();
-
-        UInt32 ir = UInt32(dr::clip(radial_idx(r), 0, m_resolution.x() - 1));
-
-        if constexpr (TraversalType == SphericalTraversalType::RadialOnly) {
-            extremum = dr::gather<Vector2f>(m_extremum_grid, ir, active && !fill);
-        } else if constexpr (TraversalType == SphericalTraversalType::Full3D) {
-            UInt32 itheta = UInt32(theta_idx(po, r, Mask(false)));
-            UInt32 iphi   = UInt32(phi_idx(po));
-            UInt32 idx = ir + itheta * UInt32(m_resolution.x()) +
-                        iphi * UInt32(m_resolution.x() * m_resolution.y());
-            extremum = dr::gather<Vector2f>(m_extremum_grid, idx, active && !fill);
-        }
-
-        extremum = dr::select(
-                fill, Vector2f(fillval, fillval), extremum
-        );
-
-        return { m_scale * extremum.x(), m_scale * extremum.y() };
-    }
-
     void traverse(TraversalCallback *cb) override {
         cb->put("data", m_extremum_grid, ParamFlags::NonDifferentiable);
         cb->put("resolution", m_resolution, ParamFlags::NonDifferentiable);
@@ -360,7 +326,7 @@ public:
 
     std::string to_string() const override {
         std::ostringstream oss;
-        oss << "ExtremumSpherical[" << std::endl
+        oss << "SphericalCoordsExtremum[" << std::endl
             << "  traversal = "
             << (TraversalType == SphericalTraversalType::RadialOnly
                 ? "RadialOnly" : "Full3D")
@@ -376,7 +342,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS(ExtremumSphericalImpl)
+    MI_DECLARE_CLASS(SphericalCoordsExtremumImpl)
 
 private:
 
@@ -718,15 +684,15 @@ private:
 // Class name helpers (for expand pattern)
 // ---------------------------------------------------------------------------
 
-MI_EXPORT_PLUGIN(ExtremumSpherical)
+MI_EXPORT_PLUGIN(SphericalCoordsExtremum)
 
 NAMESPACE_BEGIN(detail)
 template <SphericalTraversalType TT>
-constexpr const char *extremum_spherical_class_name() {
+constexpr const char *spherical_coords_extremum_class_name() {
     if constexpr (TT == SphericalTraversalType::RadialOnly) {
-        return "ExtremumSpherical_RadialOnly";
+        return "SphericalCoordsExtremum_RadialOnly";
     } else if constexpr (TT == SphericalTraversalType::Full3D) {
-        return "ExtremumSpherical_Full3D";
+        return "SphericalCoordsExtremum_Full3D";
     }
 }
 NAMESPACE_END(detail)

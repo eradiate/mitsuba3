@@ -7,7 +7,7 @@ NAMESPACE_BEGIN(mitsuba)
 /**
  * \brief Stores the extremum (minorant/majorant) data for a ray segment.
  *
- * Used as the output type of ExtremumStructure traversal. Tracks the
+ * Used as the output type of Extremum traversal. Tracks the
  * segment's entry/exit distances and the local extinction coefficient
  * bounds within that interval.
  */
@@ -58,16 +58,16 @@ struct ExtremumSegment {
         value(Vector2f(minorant, majorant)) {}
 
     /**
-     * This callback method is invoked by dr::zeros<>, and takes care of fields 
-     * that deviate from the standard zero-initialization convention. In 
-     * ExtremumSegment, the ``mint`` and ``maxt`` fields are set to  + and - 
+     * This callback method is invoked by dr::zeros<>, and takes care of fields
+     * that deviate from the standard zero-initialization convention. In
+     * ExtremumSegment, the ``mint`` and ``maxt`` fields are set to  + and -
      * infinity respectively to to mark invalid intersection records.
      */
-    void zero_(size_t size = 1) {                                                                                                                                                                            
+    void zero_(size_t size = 1) {
         mint        = dr::full<Float>(dr::Infinity<Float>, size);
         maxt        = dr::full<Float>(-dr::Infinity<Float>, size);
         value       = dr::zeros<Vector2f>(size);
-    }  
+    }
 
     /**
      * \brief Mark the extremum segment as invalid.

@@ -18,7 +18,7 @@ NAMESPACE_BEGIN(mitsuba)
 template <typename Float, typename Spectrum>
 class MI_EXPORT_LIB Volume : public JitObject<Volume<Float, Spectrum>> {
 public:
-    MI_IMPORT_TYPES(Texture, ExtremumStructure)
+    MI_IMPORT_TYPES(Texture, Extremum)
 
     // ======================================================================
     //! @{ \name Volume interface

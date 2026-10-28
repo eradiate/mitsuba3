@@ -9,9 +9,11 @@ Eradiate Mitsuba API
 
 .. autodata:: mitsuba.ERADIATE_MI_VERSION_PATCH
 
+.. autoclass:: mitsuba.Extremum
+
 .. autoclass:: mitsuba.ExtremumSegment
 
-.. autoclass:: mitsuba.ExtremumStructure
+.. autoclass:: mitsuba.ExtremumState
 
 .. autoclass:: mitsuba.Medium
 

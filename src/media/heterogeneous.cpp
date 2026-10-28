@@ -153,8 +153,8 @@ class HeterogeneousMedium final : public Medium<Float, Spectrum> {
 public:
 // #ERADIATE_CHANGE_BEGIN: Extremum iterators
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
-                    m_phase_function, m_extremum_structure, m_extrema)
-    MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, ExtremumStructure)
+                    m_phase_function, m_extremum, m_extrema)
+    MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, Extremum)
 // #ERADIATE_CHANGE_END
 
     HeterogeneousMedium(const Properties &props) : Base(props) {
@@ -169,21 +169,21 @@ public:
 
 // #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
         for (auto &prop : props.objects()) {
-            if (auto *extremum = prop.try_get<ExtremumStructure>()) {
-                if (m_extremum_structure)
+            if (auto *extremum = prop.try_get<Extremum>()) {
+                if (m_extremum)
                     Throw("Only a single extremum structure can be specified per medium");
-                m_extremum_structure = extremum;
+                m_extremum = extremum;
             }
         }
 
-        if (!m_extremum_structure) {
+        if (!m_extremum) {
             // Create a default global extremum structure.
-            m_extremum_structure =
-                PluginManager::instance()->create_object<ExtremumStructure>(Properties("extremum_global"));
+            m_extremum =
+                PluginManager::instance()->create_object<Extremum>(Properties("globalextremum"));
         }
-        m_extrema = { m_extremum_structure };
+        m_extrema = { m_extremum };
 
-        m_extremum_structure->update_extremum(
+        m_extremum->update_extremum(
             m_sigmat->bbox(), m_sigmat.get(), m_scale);
 // #ERADIATE_CHANGE_END
     }
@@ -200,11 +200,11 @@ public:
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
 
         if (string::contains(keys, "sigma_t"))
-            m_extremum_structure->update_extremum(
+            m_extremum->update_extremum(
                 m_sigmat->bbox(), m_sigmat.get(), std::nullopt);
 
         if (string::contains(keys, "scale"))
-            m_extremum_structure->set_scale(m_scale);
+            m_extremum->set_scale(m_scale);
     }
 // #ERADIATE_CHANGE_END
 
@@ -248,7 +248,7 @@ public:
             << "  sigma_t = " << string::indent(m_sigmat) << "," << std::endl
             << "  scale   = " << string::indent(m_scale) << "," << std::endl
 // #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
-            << "  extremum = "<< string::indent(m_extremum_structure) << std::endl
+            << "  extremum = "<< string::indent(m_extremum) << std::endl
 // #ERADIATE_CHANGE_END
             << "]";
         return oss.str();

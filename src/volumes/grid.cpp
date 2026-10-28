@@ -6,7 +6,6 @@
 #include <mitsuba/render/srgb.h>
 #include <mitsuba/render/volume.h>
 #include <mitsuba/render/volumegrid.h>
-#include <mitsuba/render/eradiate/extremum.h>
 #include <drjit/dynamic.h>
 #include <drjit/texture.h>
 
@@ -167,7 +166,7 @@ template <typename Float, typename Spectrum>
 class GridVolume final : public Volume<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Volume, update_bbox, m_to_local, m_bbox, m_channel_count)
-    MI_IMPORT_TYPES(VolumeGrid, ExtremumStructure)
+    MI_IMPORT_TYPES(VolumeGrid)
 
     GridVolume(const Properties &props) : Base(props) {
         std::string_view filter_type_str = props.get<std::string_view>("filter_type", "trilinear");

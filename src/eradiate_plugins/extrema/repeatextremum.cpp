@@ -5,10 +5,10 @@
 NAMESPACE_BEGIN(mitsuba)
 
 /**!
-.. _extremum-extremum_repeat:
+.. _extremum-repeatextremum:
 
-Extremum repeat structure (:monosp:`extremum_repeat`)
------------------------------------------------------
+Repeat Extremum (:monosp:`repeatextremum`)
+------------------------------------------
 
 .. pluginparameters::
 
@@ -32,21 +32,21 @@ The inner medium and integrator are unaware of the tiling.
  */
 
 template <typename Float, typename Spectrum>
-class ExtremumRepeat final : public ExtremumStructure<Float, Spectrum> {
+class RepeatExtremum final : public Extremum<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(ExtremumStructure, m_bbox)
+    MI_IMPORT_BASE(Extremum, m_bbox)
     MI_IMPORT_TYPES(Volume)
 
-    ExtremumRepeat(const Properties &props) : Base(props) {
+    RepeatExtremum(const Properties &props) : Base(props) {
         for (auto &prop : props.objects()) {
             if (auto *inner = prop.try_get<Base>()) {
                 if (m_inner)
-                    Throw("extremum_repeat accepts a single nested structure");
+                    Throw("repeatextremum accepts a single nested structure");
                 m_inner = inner;
             }
         }
         if (!m_inner)
-            Throw("extremum_repeat requires a nested extremum structure");
+            Throw("repeatextremum requires a nested extremum structure");
 
         ScalarBoundingBox3f tile = m_inner->bbox();
         ScalarVector3f lattice = props.get<ScalarVector3f>("lattice", tile.extents());
@@ -88,14 +88,9 @@ public:
         return segment;
     }
 
-    std::tuple<Float, Float> eval_1(const Interaction3f &,
-                                    Mask) const override {
-        NotImplementedError("eval_1");
-    }
-
     std::string to_string() const override {
         std::ostringstream oss;
-        oss << "ExtremumRepeat[" << std::endl
+        oss << "RepeatExtremum[" << std::endl
             << "  inner = " << string::indent(m_inner) << "," << std::endl
             << "  cell = " << m_cell << "," << std::endl
             << "  bbox = " << m_bbox << std::endl
@@ -103,7 +98,7 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS(ExtremumRepeat)
+    MI_DECLARE_CLASS(RepeatExtremum)
 
 private:
     /**
@@ -157,5 +152,5 @@ private:
     ScalarBoundingBox3f m_cell;
 };
 
-MI_EXPORT_PLUGIN(ExtremumRepeat)
+MI_EXPORT_PLUGIN(RepeatExtremum)
 NAMESPACE_END(mitsuba)
