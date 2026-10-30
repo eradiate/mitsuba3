@@ -58,7 +58,7 @@ Heterogeneous medium (Earth Observation) (:monosp:`eoheterogeneous`)
  * - ddis_threshold
    - |float|
    - Specifies the probability to importance sample the phase using the emitter as
-     incident direction. Set to a negative value to disable. (Default: 0.1)
+     incident direction. Set to a negative value to disable. (Default: 0.)
 
  * - aabb_min, aabb_max
    - |point|
@@ -89,8 +89,7 @@ public:
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
                     m_phase_function, m_extremum, m_extrema,
                     m_ddis_phase_function, m_ddis_threshold,
-                    create_ddis_phase_function, update_ddis_phase_function
-                )
+                    update_ddis_phase_function)
     MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, Extremum,
                     PhaseFunction)
     using FloatStorage = DynamicBuffer<Float>;
@@ -120,12 +119,6 @@ public:
         }
         m_extrema = { m_extremum };
 
-        m_ddis_threshold = props.get<ScalarFloat>("ddis_threshold", 0.1f);
-
-        if (m_ddis_threshold > 0.f) {
-            m_ddis_phase_function = static_cast<PhaseFunction*>(create_ddis_phase_function());
-        }
-
         // Optional user-provided bbox override
         if (props.has_property("aabb_min") && props.has_property("aabb_max")) {
             ScalarPoint3f aabb_min = props.get<ScalarPoint3f>("aabb_min");
@@ -144,8 +137,6 @@ public:
         cb->put("scale",   m_scale,  ParamFlags::NonDifferentiable);
         cb->put("albedo",  m_albedo, ParamFlags::Differentiable);
         cb->put("sigma_t", m_sigmat, ParamFlags::Differentiable);
-        if (m_ddis_phase_function != nullptr)
-            cb->put("ddis_phase_function", m_ddis_phase_function, ParamFlags::Differentiable);
         Base::traverse(cb);
     }
 

@@ -5,6 +5,9 @@
 #include <mitsuba/render/mesh.h>
 #include <mitsuba/render/scene.h>
 #include <mitsuba/render/integrator.h>
+// #ERADIATE_CHANGE_BEGIN: DDIS
+#include <set>
+// #ERADIATE_CHANGE_END
 
 #if defined(MI_ENABLE_EMBREE)
 #  include "scene_embree.inl"
@@ -27,6 +30,10 @@ MI_VARIANT Scene<Float, Spectrum>::Scene(const Properties &props)
     : JitObject<Scene>(props.id()) {
     m_thread_reordering = props.get<bool>("allow_thread_reordering", true);
     m_compact_accel = props.get<bool>("compact_acceleration_structures", false);
+
+// #ERADIATE_CHANGE_BEGIN: DDIS
+    std::set<ref<Medium>> media;
+// #ERADIATE_CHANGE_END
 
     for (auto &prop : props.objects()) {
         ref<Object> v = prop.get<ref<Object>>();
@@ -55,6 +62,16 @@ MI_VARIANT Scene<Float, Spectrum>::Scene(const Properties &props)
             }
             if (mesh)
                 mesh->set_scene(this);
+
+// #ERADIATE_CHANGE_BEGIN: DDIS
+            // create a top level media set to create ddis phase functions from
+            if(shape->interior_medium())
+                media.insert(shape->interior_medium());
+
+            if(shape->exterior_medium())
+                media.insert(shape->exterior_medium());
+// #ERADIATE_CHANGE_END
+
         } else if (emitter) {
             // Surface emitters will be added to the list when attached to a shape
             if (!has_flag(emitter->flags(), EmitterFlags::Surface))
@@ -74,9 +91,19 @@ MI_VARIANT Scene<Float, Spectrum>::Scene(const Properties &props)
         }
     }
 
+// #ERADIATE_CHANGE_BEGIN: DDIS
     // Create sensors' shapes (environment sensors)
-    for (Sensor *sensor: m_sensors)
+    for (Sensor *sensor: m_sensors){
         sensor->set_scene(this);
+        if (sensor->medium())
+                media.insert(sensor->medium());
+    }
+// #ERADIATE_CHANGE_END
+
+// #ERADIATE_CHANGE_BEGIN: DDIS
+    for (ref<Medium> medium: media)
+        medium->create_ddis_phase_function();
+// #ERADIATE_CHANGE_END
 
     // Mark backend-specific properties as queried
     props.mark_queried("embree_use_robust_intersections");

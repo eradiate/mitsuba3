@@ -59,9 +59,8 @@ template <typename Float, typename Spectrum>
 class OverlappingMedium final : public Medium<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
-                    m_phase_function, m_extrema,
-                    m_ddis_phase_function, m_ddis_threshold,
-                    create_ddis_phase_function
+                    m_phase_function, m_extrema, m_ddis_phase_function,
+                    m_ddis_threshold, update_ddis_phase_function
                 )
     MI_IMPORT_TYPES(Scene, Sampler, Extremum,
                     PhaseFunction, PhaseFunctionPtr)
@@ -109,10 +108,13 @@ public:
 
         m_phase_function = m_components[0]->phase_function();
 
-        m_ddis_threshold = props.get<ScalarFloat>("ddis_threshold", 0.1f);
-
-        if (m_ddis_threshold > 0.f) {
-            m_ddis_phase_function = static_cast<PhaseFunction*>(create_ddis_phase_function());
+        // Derive the ddis threshold from component if not set manually.
+        if (!props.has_property("ddis_threshold")) {
+            m_ddis_threshold = 0.f;
+            for (auto &component: m_components ){
+                m_ddis_threshold =
+                    dr::maximum(component->ddis_threshold(), m_ddis_threshold);
+            }
         }
 
         // Medium bounding box: union of the components' domains by default
@@ -129,9 +131,17 @@ public:
         for (size_t i = 0; i < m_components.size(); ++i) {
             cb->put("component" + std::to_string(i), m_components[i], ParamFlags::Differentiable);
         }
-        if (m_ddis_phase_function != nullptr)
-            cb->put("ddis_phase_function", m_ddis_phase_function, ParamFlags::Differentiable);
+
         Base::traverse(cb);
+    }
+
+    void parameters_changed(const std::vector<std::string> &keys) override {
+        for(const std::string &k : keys){
+            if(k.rfind("component", 0) == 0){
+                update_ddis_phase_function();
+                break;
+            }
+        }
     }
 
     UnpolarizedSpectrum
@@ -204,6 +214,10 @@ public:
                  lookup };
     }
 
+    const PhaseFunction *phase_function_component(ScalarUInt32 component) const override {
+        return m_components[component]->phase_function();
+    }
+
     std::tuple<Mask, Float, Float>
     intersect_aabb(const Ray3f &ray) const override {
         return m_aabb.ray_intersect(ray);
@@ -229,85 +243,6 @@ public:
     }
 
     MI_DECLARE_CLASS(OverlappingMedium)
-
-
-    void update_ddis_phase_function() override {
-        using FloatStorage = DynamicBuffer<Float>;
-
-        // DDIS rebuild is driven exclusively by Scene::parameters_changed()
-        // via update_ddis_phase_function(), which ensures all media sharing a
-        // phase function via ref are updated before dirty flags are cleared.
-        if (m_ddis_threshold <= 0.f || m_ddis_phase_function == nullptr)
-            return;
-
-        // Compute envelope nodes from all phase function
-        std::vector<FloatStorage> nodes_list;
-        for (ref<Base> component: m_components) {
-            const PhaseFunction *phase = component->phase_function();
-            nodes_list.push_back( phase->get_envelope_nodes() );
-        }
-        FloatStorage nodes = merge_envelope_nodes( nodes_list );
-
-        // Compute envelope values from envelope nodes and phase function
-        FloatStorage values = dr::zeros<FloatStorage>(dr::width(nodes));
-        for (ref<Base> component: m_components) {
-            const PhaseFunction *phase = component->phase_function();
-            phase->accumulate_envelope(nodes, values);
-        }
-
-        struct ValuesCallback : TraversalCallback {
-            FloatStorage *target_nodes = nullptr;
-            FloatStorage *target_values = nullptr;
-            void put_value(std::string_view name, void *ptr, uint32_t,
-                            const std::type_info &) override {
-                if (name == "nodes")
-                    target_nodes = static_cast<FloatStorage *>(ptr);
-                if (name == "values")
-                    target_values = static_cast<FloatStorage *>(ptr);
-            }
-            void put_object(std::string_view, Object *, uint32_t) override {}
-        } cb;
-
-        m_ddis_phase_function->traverse(&cb);
-
-        Assert(cb.target_values && cb.target_nodes);
-
-        if (cb.target_values)
-            *cb.target_values = values;
-
-        if (cb.target_nodes)
-            *cb.target_nodes = nodes;
-
-        if (cb.target_values || cb.target_nodes)
-            m_ddis_phase_function->parameters_changed({});
-    }
-
-protected:
-    ref<PhaseFunction> create_ddis_phase_function() override {
-        using FloatStorage = DynamicBuffer<Float>;
-
-        // Compute envelope nodes from all phase function
-        std::vector<FloatStorage> nodes_list;
-        for (ref<Base> component: m_components) {
-            const PhaseFunction *phase = component->phase_function();
-            nodes_list.push_back( phase->get_envelope_nodes() );
-        }
-        FloatStorage nodes = merge_envelope_nodes( nodes_list );
-
-        // Compute envelope values from envelope nodes and phase function
-        FloatStorage values = dr::zeros<FloatStorage>(dr::width(nodes));
-        for (ref<Base> component: m_components) {
-            const PhaseFunction *phase = component->phase_function();
-            phase->accumulate_envelope(nodes, values);
-        }
-
-        auto pmgr = PluginManager::instance();
-        Properties props_ddis("tabphase_irregular");
-        size_t shape = nodes.size();
-        props_ddis.set_any("nodes", TensorXf(std::move(nodes), 1, &shape));
-        props_ddis.set_any("values", TensorXf(std::move(values), 1, &shape));
-        return pmgr->create_object<PhaseFunction>(props_ddis);
-    }
 
 private:
     std::vector<ref<Base>> m_components;

@@ -172,8 +172,7 @@ class PiecewiseMedium final : public Medium<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
                    m_phase_function, m_extremum, m_extrema,
-                   m_ddis_phase_function, m_ddis_threshold,
-                   create_ddis_phase_function, update_ddis_phase_function)
+                   m_ddis_phase_function, update_ddis_phase_function)
     MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, PhaseFunction, Extremum)
 
     // Use 32 bit indices to keep track of indices to conserve memory
@@ -228,12 +227,6 @@ public:
         }
 
         precompute_optical_thickness();
-
-        m_ddis_threshold = props.get<ScalarFloat>("ddis_threshold", 0.1f);
-
-        if (m_ddis_threshold > 0.f) {
-            m_ddis_phase_function = static_cast<PhaseFunction*>(create_ddis_phase_function());
-        }
 
         m_extremum->update_extremum(m_aabb, m_sigmat.get(), m_scale);
     }
@@ -506,8 +499,6 @@ public:
         cb->put("scale", m_scale, ParamFlags::NonDifferentiable);
         cb->put("albedo", m_albedo.get(), ParamFlags::Differentiable);
         cb->put("sigma_t", m_sigmat.get(), ParamFlags::Differentiable);
-        if (m_ddis_phase_function != nullptr)
-            cb->put("ddis_phase_function", m_ddis_phase_function, ParamFlags::Differentiable);
         Base::traverse(cb);
     }
 
