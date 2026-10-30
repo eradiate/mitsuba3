@@ -5850,34 +5850,6 @@ Returns:
     will always be valid, except if the ray missed the Medium's
     bounding box.)doc";
 
-static const char *__doc_mitsuba_Medium_sample_interaction_analytical =
-R"doc(Sample a free-flight distance in the medium analytically.
-
-This function samples a (tentative) free-flight distance according to
-an exponential transmittance. It is then up to the integrator to then
-decide whether the MediumInteraction corresponds to a real or null
-scattering event.
-
-Parameter ``ray``:
-    Ray, along which a distance should be sampled
-
-Parameter ``it``:
-    The boundary interaction that the sampled distance cannot exceed.
-
-Parameter ``sample``:
-    A uniformly distributed random sample
-
-Parameter ``channel``:
-    The channel according to which we will sample the free-flight
-    distance. This argument is only used when rendering in RGB modes.
-
-Returns:
-    This method returns a tuple (MediumInteraction, Transmittance,
-    PDF). The MediumInteraction if an interaction was sampled within
-    the medium boudning box and before the bouding iteraction it. The
-    transmittance and PDF are both computed for all channels even if
-    the sampling operation is performed on one channel.)doc";
-
 static const char *__doc_mitsuba_Medium_sample_real_interaction =
 R"doc(Sample a real collision along ``ray``, over its part inside the
 medium's bounding box and ``[0, ray.maxt]``.
@@ -5930,19 +5902,6 @@ static const char *__doc_mitsuba_Medium_to_string = R"doc(Return a human-readabl
 static const char *__doc_mitsuba_Medium_track =
 R"doc(Tracking loop shared by sample_real_interaction, sample_transmittance
 and sample_transmittance_pdf: ``Ratio`` makes every collision null.)doc";
-
-static const char *__doc_mitsuba_Medium_transmittance_eval_analytical =
-R"doc(Compute the analytical transmittance along a ray to an interaction.
-
-Parameter ``ray``:
-    Ray, along which to compute the transmittance, use mint
-
-Parameter ``si``:
-    Interaction that marks the end of the segment along which to
-    compute the transmittance.
-
-Returns:
-    The transmittance along a ray)doc";
 
 static const char *__doc_mitsuba_Medium_transmittance_eval_pdf =
 R"doc(Compute the transmittance and PDF

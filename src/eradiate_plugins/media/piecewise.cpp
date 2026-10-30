@@ -184,9 +184,19 @@ public:
 
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
 
-        // Create a default global extremum structure.
-        m_extremum =
-            PluginManager::instance()->create_object<Extremum>(Properties("globalextremum"));
+        for (auto &prop : props.objects()) {
+            if (auto *extremum = prop.try_get<Extremum>()) {
+                if (m_extremum)
+                    Throw("Only a single extremum structure can be specified per medium");
+                m_extremum = extremum;
+            }
+        }
+
+        if (!m_extremum) {
+            // Create a default global extremum structure.
+            m_extremum =
+                PluginManager::instance()->create_object<Extremum>(Properties("globalextremum"));
+        }
         m_extrema = { m_extremum };
 
         precompute_optical_thickness();
@@ -201,9 +211,13 @@ public:
             m_sigmat->bbox(), m_sigmat.get(), m_scale);
     }
 
-    std::tuple<MediumInteraction3f, UnpolarizedSpectrum, UnpolarizedSpectrum>
-    sample_interaction_analytical(const Ray3f &ray, const Interaction3f &it,
-                            Float sample, UInt32 channel,
+    /**
+     * \brief Sample a real collision exactly, by inverting the layered
+     * optical thickness along \c ray.
+     */
+    std::pair<MediumSample3f, UnpolarizedSpectrum>
+    sample_real_interaction(const Ray3f &ray, Float sample,
+                            const UInt32 &channel,
                             Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumSample, active);
 
@@ -215,7 +229,7 @@ public:
         dr::masked(maxt, !active) = dr::Infinity<Float>;
 
         mint = dr::maximum(0.f, mint);
-        maxt = dr::minimum(it.t, dr::minimum(ray.maxt, maxt));
+        maxt = dr::minimum(ray.maxt, maxt);
 
         Mask escaped = !active;
 
@@ -348,12 +362,23 @@ public:
         dr::masked(mei.p, !escaped)                   = ray(mei.t);
         dr::masked(mei.combined_extinction, !escaped) = mei.sigma_t;
         dr::masked(mei.sigma_n, !escaped) = dr::zeros<UnpolarizedSpectrum>();
-        return { mei, tr, pdf };
+
+        Float pdf_c     = extract_channel(pdf, channel);
+        Float inv_pdf_c = dr::select(pdf_c > 0.f, dr::rcp(pdf_c), 0.f);
+
+        UnpolarizedSpectrum weight = tr * inv_pdf_c;
+        dr::masked(weight, !escaped) *= mei.sigma_s;
+
+        MediumSample3f ms = dr::zeros<MediumSample3f>();
+        ms.mei            = mei;
+        ms.pdf_ratio      = dr::select(active, pdf * inv_pdf_c, 1.f);
+        return { ms, dr::select(active, weight, 1.f) };
     }
 
-    UnpolarizedSpectrum transmittance_eval_analytical(const Ray3f &ray,
-                                        const Interaction3f &it,
-                                        Mask active) const override {
+    /// Exact transmittance along \c ray: \c sample is unused.
+    UnpolarizedSpectrum sample_transmittance(const Ray3f &ray, Float /*sample*/,
+                                             const UInt32 & /*channel*/,
+                                             Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
 
         // Initial intersection with the medium
@@ -362,8 +387,7 @@ public:
         active &= aabb_its;
         mint         = dr::maximum(0.f, mint);
         maxt =
-            dr::select(active, dr::minimum(ray.maxt, dr::minimum(maxt, it.t)),
-                       dr::Infinity<Float>);
+            dr::select(active, dr::minimum(ray.maxt, maxt), dr::Infinity<Float>);
         maxt = dr::maximum(0.f, maxt);
 
         const ScalarVector3i res            = m_sigmat->resolution();
@@ -434,10 +458,21 @@ public:
         dr::masked(opt_thick, active) =
             dr::select(same_cell, (maxt - mint) * s_sigma_t, cum_opt_thick);
 
-        UnpolarizedSpectrum tr = dr::zeros<UnpolarizedSpectrum>();
+        UnpolarizedSpectrum tr(1.f);
         dr::masked(tr, active) = dr::exp(-opt_thick);
+        return tr;
+    }
 
-        return UnpolarizedSpectrum(tr);
+    std::tuple<UnpolarizedSpectrum, UnpolarizedSpectrum, UnpolarizedSpectrum>
+    sample_transmittance_pdf(const Ray3f &ray, Float sample,
+                             const UInt32 &channel,
+                             Mask active) const override {
+        UnpolarizedSpectrum tr =
+            sample_transmittance(ray, sample, channel, active);
+        Float tr_c = extract_channel(tr, channel);
+        UnpolarizedSpectrum ratio =
+            tr * dr::select(tr_c > 0.f, dr::rcp(tr_c), 0.f);
+        return { tr, ratio, ratio };
     }
 
     void traverse(TraversalCallback *cb) override {
