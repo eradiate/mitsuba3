@@ -135,7 +135,9 @@ template <typename Float, typename Spectrum>
 class HomogeneousMedium final : public Medium<Float, Spectrum> {
 public:
 // #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
-    MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction, m_phase_function, m_extremum, m_extrema)
+    MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
+                   m_phase_function, m_extremum, m_extrema,
+                   update_ddis_phase_function)
     MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, Extremum)
 
     HomogeneousMedium(const Properties &props) : Base(props) {
@@ -153,8 +155,8 @@ public:
 
         ScalarBoundingBox3f extr_bbox(-dr::Infinity<ScalarFloat>, dr::Infinity<ScalarFloat>);
         m_extremum->update_extremum(extr_bbox, m_sigmat.get(), m_scale);
-        // #ERADIATE_CHANGE_END
     }
+// #ERADIATE_CHANGE_END
 
     void traverse(TraversalCallback *cb) override {
         cb->put("scale",   m_scale,  ParamFlags::NonDifferentiable);
@@ -165,6 +167,9 @@ public:
 
 // #ERADIATE_CHANGE_BEGIN:
     void parameters_changed(const std::vector<std::string> &keys = {}) override {
+        if(string::contains(keys, "phase_function"))
+            update_ddis_phase_function();
+
         if (string::contains(keys, "sigma_t")) {
             ScalarBoundingBox3f extr_bbox(-dr::Infinity<ScalarFloat>, dr::Infinity<ScalarFloat>);
             m_extremum->update_extremum(extr_bbox, m_sigmat.get(), std::nullopt);
