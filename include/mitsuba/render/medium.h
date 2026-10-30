@@ -118,49 +118,6 @@ public:
 
 // #ERADIATE_CHANGE_BEGIN: Piecewise Traversal & RRT
     /**
-     * \brief Sample a free-flight distance in the medium analytically.
-     *
-     * This function samples a (tentative) free-flight distance according to an
-     * exponential transmittance. It is then up to the integrator to then decide
-     * whether the MediumInteraction corresponds to a real or null scattering
-     * event.
-     *
-     * \param ray      Ray, along which a distance should be sampled
-     * \param it       The boundary interaction that the sampled distance cannot
-     * exceed.
-     * \param sample   A uniformly distributed random sample
-     * \param channel  The channel according to which we will sample the
-     * free-flight distance. This argument is only used when rendering in RGB
-     * modes.
-     *
-     * \return         This method returns a tuple
-     *                 (MediumInteraction, Transmittance, PDF).
-     *                 The MediumInteraction if an interaction was sampled within
-     *                 the medium boudning box and before the bouding iteraction
-     *                 \ref it.
-     *                 The transmittance and PDF are both computed for all channels
-     *                 even if the sampling operation is performed on one channel.
-     *
-     */
-    virtual
-    std::tuple<MediumInteraction3f, UnpolarizedSpectrum, UnpolarizedSpectrum>
-    sample_interaction_analytical(const Ray3f &ray, const Interaction3f &it,
-                            Float sample, UInt32 channel, Mask active) const;
-
-    /** \brief Compute the analytical transmittance along a ray to an interaction.
-     *
-     * \param ray      Ray, along which to compute the transmittance, use mint
-     * \param si       Interaction that marks the end of the segment along which
-     *                 to compute the transmittance.
-     *
-     * \return
-     *      The transmittance along a ray
-    */
-    virtual UnpolarizedSpectrum
-    transmittance_eval_analytical(const Ray3f &ray, const Interaction3f &it,
-                                  Mask active) const;
-
-    /**
      * \brief Sample a real collision along \c ray, over its part inside the
      * medium's bounding box and <tt>[0, ray.maxt]</tt>.
      *
@@ -359,9 +316,6 @@ DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::Medium)
     DRJIT_CALL_METHOD(transmittance_eval_pdf)
     DRJIT_CALL_METHOD(get_scattering_coefficients)
 // #ERADIATE_CHANGE_BEGIN
-    // Piecewise
-    DRJIT_CALL_METHOD(sample_interaction_analytical)
-    DRJIT_CALL_METHOD(transmittance_eval_analytical)
     // Overlapping Media
     DRJIT_CALL_METHOD(phase_function)
     DRJIT_CALL_METHOD(in_aabb)
