@@ -52,8 +52,8 @@ collision scatters with that component's phase function.
 No combined majorant structure is built: the medium traverses its
 components' extremum structures side by side and sums their segments. Each
 component must have a single extremum structure, so overlaps do not nest
-(list every medium in one :monosp:`overlap` instead). At most four
-components are supported.
+(list every medium in one :monosp:`overlap` instead); a component may be a
+:monosp:`repeat` of a plain medium. At most four components are supported.
 */
 template <typename Float, typename Spectrum>
 class OverlappingMedium final : public Medium<Float, Spectrum> {

@@ -3865,6 +3865,8 @@ static const char *__doc_mitsuba_ExtremumState_fields = R"doc()doc";
 
 static const char *__doc_mitsuba_ExtremumState_fields_2 = R"doc()doc";
 
+static const char *__doc_mitsuba_ExtremumState_inner_maxt = R"doc(End of the inner structure's traversal (nested structures).)doc";
+
 static const char *__doc_mitsuba_ExtremumState_labels = R"doc()doc";
 
 static const char *__doc_mitsuba_ExtremumState_maxt = R"doc(End of the traversal range.)doc";
