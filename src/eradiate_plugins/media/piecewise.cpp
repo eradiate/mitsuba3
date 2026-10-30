@@ -60,7 +60,13 @@ Piecewise medium (:monosp:`piecewise`)
  * - ddis_threshold
    - |float|
    - Specifies the probability to importance sample the phase using the emitter as
-     incident direction. Set to a negative value to disable. (Default: 0.1)
+     incident direction. Set to a negative value to disable. (Default: 0.)
+
+ * - aabb_min, aabb_max
+   - |point|
+   - Optional override to the medium bounding box in x and y. The z range must
+     match that of ``sigma_t``, which defines the layers. Uses the bounding box
+     of the ``sigma_t`` volume by default.
 
 
 This plugin provides a 1D heterogeneous medium implementation (plane-parallel
@@ -68,6 +74,10 @@ geometry), which acquires its data from nested volume instances. These can be
 constant, use a procedural function, or fetch data from disk, *e.g.* using a 3D
 grid, as long as the underlying grid has the shape [1,1,N], with N the number of
 layers on the vertical (z) axis.
+
+The plugin accepts optional parameters to set the medium's bounding box and
+extremum structure. Those are used, instead of the analytical sampling path,
+when the plugin is nested in another medium.
 
 The medium is parametrized by the single-scattering albedo and the extinction
 coefficient :math:`\sigma_t`. The extinction coefficient should be provided in
@@ -184,10 +194,38 @@ public:
 
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
 
-        // Create a default global extremum structure.
-        m_extremum =
-            PluginManager::instance()->create_object<Extremum>(Properties("globalextremum"));
+        for (auto &prop : props.objects()) {
+            if (auto *extremum = prop.try_get<Extremum>()) {
+                if (m_extremum)
+                    Throw("Only a single extremum structure can be specified per medium");
+                m_extremum = extremum;
+            }
+        }
+
+        if (!m_extremum) {
+            // Create a default global extremum structure.
+            m_extremum =
+                PluginManager::instance()->create_object<Extremum>(Properties("globalextremum"));
+        }
         m_extrema = { m_extremum };
+
+        // Optional user-provided bbox override, horizontal only: the layer
+        // indexing relies on the z range of sigma_t
+        m_aabb = m_sigmat->bbox();
+        if (props.has_property("aabb_min") && props.has_property("aabb_max")) {
+            ScalarPoint3f aabb_min = props.get<ScalarPoint3f>("aabb_min");
+            ScalarPoint3f aabb_max = props.get<ScalarPoint3f>("aabb_max");
+            // Tolerance absorbs rounding in the volume's to_world transform
+            ScalarFloat tol = 1e-5f * (m_aabb.max.z() - m_aabb.min.z());
+            if (dr::abs(aabb_min.z() - m_aabb.min.z()) > tol ||
+                dr::abs(aabb_max.z() - m_aabb.max.z()) > tol)
+                Throw("PiecewiseMedium: aabb z range [%f, %f] must match the "
+                      "sigma_t z range [%f, %f]", aabb_min.z(), aabb_max.z(),
+                      m_aabb.min.z(), m_aabb.max.z());
+            m_aabb = ScalarBoundingBox3f(
+                ScalarPoint3f(aabb_min.x(), aabb_min.y(), m_aabb.min.z()),
+                ScalarPoint3f(aabb_max.x(), aabb_max.y(), m_aabb.max.z()));
+        }
 
         precompute_optical_thickness();
 
@@ -197,13 +235,16 @@ public:
             m_ddis_phase_function = static_cast<PhaseFunction*>(create_ddis_phase_function());
         }
 
-        m_extremum->update_extremum(
-            m_sigmat->bbox(), m_sigmat.get(), m_scale);
+        m_extremum->update_extremum(m_aabb, m_sigmat.get(), m_scale);
     }
 
-    std::tuple<MediumInteraction3f, UnpolarizedSpectrum, UnpolarizedSpectrum>
-    sample_interaction_analytical(const Ray3f &ray, const Interaction3f &it,
-                            Float sample, UInt32 channel,
+    /**
+     * \brief Sample a real collision exactly, by inverting the layered
+     * optical thickness along \c ray.
+     */
+    std::pair<MediumSample3f, UnpolarizedSpectrum>
+    sample_real_interaction(const Ray3f &ray, Float sample,
+                            const UInt32 &channel,
                             Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumSample, active);
 
@@ -215,7 +256,7 @@ public:
         dr::masked(maxt, !active) = dr::Infinity<Float>;
 
         mint = dr::maximum(0.f, mint);
-        maxt = dr::minimum(it.t, dr::minimum(ray.maxt, maxt));
+        maxt = dr::minimum(ray.maxt, maxt);
 
         Mask escaped = !active;
 
@@ -348,12 +389,23 @@ public:
         dr::masked(mei.p, !escaped)                   = ray(mei.t);
         dr::masked(mei.combined_extinction, !escaped) = mei.sigma_t;
         dr::masked(mei.sigma_n, !escaped) = dr::zeros<UnpolarizedSpectrum>();
-        return { mei, tr, pdf };
+
+        Float pdf_c     = extract_channel(pdf, channel);
+        Float inv_pdf_c = dr::select(pdf_c > 0.f, dr::rcp(pdf_c), 0.f);
+
+        UnpolarizedSpectrum weight = tr * inv_pdf_c;
+        dr::masked(weight, !escaped) *= mei.sigma_s;
+
+        MediumSample3f ms = dr::zeros<MediumSample3f>();
+        ms.mei            = mei;
+        ms.pdf_ratio      = dr::select(active, pdf * inv_pdf_c, 1.f);
+        return { ms, dr::select(active, weight, 1.f) };
     }
 
-    UnpolarizedSpectrum transmittance_eval_analytical(const Ray3f &ray,
-                                        const Interaction3f &it,
-                                        Mask active) const override {
+    /// Exact transmittance along \c ray: \c sample is unused.
+    UnpolarizedSpectrum sample_transmittance(const Ray3f &ray, Float /*sample*/,
+                                             const UInt32 & /*channel*/,
+                                             Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
 
         // Initial intersection with the medium
@@ -362,8 +414,7 @@ public:
         active &= aabb_its;
         mint         = dr::maximum(0.f, mint);
         maxt =
-            dr::select(active, dr::minimum(ray.maxt, dr::minimum(maxt, it.t)),
-                       dr::Infinity<Float>);
+            dr::select(active, dr::minimum(ray.maxt, maxt), dr::Infinity<Float>);
         maxt = dr::maximum(0.f, maxt);
 
         const ScalarVector3i res            = m_sigmat->resolution();
@@ -434,10 +485,21 @@ public:
         dr::masked(opt_thick, active) =
             dr::select(same_cell, (maxt - mint) * s_sigma_t, cum_opt_thick);
 
-        UnpolarizedSpectrum tr = dr::zeros<UnpolarizedSpectrum>();
+        UnpolarizedSpectrum tr(1.f);
         dr::masked(tr, active) = dr::exp(-opt_thick);
+        return tr;
+    }
 
-        return UnpolarizedSpectrum(tr);
+    std::tuple<UnpolarizedSpectrum, UnpolarizedSpectrum, UnpolarizedSpectrum>
+    sample_transmittance_pdf(const Ray3f &ray, Float sample,
+                             const UInt32 &channel,
+                             Mask active) const override {
+        UnpolarizedSpectrum tr =
+            sample_transmittance(ray, sample, channel, active);
+        Float tr_c = extract_channel(tr, channel);
+        UnpolarizedSpectrum ratio =
+            tr * dr::select(tr_c > 0.f, dr::rcp(tr_c), 0.f);
+        return { tr, ratio, ratio };
     }
 
     void traverse(TraversalCallback *cb) override {
@@ -457,8 +519,7 @@ public:
             update_ddis_phase_function();
 
         if (string::contains(keys, "sigma_t"))
-            m_extremum->update_extremum(
-                m_sigmat->bbox(), m_sigmat.get(), std::nullopt);
+            m_extremum->update_extremum(m_aabb, m_sigmat.get(), std::nullopt);
 
         if (string::contains(keys, "scale"))
             m_extremum->set_scale(m_scale);
@@ -528,16 +589,10 @@ public:
             reverse_cum_opt_thickness.data(), resolution.z()*SpectralSize);
     }
 
-    UnpolarizedSpectrum get_majorant(const MediumInteraction3f &mi,
+    UnpolarizedSpectrum get_majorant(const MediumInteraction3f &/*mi*/,
                                      Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
-
-        auto sigmat = m_sigmat->eval(mi) * m_scale;
-        if (has_flag(m_phase_function->flags(), PhaseFunctionFlags::Microflake))
-            sigmat *= m_phase_function->projected_area(mi, active);
-
         return m_max_density;
-        return sigmat & active;
     }
 
     std::tuple<UnpolarizedSpectrum, UnpolarizedSpectrum, UnpolarizedSpectrum>
@@ -551,18 +606,18 @@ public:
 
         auto sigmas = sigmat * m_albedo->eval(mi, active);
         auto sigman = m_max_density - sigmat;
-        ;
+
         return { sigmas, sigman, sigmat };
     }
 
     std::tuple<Mask, Float, Float>
     intersect_aabb(const Ray3f &ray) const override {
-        return m_sigmat->bbox().ray_intersect(ray);
+        return m_aabb.ray_intersect(ray);
     }
 
     virtual Mask
     in_aabb(const Point3f &pos) const override {
-        return m_sigmat->bbox().contains(pos);
+        return m_aabb.contains(pos);
     }
 
     std::string to_string() const override {
@@ -605,6 +660,7 @@ public:
 private:
     ref<Volume> m_sigmat, m_albedo;
     ScalarFloat m_scale;
+    ScalarBoundingBox3f m_aabb;
 
     Float m_max_density;
     FloatStorage m_cum_opt_thickness;

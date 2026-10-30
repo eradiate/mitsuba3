@@ -318,36 +318,6 @@
 
     Base class: :py:obj:`mitsuba.Object`
 
-    .. py:method:: mitsuba.Medium.delta_track(self, ray, sample, rng, channel, active=True)
-
-        Delta tracking along ``ray``, over its part inside the medium's
-        bounding box and ``[0, ray.maxt]``.
-
-        Free flights are sampled at the hero channel's combined majorant. At a
-        tentative collision, component ``i`` is picked with probability
-        proportional to its majorant and only its coefficients are evaluated
-        (eval_component); the collision is then null or real. Tracking stops
-        at the first real collision, recorded in the returned TrackingRecord
-        with its component. A ray that misses that range returns no collision.
-
-        Parameter ``sample`` (float):
-            Uniform sample in ``[0, 1)`` that draws the first free flight.
-
-        Parameter ``rng`` (drjit.scalar.PCG32):
-            Generator of the later free flights and of the collision choices.
-
-        Parameter ``channel`` (int):
-            Hero channel, along which free flights are sampled.
-
-        Parameter ``ray`` (:py:obj:`mitsuba.Ray3f`):
-            *no description available*
-
-        Parameter ``active`` (bool):
-            Mask to specify active lanes.
-
-        Returns → :py:obj:`mitsuba.TrackingRecord`:
-            *no description available*
-
     .. py:method:: mitsuba.Medium.eval_component(self, mei, component, active=True)
 
         Scattering and extinction coefficients of one medium component.
@@ -468,42 +438,6 @@
         Returns → :py:obj:`mitsuba.PhaseFunction`:
             *no description available*
 
-    .. py:method:: mitsuba.Medium.ratio_track(self, ray, sample, rng, channel, rrt, active=True)
-
-        Ratio tracking along ``ray``, residual ratio tracking where ``rrt`` is
-        set.
-
-        As delta_track, except that every collision is null and the traversal
-        runs to the end of the range. With ``rrt``, the minorants are a
-        control extinction, accounted for analytically, and free flights are
-        sampled at the residual majorants. The record's ``throughput`` and
-        ``pdf_ratio`` are meaningful only without ``rrt``.
-
-        Traversal stops as soon as the transmittance estimate reaches zero. If
-        the medium's ``rr_threshold`` is positive, estimates falling below it
-        undergo Russian roulette.
-
-        Parameter ``ray`` (:py:obj:`mitsuba.Ray3f`):
-            *no description available*
-
-        Parameter ``sample`` (float):
-            *no description available*
-
-        Parameter ``rng`` (drjit.scalar.PCG32):
-            *no description available*
-
-        Parameter ``channel`` (int):
-            *no description available*
-
-        Parameter ``rrt`` (bool):
-            *no description available*
-
-        Parameter ``active`` (bool):
-            Mask to specify active lanes.
-
-        Returns → :py:obj:`mitsuba.TrackingRecord`:
-            *no description available*
-
     .. py:method:: mitsuba.Medium.sample_interaction(self, ray, sample, channel, active)
 
         Sample a free-flight distance in the medium.
@@ -531,57 +465,88 @@
             will always be valid, except if the ray missed the Medium's
             bounding box.
 
-    .. py:method:: mitsuba.Medium.sample_interaction_analytical(self, ray, it, sample, channel, active)
+    .. py:method:: mitsuba.Medium.sample_real_interaction(self, ray, sample, channel, active=True)
 
-        Sample a free-flight distance in the medium analytically.
+        Sample a real collision along ``ray``, over its part inside the
+        medium's bounding box and ``[0, ray.maxt]``.
 
-        This function samples a (tentative) free-flight distance according to
-        an exponential transmittance. It is then up to the integrator to then
-        decide whether the MediumInteraction corresponds to a real or null
-        scattering event.
-
-        Parameter ``ray`` (:py:obj:`mitsuba.Ray3f`):
-            Ray, along which a distance should be sampled
-
-        Parameter ``it`` (:py:obj:`mitsuba.Interaction3f`):
-            The boundary interaction that the sampled distance cannot exceed.
+        The default implementation uses delta tracking. Free flights are
+        sampled at the hero channel's combined majorant. At a tentative
+        collision, component ``i`` is picked with probability proportional to
+        its majorant and the event type (null or real) is sample using the
+        components coefficients (eval_component). Tracking stops at the first
+        real collision. A ray that misses that range returns no collision.
 
         Parameter ``sample`` (float):
-            A uniformly distributed random sample
+            Uniform sample in ``[0, 1)`` that draws the first free flight and
+            seeds the generator of the later free flights and of the collision
+            choices.
 
         Parameter ``channel`` (int):
-            The channel according to which we will sample the free-flight
-            distance. This argument is only used when rendering in RGB modes.
+            Hero channel, along which free flights are sampled.
+
+        Parameter ``ray`` (:py:obj:`mitsuba.Ray3f`):
+            *no description available*
 
         Parameter ``active`` (bool):
             Mask to specify active lanes.
 
-        Returns → tuple[:py:obj:`mitsuba.MediumInteraction3f`, :py:obj:`mitsuba.Color3f`, :py:obj:`mitsuba.Color3f`]:
-            This method returns a tuple (MediumInteraction, Transmittance,
-            PDF). The MediumInteraction if an interaction was sampled within
-            the medium boudning box and before the bouding iteraction it. The
-            transmittance and PDF are both computed for all channels even if
-            the sampling operation is performed on one channel.
+        Returns → tuple[:py:obj:`mitsuba.MediumSample3f`, :py:obj:`mitsuba.Color3f`]:
+            A pair (sample, weight): the collision and path throughput weight.
 
-    .. py:method:: mitsuba.Medium.transmittance_eval_analytical(self, ray, it, active)
+    .. py:method:: mitsuba.Medium.sample_transmittance(self, ray, sample, channel, active=True)
 
-        Compute the analytical transmittance along a ray to an interaction.
+        Estimate the transmittance along ``ray``.
+
+        The default implementation uses (residual) ratio tracking: as
+        sample_real_interaction, except that every collision is null and the
+        traversal runs to the end of the range. The property ``use_rrt``
+        specifies whether the minorant is used as control extinction tracking,
+        the minorants are a control extinction, accounted for analytically,
+        and free flights are sampled at the residual majorants.
+
+        Traversal stops as soon as the transmittance estimate reaches zero. If
+        the medium's ``rr_threshold`` is positive, estimates falling below it
+        undergo Russian roulette.
 
         Parameter ``ray`` (:py:obj:`mitsuba.Ray3f`):
-            Ray, along which to compute the transmittance, use mint
+            *no description available*
 
-        Parameter ``si``:
-            Interaction that marks the end of the segment along which to
-            compute the transmittance.
+        Parameter ``sample`` (float):
+            *no description available*
 
-        Parameter ``it`` (:py:obj:`mitsuba.Interaction3f`):
+        Parameter ``channel`` (int):
             *no description available*
 
         Parameter ``active`` (bool):
             Mask to specify active lanes.
 
         Returns → :py:obj:`mitsuba.Color3f`:
-            The transmittance along a ray
+            *no description available*
+
+    .. py:method:: mitsuba.Medium.sample_transmittance_pdf(self, ray, sample, channel, active=True)
+
+        Estimate the transmittance, path throughput, and pdf ratio along
+        ``ray``.
+
+        As sample_transmittance, but also returns the path throughput weight
+        and the sampling densities of all channels relative to the hero
+        channel. Cannot use residual ratio tracking.
+
+        Parameter ``ray`` (:py:obj:`mitsuba.Ray3f`):
+            *no description available*
+
+        Parameter ``sample`` (float):
+            *no description available*
+
+        Parameter ``channel`` (int):
+            *no description available*
+
+        Parameter ``active`` (bool):
+            Mask to specify active lanes.
+
+        Returns → tuple[:py:obj:`mitsuba.Color3f`, :py:obj:`mitsuba.Color3f`, :py:obj:`mitsuba.Color3f`]:
+            A tuple (transmittance, throughput, pdf_ratio).
 
     .. py:method:: mitsuba.Medium.transmittance_eval_pdf(self, mi, si, active)
 

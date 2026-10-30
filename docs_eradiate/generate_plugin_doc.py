@@ -33,7 +33,6 @@ EXTREMUM_ORDERING = [
 ]
 
 INTEGRATOR_ORDERING = [
-    "piecewise_volpath",
     "eovolpath",
 ]
 
