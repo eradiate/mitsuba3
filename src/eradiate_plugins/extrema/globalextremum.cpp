@@ -7,10 +7,10 @@
 NAMESPACE_BEGIN(mitsuba)
 
 /**!
-.. _extremum-extremum_global:
+.. _extremum-globalextremum:
 
-Extremum global structure (:monosp:`extremum_global`)
------------------------------------------------------
+Global Extremum (:monosp:`globalextremum`)
+-------------------------------------------
 
 This plugin holds the global minorant and majorant values of a volume.
 At runtime, traversal is performed via a single segment determined by the
@@ -18,12 +18,12 @@ passed ``mint`` and ``maxt`` values.
 */
 
 template <typename Float, typename Spectrum>
-class ExtremumGlobal final : public ExtremumStructure<Float, Spectrum> {
+class GlobalExtremum final : public Extremum<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(ExtremumStructure, m_bbox, m_scale)
+    MI_IMPORT_BASE(Extremum, m_bbox, m_scale)
     MI_IMPORT_TYPES(Volume)
 
-    ExtremumGlobal(const Properties &props) : Base(props) {}
+    GlobalExtremum(const Properties &props) : Base(props) {}
 
     void build(const Volume *volume) override {
         m_minorant = volume->min();
@@ -53,19 +53,13 @@ public:
         return segment;
     }
 
-    std::tuple<Float, Float> eval_1(const Interaction3f &/*it*/,
-                                    Mask /*active*/) const override {
-
-        return { m_scale*m_minorant, m_scale*m_majorant };
-    }
-
     void traverse(TraversalCallback *cb) override {
         Base::traverse(cb);
     }
 
     std::string to_string() const override {
         std::ostringstream oss;
-        oss << "ExtremumGlobal[" << std::endl
+        oss << "GlobalExtremum[" << std::endl
             << "  minorant = " << m_minorant << "," << std::endl
             << "  majorant = " << m_majorant << "," << std::endl
             << "  scale = " << m_scale << "," << std::endl
@@ -73,12 +67,12 @@ public:
         return oss.str();
     }
 
-    MI_DECLARE_CLASS(ExtremumGlobal)
+    MI_DECLARE_CLASS(GlobalExtremum)
 
 private:
     ScalarFloat m_minorant;
     ScalarFloat m_majorant;
 };
 
-MI_EXPORT_PLUGIN(ExtremumGlobal)
+MI_EXPORT_PLUGIN(GlobalExtremum)
 NAMESPACE_END(mitsuba)

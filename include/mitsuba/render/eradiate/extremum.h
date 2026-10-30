@@ -11,7 +11,7 @@ NAMESPACE_BEGIN(mitsuba)
 
 /**
  * \brief Traversal state carried between successive \c next calls of an
- * \c ExtremumStructure.
+ * \c Extremum.
  *
  * Holds what a structure cannot cheaply recover per segment: local ray
  * information, current visited index and traversal distance. The traversal
@@ -38,21 +38,21 @@ struct ExtremumState {
     /// End of the traversal range.
     Float maxt;
 
-    /// End of the inner structure's traversal (nested structures).
+    /// End of the inner extremum's traversal (nested extrema).
     Float inner_maxt;
 
     DRJIT_STRUCT(ExtremumState, o, d, pi, mint, maxt, inner_maxt)
 };
 
 /**
- * \brief Abstract base class for extremum structures
+ * \brief Abstract base class for an extremum
  *
- * ExtremumStructure provides an interface for spatial data structures that
+ * Extremum provides an interface for spatial data structures that
  * store local extrema (majorant/minorant) of volumetric extinction coefficients.
  * This enables efficient use of tracking algorithms with locally-adaptive
  * majorants and minorants.
  *
- * Structures follow the pattern of an iterator: the traversal is initialized
+ * Extrema follow the pattern of an iterator: the traversal is initialized
  * with ``begin``, and segments are served in order with ``next``.
  *
  * The extremum structure needs to be built using the ``update_extremum``
@@ -60,12 +60,12 @@ struct ExtremumState {
  * usually a ``Medium``, passes the volumetric data the extremum is derived from.
  */
 template <typename Float, typename Spectrum>
-class MI_EXPORT_LIB ExtremumStructure : public JitObject<ExtremumStructure<Float, Spectrum>> {
+class MI_EXPORT_LIB Extremum : public JitObject<Extremum<Float, Spectrum>> {
 public:
     MI_IMPORT_TYPES(Medium, Sampler, Volume)
 
     /// Destructor
-    ~ExtremumStructure();
+    ~Extremum();
 
     /// Setter for the bbox over which the structure must be valid.
     MI_INLINE void set_bbox(ScalarBoundingBox3f bbox) { m_bbox = bbox; };
@@ -142,24 +142,6 @@ public:
     virtual ExtremumSegment next(ExtremumState &state, const Ray3f &ray,
                                  Mask active = true) const = 0;
 
-    // Note: this is currently dead code. It is kept in case it is needed in the future.
-    /**
-     * \brief Evaluate the minorant and majorant at a medium interaction point.
-     *
-     * This method performs point evaluation at interaction point specified in
-     * local space.
-     *
-     * \param it        Interaction interaction point in local space
-     * \param active    Mask for active lanes
-     *
-     * \return          The minorant and majorant values at the medium
-     *                  interaction point. Clamped values outside bounds.
-     *
-     */
-    virtual std::tuple<Float, Float> eval_1(
-        const Interaction3f & it,
-        Mask active = true
-    ) const = 0;
 
     // =============================================================
     //! @{ \name Non-virtual query methods
@@ -169,11 +151,11 @@ public:
     //! @}
     // =============================================================
 
-    MI_DECLARE_PLUGIN_BASE_CLASS(ExtremumStructure)
+    MI_DECLARE_PLUGIN_BASE_CLASS(Extremum)
 
 protected:
-    ExtremumStructure();
-    ExtremumStructure(const Properties &props);
+    Extremum();
+    Extremum(const Properties &props);
 
 protected:
     /// The bbox over which the extremum structure must be valid.
@@ -182,6 +164,6 @@ protected:
     ScalarFloat m_scale;
 };
 
-MI_EXTERN_CLASS(ExtremumStructure)
+MI_EXTERN_CLASS(Extremum)
 NAMESPACE_END(mitsuba)
 

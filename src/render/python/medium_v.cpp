@@ -186,7 +186,7 @@ MI_PY_EXPORT(Medium) {
 // #ERADIATE_CHANGE_BEGIN: Local extremum structure
         .def("extrema",
              [](Medium *ptr) {
-                 std::vector<const Medium::ExtremumStructure *> out;
+                 std::vector<const Medium::Extremum *> out;
                  for (const auto &structure : ptr->extrema())
                      out.push_back(structure.get());
                  return out;

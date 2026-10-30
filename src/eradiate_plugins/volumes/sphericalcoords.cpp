@@ -1,7 +1,6 @@
 #include <mitsuba/core/properties.h>
 #include <mitsuba/core/transform.h>
 #include <mitsuba/render/volume.h>
-#include <mitsuba/render/eradiate/extremum.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -81,7 +80,7 @@ template <typename Float, typename Spectrum>
 class SphericalCoordsVolume final : public Volume<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Volume, m_to_local, m_bbox)
-    MI_IMPORT_TYPES(VolumeGrid, ExtremumStructure)
+    MI_IMPORT_TYPES(VolumeGrid)
 
     using VolumeType = Volume<Float, Spectrum>;
 

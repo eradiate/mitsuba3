@@ -69,7 +69,7 @@ This plugin provides a flexible heterogeneous medium implementation, which acqui
 from nested volume instances. These can be constant, use a procedural function, or fetch data from
 disk, e.g. using a 3D grid.
 
-This plugin is identical to the ``heterogeneous ` plugin but accepts additional parameters to set the
+This plugin is identical to the ``heterogeneous`` plugin but accepts additional parameters to set the
 medium's bounding box. It is possible to set volumes that span a portion of the medium's bbox,
 and thus exploit wrapping mechanism, e.g. periodic boundaries, outside this portion.
 
@@ -87,11 +87,11 @@ template <typename Float, typename Spectrum>
 class EOHeterogeneousMedium final : public Medium<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
-                    m_phase_function, m_extremum_structure, m_extrema,
+                    m_phase_function, m_extremum, m_extrema,
                     m_ddis_phase_function, m_ddis_threshold,
                     create_ddis_phase_function, update_ddis_phase_function
                 )
-    MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, ExtremumStructure,
+    MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, Extremum,
                     PhaseFunction)
     using FloatStorage = DynamicBuffer<Float>;
 
@@ -106,19 +106,19 @@ public:
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
 
         for (auto &prop : props.objects()) {
-            if (auto *extremum = prop.try_get<ExtremumStructure>()) {
-                if (m_extremum_structure)
+            if (auto *extremum = prop.try_get<Extremum>()) {
+                if (m_extremum)
                     Throw("Only a single extremum structure can be specified per medium");
-                m_extremum_structure = extremum;
+                m_extremum = extremum;
             }
         }
 
-        if (!m_extremum_structure) {
+        if (!m_extremum) {
             // Create a default global extremum structure.
-            m_extremum_structure =
-                PluginManager::instance()->create_object<ExtremumStructure>(Properties("extremum_global"));
+            m_extremum =
+                PluginManager::instance()->create_object<Extremum>(Properties("globalextremum"));
         }
-        m_extrema = { m_extremum_structure };
+        m_extrema = { m_extremum };
 
         m_ddis_threshold = props.get<ScalarFloat>("ddis_threshold", 0.1f);
 
@@ -135,7 +135,7 @@ public:
             m_aabb = m_sigmat->bbox();
         }
 
-        m_extremum_structure->update_extremum(
+        m_extremum->update_extremum(
             dr::select(m_aabb.valid(), m_aabb, m_sigmat->bbox()),
             m_sigmat.get(), m_scale);
     }
@@ -157,13 +157,13 @@ public:
 
         if (string::contains(keys, "sigma_t")) {
             // we assume that the AABB cannot change and so is not recomputed.
-            m_extremum_structure->update_extremum(
+            m_extremum->update_extremum(
                 dr::select(m_aabb.valid(), m_aabb, m_sigmat->bbox()),
                 m_sigmat.get(), std::nullopt);
         }
 
         if (string::contains(keys, "scale"))
-            m_extremum_structure->set_scale(m_scale);
+            m_extremum->set_scale(m_scale);
     }
 
     UnpolarizedSpectrum
@@ -204,7 +204,7 @@ public:
             << "  sigma_t = " << string::indent(m_sigmat) << "," << std::endl
             << "  scale   = " << string::indent(m_scale) << "," << std::endl
             << "  ddis_phase_function   = " << string::indent(m_ddis_phase_function) << "," << std::endl
-            << "  extremum = "<< string::indent(m_extremum_structure) << std::endl
+            << "  extremum = "<< string::indent(m_extremum) << std::endl
             << "]";
         return oss.str();
     }

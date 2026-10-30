@@ -91,7 +91,8 @@ api_doc_structure = {
     ],
     "Extremum": [
         r"mitsuba\.ExtremumSegment([\w]*)",
-        r"mitsuba\.ExtremumStructure([\w]*)",
+        r"mitsuba\.ExtremumState([\w]*)",
+        r"mitsuba\.Extremum",
     ],
     "Phase": [
         r"mitsuba\.PhaseFunction",

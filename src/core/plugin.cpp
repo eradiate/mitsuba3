@@ -230,7 +230,7 @@ std::string_view plugin_type_name(ObjectType ot) {
         case ObjectType::PhaseFunction: return "phase";
         case ObjectType::ReconstructionFilter: return "rfilter";
 // #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
-        case ObjectType::ExtremumStructure: return "extremum";
+        case ObjectType::Extremum: return "extremum";
 // #ERADIATE_CHANGE_END
     }
     return "invalid"; // (to avoid a compiler warning; this should never happen)

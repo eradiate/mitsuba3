@@ -26,10 +26,10 @@ EMITTER_ORDERING = [
 ]
 
 EXTREMUM_ORDERING = [
-    "extremum_grid",
-    "extremum_spherical",
-    "extremum_global",
-    "extremum_repeat",
+    "gridextremum",
+    "sphericalcoordsextremum",
+    "globalextremum",
+    "repeatextremum",
 ]
 
 INTEGRATOR_ORDERING = [
@@ -168,7 +168,7 @@ def generate(build_dir):
     sections = [
         ("bsdfs", BSDF_ORDERING),
         ("emitters", EMITTER_ORDERING),
-        ("extremum", EXTREMUM_ORDERING),
+        ("extrema", EXTREMUM_ORDERING),
         ("integrators", INTEGRATOR_ORDERING),
         ("media", MEDIA_ORDERING),
         ("phase", PHASE_ORDERING),

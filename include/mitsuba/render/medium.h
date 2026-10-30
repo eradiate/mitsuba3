@@ -35,7 +35,7 @@ class MI_EXPORT_LIB Medium : public JitObject<Medium<Float, Spectrum>> {
 public:
 // #ERADIATE_CHANGE_BEGIN: Extremum support && Overlapping Media
     MI_IMPORT_TYPES(PhaseFunction, PhaseFunctionContext, Sampler, Scene,
-                    Texture, ExtremumStructure, PhaseFunctionPtr);
+                    Texture, Extremum, PhaseFunctionPtr);
 // #ERADIATE_CHANGE_END
 
     /// Destructor
@@ -254,7 +254,7 @@ public:
 
 // #ERADIATE_CHANGE_BEGIN: Extremum Structure & DDIS
     /// Extremum structures, one per component.
-    const std::vector<ref<ExtremumStructure>> &extrema() const {
+    const std::vector<ref<Extremum>> &extrema() const {
         return m_extrema;
     }
 
@@ -326,9 +326,9 @@ protected:
     bool m_has_spectral_extinction;
 
 // #ERADIATE_CHANGE_BEGIN: Extremum structure support & DDIS
-    ref<ExtremumStructure> m_extremum_structure;
+    ref<Extremum> m_extremum;
     /// Extremum structures, one per component.
-    std::vector<ref<ExtremumStructure>> m_extrema;
+    std::vector<ref<Extremum>> m_extrema;
     bool m_use_rrt;
     /// Ratio tracking Russian roulette threshold, disabled if not positive.
     ScalarFloat m_rr_threshold = 0.f;
@@ -336,7 +336,7 @@ protected:
     ref<PhaseFunction> m_ddis_phase_function = nullptr;
     ScalarFloat m_ddis_threshold = 0.f;
 
-    MI_DECLARE_TRAVERSE_CB(m_phase_function, m_extremum_structure,
+    MI_DECLARE_TRAVERSE_CB(m_phase_function, m_extremum,
                            m_ddis_phase_function, m_ddis_threshold)
 // #ERADIATE_CHANGE_END
 };

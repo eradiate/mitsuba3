@@ -161,10 +161,10 @@ template <typename Float, typename Spectrum>
 class PiecewiseMedium final : public Medium<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
-                   m_phase_function, m_extremum_structure, m_extrema,
+                   m_phase_function, m_extremum, m_extrema,
                    m_ddis_phase_function, m_ddis_threshold,
                    create_ddis_phase_function, update_ddis_phase_function)
-    MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, PhaseFunction, ExtremumStructure)
+    MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, PhaseFunction, Extremum)
 
     // Use 32 bit indices to keep track of indices to conserve memory
     using ScalarIndex     = uint32_t;
@@ -185,9 +185,9 @@ public:
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
 
         // Create a default global extremum structure.
-        m_extremum_structure =
-            PluginManager::instance()->create_object<ExtremumStructure>(Properties("extremum_global"));
-        m_extrema = { m_extremum_structure };
+        m_extremum =
+            PluginManager::instance()->create_object<Extremum>(Properties("globalextremum"));
+        m_extrema = { m_extremum };
 
         precompute_optical_thickness();
 
@@ -197,7 +197,7 @@ public:
             m_ddis_phase_function = static_cast<PhaseFunction*>(create_ddis_phase_function());
         }
 
-        m_extremum_structure->update_extremum(
+        m_extremum->update_extremum(
             m_sigmat->bbox(), m_sigmat.get(), m_scale);
     }
 
@@ -457,11 +457,11 @@ public:
             update_ddis_phase_function();
 
         if (string::contains(keys, "sigma_t"))
-            m_extremum_structure->update_extremum(
+            m_extremum->update_extremum(
                 m_sigmat->bbox(), m_sigmat.get(), std::nullopt);
 
         if (string::contains(keys, "scale"))
-            m_extremum_structure->set_scale(m_scale);
+            m_extremum->set_scale(m_scale);
     }
 
     void precompute_optical_thickness() {
@@ -571,7 +571,7 @@ public:
             << "  albedo        = " << string::indent(m_albedo) << "," << std::endl
             << "  sigma_t       = " << string::indent(m_sigmat) << "," << std::endl
             << "  scale         = " << string::indent(m_scale) << "," << std::endl
-            << "  extremum      = " << string::indent(m_extremum_structure) << std::endl
+            << "  extremum      = " << string::indent(m_extremum) << std::endl
             << "]";
         return oss.str();
     }
