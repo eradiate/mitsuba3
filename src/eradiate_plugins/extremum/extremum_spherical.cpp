@@ -32,7 +32,12 @@ querying the underlying volume's extrema over each spherical cell.
 At runtime, concentric shell traversal provides tight-fitting local extremum for
 radially-varying media such as planetary atmospheres.
 
-.. warning:: This extremum only implements radial extremum variations.
+.. warning:: Rays passing close to the polar axis within numerical tolerance
+   (1e-6 in single, 1e-15 in double precision of the outer radius) are
+   considered discontinuous over the azimuthal dimension. There were identified
+   unresolved cases of off-by-one majorant readings for rays traversing close
+   to the polar axis with a direction that grazes an azimuthal boundary. This
+   only affects cases with azimuth resolution > 1.
 */
 
 template <typename Float, typename Spectrum>
@@ -40,9 +45,6 @@ class ExtremumSpherical final : public ExtremumStructure<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(ExtremumStructure, m_bbox, m_scale)
     MI_IMPORT_TYPES(Volume)
-
-    using TrackingStateType    = TrackingState<Float, Spectrum>;
-    using TrackingFunctionType = TrackingFunction<Float, Spectrum>;
 
     ExtremumSpherical(const Properties &props) : Base(props), m_props(props) {
         ScalarVector3i resolution = props.get<ScalarVector3i>("resolution", ScalarVector3i(1, 1, 1));
@@ -71,7 +73,7 @@ public:
                 result = (Object *) new Impl<SphericalTraversalType::RadialOnly>(m_props);
                 break;
             case SphericalTraversalType::Full3D:
-                Throw("Full3D spherical traversal is not yet implemented!");
+                result = (Object *) new Impl<SphericalTraversalType::Full3D>(m_props);
                 break;
             default:
                 Throw("Unsupported spherical traversal type!");
@@ -83,14 +85,19 @@ public:
         NotImplementedError("build");
     }
 
-    TrackingStateType traverse_extremum(const Ray3f &, Float, Float, UInt32,
-                    TrackingStateType, TrackingFunctionType*, Mask) const override {
-        NotImplementedError("traverse_extremum");
-    }
-
     std::tuple<Float, Float> eval_1(const Interaction3f &,
                                     Mask) const override {
         NotImplementedError("eval_1");
+    }
+
+    ExtremumState begin(const Ray3f &, Float, Float,
+                               Mask) const override {
+        NotImplementedError("begin");
+    }
+
+    ExtremumSegment next(ExtremumState &, const Ray3f &,
+                              Mask) const override {
+        NotImplementedError("next");
     }
 
     MI_DECLARE_CLASS(ExtremumSpherical)
@@ -111,8 +118,6 @@ public:
     MI_IMPORT_BASE(ExtremumStructure, m_bbox, m_scale)
     MI_IMPORT_TYPES(Volume)
 
-    using TrackingStateType    = TrackingState<Float, Spectrum>;
-    using TrackingFunctionType = TrackingFunction<Float, Spectrum>;
     using FloatStorage         = DynamicBuffer<Float>;
 
     ExtremumSphericalImpl(const Properties &props) : Base(props) {
@@ -137,39 +142,187 @@ public:
 
         m_dr = (m_rmax - m_rmin) / m_resolution.x();
         m_idr = dr::rcp(m_dr);
+        m_dtheta = dr::Pi<ScalarFloat> / m_resolution.y();
+        m_dphi   = dr::TwoPi<ScalarFloat> / m_resolution.z();
+        m_eps =
+            ScalarVector3f(m_resolution) * math::RayEpsilon<ScalarFloat>;
 
         build_grid(volume);
+        build_angle_tables();
     }
 
-    TrackingStateType traverse_extremum(
-        const Ray3f &ray,
-        Float mint,
-        Float maxt,
-        UInt32 channel,
-        TrackingStateType state,
-        TrackingFunctionType* func,
-        Mask active
-    ) const override {
-        if constexpr (TraversalType == SphericalTraversalType::RadialOnly) {
-            return traverse_radial(
-                func,
-                state,
-                ray,
-                mint,
-                maxt,
-                channel,
-                active
-            );
-        } else {
-            Throw("Full3D spherical traversal is not yet implemented!");
-            return TrackingStateType();
+    ExtremumState begin(const Ray3f &ray, Float mint, Float maxt,
+                        Mask active) const override {
+        auto [hit, d0, d1] = m_bbox.ray_intersect(ray);
+
+        ExtremumState state = dr::zeros<ExtremumState>();
+        state.o = m_to_local * ray.o;
+        state.d = m_to_local * ray.d;
+
+        state.mint = dr::select(hit, dr::maximum(mint, d0), mint);
+        state.maxt = dr::select(hit && active, dr::minimum(maxt, d1), state.mint);
+
+        const Point3f  &o = state.o;
+        const Vector3f &d = state.d;
+        RayCoeffs rc = ray_coeffs(o, d);
+
+        Point3f p = dr::fmadd(d, state.mint, o);
+        Float   r = dr::norm(p);
+
+        // Determine the radial starting index.
+        state.pi = dr::zeros<Vector3i>();
+        state.pi.x() = radial_idx(r, idx_bias(m_eps.x(), dr::fmadd(state.mint, rc.a, rc.b)));
+
+        if constexpr (TraversalType == SphericalTraversalType::Full3D) {
+            auto [on_axis, crosses_axis, t_cross] = axis_crossing(o, d);
+
+            // Near the axis, the angles of `p` are rounding noise: take them
+            // from the direction, on the current side of the axis crossing.
+            Mask before     = t_cross > state.mint + EventEpsilon;
+            Point3f p_dir   = Point3f(dr::select(before, -d, d));
+            Point3f p_theta = dr::select(on_axis, p_dir, p);
+            Point3f p_phi   = dr::select(crosses_axis, p_dir, p);
+
+            Float rate_theta = -dr::fmadd(state.mint, rc.n1, rc.n0);
+            Float bias_theta = idx_bias(m_eps.y(), rate_theta);
+            Float bias_phi   = idx_bias(m_eps.z(), rc.phi_dot);
+
+            // Determine the zenithal and azimuthal starting indices.
+            state.pi.y() = theta_idx(p_theta, r, on_axis, bias_theta);
+            state.pi.z() = phi_idx(p_phi, bias_phi);
         }
+
+        return state;
     }
 
-    std::tuple<Float, Float> eval_1(
-        const Interaction3f &it,
-        Mask active
-    ) const override {
+    /**
+     * Traversal of a spherical grid done in the style of a DDA: the next
+     * minimum intersection over all dimensions is chosen as the next distance
+     * to move to. One notable difference is the presence of "turning points"
+     * in spherical and zenithal dimensions. The tracking index does not change
+     * monotonically over those dimension and the point at which the step
+     * direction changes is what we call the turning point. It gets treated
+     * as a virtual boundary, meaning that it creates an additional segment when
+     * crossing through it.
+     * Because the step direction is not constant throughout traversal, we use
+     * `step_after` to provide the stepping direction after the turning point.
+     * It is then possible to check whether `t > t_turn` and select + or -
+     * `step_after` accordingly.
+     */
+    ExtremumSegment next(ExtremumState &state, const Ray3f &,
+                         Mask active) const override {
+        const Point3f  &o = state.o;
+        const Vector3f &d = state.d;
+        RayCoeffs rc = ray_coeffs(o, d);
+
+        Vector3f t_turn     = -dr::Infinity<Float>;
+        Vector3i step_after = dr::zeros<Vector3i>();
+
+        // Retrieve Turning point and Step direction ---------------------------
+
+        // Radial turning point, closest approach to the origin.
+        t_turn.x()     = -rc.b * rc.inv_a;
+        step_after.x() = 1;
+
+        Mask on_axis = false, crosses_axis = false;
+        Float t_cross = 0.f;
+
+        if constexpr (TraversalType == SphericalTraversalType::Full3D) {
+            std::tie(on_axis, crosses_axis, t_cross) = axis_crossing(o, d);
+
+            // Zenithal turning point.
+            // d/dt cos(theta(t)) has shape n0+n1*t/r(t) with r(t) positive.
+            // the turning point is therefore -n0/n1 and the index grows when
+            // n1 is negative. n1 == 0 has a turning point on the xy plane, and
+            // step is monotonic with sign n0.
+            Mask no_turn = rc.n1 == 0.f;
+            t_turn.y() =
+                dr::select(no_turn, -dr::Infinity<Float>, -rc.n0 / rc.n1);
+
+            step_after.y() = dr::select(dr::select(no_turn, rc.n0, rc.n1) < 0.f, 1, -1);
+            step_after.z() = dr::select(rc.phi_dot > 0.f, 1, -1);
+        }
+
+        // Handle discontinuities of theta and phi dimensions along the polar axis.
+        // Such discontinuity happens at origin crossing for theta and polar
+        // axis crossing for phi. Set distance to those events as turning points.
+        dr::mask_t<Vector3f> discontinuous(false, on_axis, crosses_axis);
+        dr::masked(t_turn, discontinuous) = Vector3f(t_cross);
+
+        Vector3f dt = dr::Infinity<Float>;
+        const Float threshold = state.mint + EventEpsilon;
+
+        Vector3i step = dr::select(t_turn > threshold, -step_after, step_after);
+        Vector3i test_idx = state.pi + dr::select(step > 0, Vector3i(1), Vector3i(0));
+
+        // Radius shell intersection -------------------------------------------
+        Float shell_r = shell_radius(dr::clip(test_idx.x(), 0, m_resolution.x()));
+        dt.x() = sphere_crossing( rc, shell_r, threshold);
+
+        if constexpr (TraversalType == SphericalTraversalType::Full3D) {
+            // Zenith cone intersection ----------------------------------------
+            Float cos_t = cos_theta(test_idx.y());
+            dt.y() = cone_crossing(rc, o, d, cos_t, threshold);
+
+            // Azimuth plane intersection --------------------------------------
+            Vector2f n = phi_normal(test_idx.z());
+            dt.z() = plane_crossing(o, d, n, threshold);
+
+            dr::masked(dt, discontinuous) = dr::Infinity<Float>;
+        }
+
+        Vector3f t_turn_fwd =
+            dr::select(t_turn > threshold, t_turn, dr::Infinity<Float>);
+
+        Float t_next =
+            dr::minimum(dr::min(dr::minimum(dt, t_turn_fwd)), state.maxt);
+        dr::masked(t_next, !active) = state.maxt;
+
+        // Construct segment ---------------------------------------------------
+        UInt32 idx = UInt32(dr::clip(state.pi.x(), 0, m_resolution.x() - 1));
+        if constexpr (TraversalType == SphericalTraversalType::Full3D)
+            idx += UInt32(state.pi.y() * m_resolution.x() +
+                          state.pi.z() * (m_resolution.x() * m_resolution.y()));
+
+        Vector2f extremum = dr::gather<Vector2f>(m_extremum_grid, idx, active);
+        dr::masked(extremum, state.pi.x() < 0) = Vector2f(m_fillmin);
+        dr::masked(extremum, state.pi.x() >= m_resolution.x()) =
+            Vector2f(m_fillmax);
+
+        ExtremumSegment segment(state.mint, t_next, m_scale * extremum);
+
+        const Float next_threshold = t_next + EventEpsilon;
+
+        auto crossed =
+            (dt <= next_threshold) && !(t_turn_fwd <= next_threshold);
+
+        // Advance variables ---------------------------------------------------
+        if constexpr (TraversalType == SphericalTraversalType::RadialOnly) {
+            dr::masked(state.pi.x(), crossed.x() && active) += step.x();
+        } else {
+            Vector3i pi = state.pi;
+            dr::masked(pi, crossed) += step;
+
+            discontinuous &= t_turn_fwd <= next_threshold;
+            Vector3i flipped(pi.x(),
+                             m_resolution.y() - 1 - pi.y(),
+                             phi_flip(pi.z(), d, discontinuous.z()));
+            dr::masked(pi, discontinuous) = flipped;
+
+            pi.y() = dr::clip(pi.y(), 0, m_resolution.y() - 1);
+
+            dr::masked(pi.z(), pi.z() < 0) = m_resolution.z() - 1;
+            dr::masked(pi.z(), pi.z() >= m_resolution.z()) = 0;
+
+            dr::masked(state.pi, active) = pi;
+        }
+
+        dr::masked(state.mint, active) = t_next;
+        return segment;
+    }
+
+    std::tuple<Float, Float> eval_1(const Interaction3f &it,
+                                    Mask active) const override {
         Point3f po = m_to_local * it.p;
         Float r = dr::norm(po);
 
@@ -179,16 +332,16 @@ public:
         Mask fill = fillval >= 0.f;
         Vector2f extremum = dr::zeros<Vector2f>();
 
-        if constexpr (TraversalType == SphericalTraversalType::RadialOnly) {
-            // Note that this is only valid for radial only for now
-            UInt32 ir = dr::clip(
-                dr::floor2int<UInt32>((r - m_rmin) * m_idr),
-                0u, (uint32_t)(m_resolution.x() - 1)
-            );
-            extremum = dr::gather<Vector2f>(m_extremum_grid, ir, active && !fill);
+        UInt32 ir = UInt32(dr::clip(radial_idx(r), 0, m_resolution.x() - 1));
 
+        if constexpr (TraversalType == SphericalTraversalType::RadialOnly) {
+            extremum = dr::gather<Vector2f>(m_extremum_grid, ir, active && !fill);
         } else if constexpr (TraversalType == SphericalTraversalType::Full3D) {
-            Throw("Full3D spherical evaluation is not yet implemented!");
+            UInt32 itheta = UInt32(theta_idx(po, r, Mask(false)));
+            UInt32 iphi   = UInt32(phi_idx(po));
+            UInt32 idx = ir + itheta * UInt32(m_resolution.x()) +
+                        iphi * UInt32(m_resolution.x() * m_resolution.y());
+            extremum = dr::gather<Vector2f>(m_extremum_grid, idx, active && !fill);
         }
 
         extremum = dr::select(
@@ -314,199 +467,252 @@ private:
         Log(Info, "Extremum spherical grid constructed successfully");
     }
 
-    // ------------------------------------------------------------------
-    // RadialOnly shell traversal
-    // ------------------------------------------------------------------
-    /** \brief General radial traversal algorithm.
-     *
-     * This method traverses the regular concentric-shell structure along the
-     * provided ray. At each traversed cell, it calls the function ``func``,
-     * that can perform actions on the passed ``segment``, ``state``,``advance``,
-     * and ``active``. This function can be used for sampling segments and
-     * perform various tracking algorithms.
-     *
-     * \param func  Function to be called at each step of the traversal. Must have
-     *              the signature:
-     *              (ExtremumSegment& segment,
-     *               StateD& state,
-     *               Mask& condition,
-     *               Mask active) -> StateD
-     *
-     *              Changes to the segment, state, and condition can be done in place.
-     * \param state The payload passed to ``func``.
-     * \param ray   The ray along which the structure is traversed.
-     * \param mint  The minimum distance along the ray.
-     * \param maxt  The maximum distance along the ray.
-     * \param active
-     *
-     * \return
-     *      Returns the final state at the end of the traversal.
-     */
-    template<typename FuncT, typename StateT>
-    std::decay_t<StateT> traverse_radial(
-        FuncT&& func,
-        StateT&& state,
-        const Ray3f ray,
-        Float mint,
-        Float maxt,
-        UInt32 channel,
-        Mask active
-    ) const {
-        using StateD = std::decay_t<StateT>;
+    /// Precomputes every cos(theta) for every theta cone boudary and 2D
+    /// normal (sin(phi), -cos(phi)) for every azimuth boundary.
+    void build_angle_tables() {
+        std::vector<ScalarFloat> cosines(m_resolution.y() + 1);
+        for (int32_t i = 0; i <= m_resolution.y(); ++i) {
+            cosines[i] = dr::cos(ScalarFloat(i) * m_dtheta);
+            // For even resolution, the middle boundary degenartes into a plane
+            // Store an exact zero to ensure numerical stability.
+            dr::masked(cosines[i], 2 * i == m_resolution.y()) = ScalarFloat(0);
+        }
 
-        Ray3f local_ray(m_to_local * ray.o, // Normalize origin
-                        m_to_local * ray.d, // Normalize direction
-                        ray.time, ray.wavelengths);
+        std::vector<ScalarFloat> normals(2 * (m_resolution.z() + 1));
+        for (int32_t i = 0; i <= m_resolution.z(); ++i) {
+            // Azimuth boundary at phi = -pi + i * dphi
+            auto [s, c] = dr::sincos(dr::fmadd(ScalarFloat(i), m_dphi, -dr::Pi<ScalarFloat>));
+            normals[2 * i]     = s;
+            normals[2 * i + 1] = -c;
+        }
 
-        ExtremumSegment segment  = dr::zeros<ExtremumSegment>();
-        Mask reached    = false;
-        Float current_t = mint;
-
-        // ray-sphere intersection info
-        Vector3f o      = local_ray.o - m_center;
-        Float o_squared = dr::squared_norm(o);
-        Float a         = dr::squared_norm(local_ray.d);
-        Float b_half    = dr::dot(o, local_ray.d);
-
-        // Intersection value precomputation
-        Float disc_base = b_half * b_half - a * o_squared;
-        Float inv_a     = dr::rcp(a);
-
-        // Find the current/next intersection (use this to calculate the
-        // midpoint too)
-        Point3f pos = local_ray(mint + dr::Epsilon<Float> * 10.f);
-        Vector3f oc = pos - m_center;
-        Float r     = dr::norm(oc);
-
-        // Calculate the initial layer index from which we will step through
-        // layers.
-        Int32 layer_idx = dr::clip(dr::floor2int<Int32>((r - m_rmin) * m_idr),
-                                   -1, m_resolution.x());
-        Mask passed_midpoint = dr::dot((m_center - pos), local_ray.d) < 0;
-        Int32 shell_padding  = dr::select(passed_midpoint, 1, 0);
-        Int32 step           = dr::select(passed_midpoint, 1, -1);
-
-        struct LoopState {
-            ExtremumSegment segment;
-            StateD state;
-            Mask advance;
-            Mask active;
-            Mask reached;
-            Float current_t;
-            Int32 layer_idx;
-            Int32 step;
-            Int32 padding;
-
-            DRJIT_STRUCT(                                                      \
-                LoopState, segment, state, advance, active, reached, current_t,\
-                 layer_idx, step, padding                                      \
-            )
-        } ls = {
-            segment,
-            state,
-            /*advance=*/active,
-            active,
-            reached,
-            current_t,
-            layer_idx,
-            step,
-            shell_padding,
-        };
-
-        dr::tie(ls) = dr::while_loop(
-            dr::make_tuple(ls),
-            [](const LoopState &ls) { return ls.active; },
-            [this, func, maxt, a, inv_a, disc_base, b_half, channel](LoopState &ls) {
-
-            // Compute radius at current position
-            const Float eps = dr::Epsilon<Float> * 2.f;
-
-            // Passed midpoint == exiting the concentric spheres
-            const Int32 shell_idx = dr::clip(ls.layer_idx + ls.padding, 0, m_resolution.x());
-
-            // Boundary condition of rmin and rmax
-            Float fill_value = -1.f;
-            dr::masked(fill_value, ls.layer_idx < 0) = m_fillmin;
-            dr::masked(fill_value, ls.layer_idx >= m_resolution.x()) = m_fillmax;
-            const Mask fill = fill_value >= 0.f;
-
-            // Test intersection with the shell
-            const Float r_test = m_rmin + Float(shell_idx) * m_dr;
-
-            const Float disc = disc_base + a * dr::square(r_test);
-            const Mask valid_test = disc >= 0.f;
-            const Float sqrt_disc = dr::sqrt(disc);
-            const Float t_test_near = (-b_half - sqrt_disc) * inv_a;
-            const Float t_test_far  = (-b_half + sqrt_disc) * inv_a;
-
-            // Update if there is valid intersection that is not tangent.
-            Mask update = ls.active
-                          && valid_test
-                          && dr::abs(t_test_far - t_test_near) > eps;
-            const Mask pass_midpoint = !update || ls.layer_idx == -1;
-
-            // Special case at midpoint where we miss the intersection with the
-            // shell, bump padding to test outer shell, set step to increase
-            // layer index and continue to next iteration.
-            dr::masked(ls.padding, pass_midpoint) = 1;
-            dr::masked(ls.step, pass_midpoint)    = 1;
-
-            if( dr::any_or<true>(update) ) {
-
-                // Find smallest t > current_t + epsilon among the 4 candidates
-                const Float threshold = ls.current_t + eps;
-                Float t_next = maxt;
-
-                // Helper: update t_next if candidate > threshold and < t_next
-                auto consider = [&](Float t_cand, Mask valid_cand) DRJIT_INLINE_LAMBDA {
-                    Mask use = valid_cand && (t_cand > threshold) && (t_cand < t_next);
-                    dr::masked(t_next, use) = t_cand;
-                };
-
-                consider(t_test_near, valid_test);
-                consider(t_test_far,  valid_test);
-
-                // Look up extremum values for this shell
-                Vector2f extremum = dr::gather<Vector2f>(
-                    m_extremum_grid, ls.layer_idx, ls.active && !fill);
-                extremum = m_scale * dr::select(!fill, extremum, fill_value);
-
-                dr::masked(ls.segment, update) = ExtremumSegment(
-                    ls.current_t, t_next, extremum
-                );
-
-                Mask active_update = ls.active && update;
-                auto result =
-                    func( ls.segment, ls.state, channel, active_update);
-                ls.advance    = result.first;
-                active_update &= result.second;
-
-                // Advance state for lanes that haven't reached target
-                dr::masked(ls.current_t, ls.advance && update) = t_next;
-                dr::masked(ls.layer_idx, ls.advance && update) += ls.step;
-
-                // Continue only if not reached and still in bounds
-                dr::masked(ls.active, update) &= active_update && (t_next <= maxt);
-            }
-            ls.active &= ls.layer_idx < m_resolution.x();
-        },
-        "Spherical Shell Traversal");
-
-        return ls.state;
+        m_cos_theta  = dr::load<FloatStorage>(cosines.data(), cosines.size());
+        m_phi_normal = dr::load<FloatStorage>(normals.data(), normals.size());
     }
 
+    // ------------------------------------------------------------------
+    // Boundary-crossing helpers
+    // ------------------------------------------------------------------
+
+    /// Ray-only terms shared by the crossing tests, independent of boundaries.
+    struct RayCoeffs {
+        Float a, b, inv_a, o_sqr;
+        /// dot(o,d)^2 - |d|^2 |o|^2, i.e. -|o x d|^2
+        Float disc_base;
+        /// Cone terms: d_z^2, o_z^2, d_z o_z, and k = |d_z o - o_z d|^2
+        Float dz2, oz2, dzoz, k;
+        /// d/dt cos(theta) has the sign of n0 + n1 t; d/dt phi that of phi_dot
+        Float n0, n1, phi_dot;
+    };
+
+    static RayCoeffs ray_coeffs(const Point3f &o, const Vector3f &d) {
+        RayCoeffs rc {};
+        rc.a         = dr::squared_norm(d);
+        rc.b         = dr::dot(o, d);
+        rc.o_sqr     = dr::squared_norm(o);
+        rc.inv_a     = dr::rcp(rc.a);
+
+        Vector3f c   = dr::cross(o, d);
+        rc.disc_base = -dr::squared_norm(c);
+
+        if constexpr (TraversalType == SphericalTraversalType::Full3D) {
+            rc.dz2       = dr::square(d.z());
+            rc.oz2       = dr::square(o.z());
+            rc.dzoz      = d.z() * o.z();
+            rc.k         = dr::squared_norm(Vector2f(c.x(), c.y()));
+            rc.n0        = dr::fmsub(d.z(), rc.o_sqr, o.z() * rc.b);
+            rc.n1        = dr::fmsub(rc.b, d.z(), rc.a * o.z());
+            rc.phi_dot   = c.z();
+        }
+        return rc;
+    }
+
+    /// Signed tolerance sending a query that sits on a cell boundary into the
+    /// cell it is heading into. `rate` is the derivative of the cell coordinate.
+    static Float idx_bias(ScalarFloat tol, Float rate) {
+        return dr::select(rate < 0.f, Float(-tol), Float(tol));
+    }
+
+    static Float forward(Float t, Mask valid, Float threshold) {
+        return dr::select(valid && (t > threshold), t, dr::Infinity<Float>);
+    }
+
+    /// Nearest crossing, strictly ahead of `threshold`, of ray (o, d) with
+    /// the origin-centered sphere of radius `r_test`; +inf if there is none.
+    static Float sphere_crossing(const RayCoeffs &rc, Float r_test,
+                                 Float threshold, Mask valid = true) {
+        Float disc = dr::fmadd(rc.a, dr::square(r_test), rc.disc_base);
+        Float sq   = dr::sqrt(dr::maximum(disc, 0.f));
+        Float near = (-rc.b - sq) * rc.inv_a,
+              far  = (-rc.b + sq) * rc.inv_a;
+        return forward(dr::select(near > threshold, near, far),
+                       valid && (disc >= 0.f), threshold);
+    }
+
+    /// Ray (o,d)/Cone intersection. Cone defined by cos(theta) (c) w.r.t the
+    /// vertical axis in local frame. +inf for no intersection.
+    static Float cone_crossing(const RayCoeffs &rc, const Point3f &o,
+                               const Vector3f &d, Float c, Float threshold,
+                               Mask valid = true) {
+        Float c2 = dr::square(c);
+
+        // Factored discriminant form so that disc = 0 when c = 0.
+        Float disc = c2 * dr::fmadd(c2, rc.disc_base, rc.k);
+        Float sq   = dr::sqrt(dr::maximum(disc, 0.f));
+
+        Float qa = dr::fnmadd(c2, rc.a,     rc.dz2),
+              qb = dr::fnmadd(c2, rc.b,     rc.dzoz),
+              qc = dr::fnmadd(c2, rc.o_sqr, rc.oz2);
+
+        // Citardauq form of the quadratic formulation, generic expression
+        // suffers from catastrophic cancellation at discriminant = 0.
+        // Stable root form (t1 = c/a*t0), avoid double counting equatorial plane.
+        Float tmp = -(qb + dr::copysign(sq, qb));
+        Float t0  = tmp / qa;
+        Float t1  = dr::select(disc > 0.f, qc / tmp, t0);
+
+        valid &= disc >= 0.f;
+
+        // discard intersection with opposite cones.
+        auto valid_side = [&](Float t) DRJIT_INLINE_LAMBDA {
+            return valid && (dr::fmadd(t, d.z(), o.z()) * c >= 0.f);
+        };
+        return dr::minimum(forward(t0, valid_side(t0), threshold),
+                           forward(t1, valid_side(t1), threshold));
+    }
+
+    /// Ray(o,d)/Half-plane intersection test.
+    /// The plane goes through the vertical axis and has normal n.
+    static Float plane_crossing(const Point3f &o, const Vector3f &d,
+                                const Vector2f &n, Float threshold) {
+        return forward(-(o.x() * n.x() + o.y() * n.y()) /
+                        (d.x() * n.x() + d.y() * n.y()), true, threshold);
+    }
+
+    /// Radius of shell boundary `idx`.
+    Float shell_radius(Int32 idx) const {
+        return dr::fmadd(Float(idx), m_dr, m_rmin);
+    }
+
+    /// Tabulated cos(theta) of colatitude boundary `idx`.
+    Float cos_theta(Int32 idx) const {
+        return dr::gather<Float>(m_cos_theta, UInt32(idx));
+    }
+
+    /// Tabulated 2D normal of the plane at azimuth boundary `idx`.
+    Vector2f phi_normal(Int32 idx, Mask active = true) const {
+        return dr::gather<Vector2f>(m_phi_normal, UInt32(idx), active);
+    }
+
+    /**
+     * \return A tuple <tt>(on_axis, crosses_axis, crossing_distance)</tt>.
+     *   <ul>
+     *     <li>\c on_axis is true when the ray runs along the vertical axis</li>
+     *     <li>\c crosses_axis is true when the ray crosses the vertical axis
+     *         too close to resolve the azimuth plane crossing. </li>
+     *     <li>\c crossing_distance is the distance to the origin if on_axis
+     *         is true and the distance to the axis otherwise.</li>
+     *  </ul>
+     */
+    std::tuple<Mask, Mask, Float> axis_crossing(const Point3f &o,
+                                                const Vector3f &d) const {
+        const ScalarFloat tol =
+            math::RayEpsilon<ScalarFloat> * math::RayEpsilon<ScalarFloat>;
+        Float o_xy2  = dr::fmadd(o.x(), o.x(), o.y() * o.y());
+        Float d_xy2  = dr::fmadd(d.x(), d.x(), d.y() * d.y());
+        Mask on_axis = o_xy2 <= tol * dr::squared_norm(o) &&
+                       d_xy2 <= tol * dr::squared_norm(d);
+
+        Float o_dxy    = dr::fmadd(o.x(), d.x(), o.y() * d.y());
+        Float t_axis   = -o_dxy / d_xy2;
+        Float t_origin = -o.z() * dr::rcp(d.z());
+
+        // Spacing of the plane crossings near the axis, compared to the
+        // t resolution of next() (see `threshold`) with a safety factor.
+        Float c_z     = dr::fmsub(o.x(), d.y(), o.y() * d.x());
+        Float spacing = dr::abs(c_z) * m_dphi / d_xy2;
+        Float t_res   = EventEpsilon * dr::maximum(1.f, dr::abs(t_axis));
+
+        Mask crosses_axis = !on_axis && spacing < 8.f * t_res;
+        return { on_axis, crosses_axis,
+                 dr::select(on_axis, t_origin, t_axis) };
+    }
+
+    /// Returns the azimuth cell index across the vertical axis from cell `i`,
+    /// with `d` pointing away from the axis. Relies on boundary symmetry around
+    /// pi to avoid recalculating atan2.
+    Int32 phi_flip(Int32 i, const Vector3f &d, Mask active) const {
+        const int32_t res = m_resolution.z();
+        Int32 k = i + (res + 1) / 2;
+
+        if (res % 2 == 1) {
+            // for odd resolution, test the wrapped index to the boundary
+            Int32 k_wrap = dr::select(k > res, k - res, k);
+            Vector2f n   = phi_normal(k_wrap, active);
+            Float side   = dr::fmadd(d.x(), n.x(), d.y() * n.y());
+            dr::masked(k, side > 0.f) -= 1;
+        }
+
+        return dr::select(k >= res, k - res, k);
+    }
+
+    /// Shell index for radius `r`. Using -1 and resolution.x() as sentinels
+    /// for the fillmin and fillmax exterior regions. `bias` shifts the cell
+    /// coordinate, see \ref m_eps.
+    Int32 radial_idx(Float r, Float bias = 0.f) const {
+        return dr::clip(
+            dr::floor2int<Int32>(dr::fmadd(r - m_rmin, m_idr, bias)),
+            -1, m_resolution.x());
+    }
+
+    /// Zenithal cell index w.r.t vertical axis. for position `p` at radius
+    /// `r`. `on_axis` re-derives the pole cell from the sign of z instead.
+    Int32 theta_idx(const Point3f &p, Float r, Mask on_axis, Float bias = 0.f) const {
+        Int32 result( 0 );
+
+        Float theta =
+            dr::acos(p.z() * dr::rcp(dr::maximum(r, dr::Smallest<Float>) ) )
+            * dr::InvPi<Float>;
+        dr::masked(result, !on_axis) =
+            dr::clip(
+                dr::floor2int<Int32>( dr::fmadd(theta, Float(m_resolution.y()), bias) ),
+                0, m_resolution.y() - 1);
+
+        if (unlikely(dr::any_or<true>(on_axis)))
+            dr::masked(result, on_axis)  =
+                dr::select(p.z() > 0.f, 0, m_resolution.y() - 1);
+
+        return result;
+    }
+
+    /// Azimuth cell index for position `p`, wrapped into [0, resolution.z()).
+    Int32 phi_idx(const Point3f &p, Float bias = 0.f) const {
+        Int32 i = dr::floor2int<Int32>(
+            dr::fmadd(dr::atan2(p.y(), p.x()) * dr::InvTwoPi<Float> + 0.5f,
+                      Float(m_resolution.z()), bias));
+        dr::masked(i, i < 0) += m_resolution.z();
+        dr::masked(i, i >= m_resolution.z()) -= m_resolution.z();
+        return i;
+    }
 
 private:
+    /// Separation in t below which next() treats events as simultaneous.
+    static constexpr ScalarFloat EventEpsilon = 2.f * dr::Epsilon<ScalarFloat>;
+
     FloatStorage m_extremum_grid;
+    FloatStorage m_cos_theta, m_phi_normal;
     ScalarVector3i m_resolution;
     ScalarFloat m_rmin, m_rmax;
     ScalarFloat m_fillmin, m_fillmax;
     ScalarPoint3f m_center;
     ScalarFloat m_dr, m_idr;
+    ScalarFloat m_dtheta, m_dphi;
+
+    /// Per-dimension tolerance on a cell dimension
+    ScalarVector3f m_eps;
 
     ScalarAffineTransform4f m_to_local;
 };
-
 
 // ---------------------------------------------------------------------------
 // Class name helpers (for expand pattern)

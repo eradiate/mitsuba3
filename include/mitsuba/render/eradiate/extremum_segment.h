@@ -70,18 +70,6 @@ struct ExtremumSegment {
     }  
 
     /**
-     * \brief Check whether this is a valid segment
-     * 
-     * A segment is considered valid when 
-     * \code
-     * segment.mint < segment.maxt
-     * \endcode
-     */
-    Mask valid() const {
-        return mint < maxt;
-    }
-
-    /**
      * \brief Mark the extremum segment as invalid.
      *
      * This operation sets segment's minimum

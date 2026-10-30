@@ -4,12 +4,42 @@
 #include <mitsuba/render/interaction.h>
 #include <mitsuba/render/volume.h>
 #include <mitsuba/render/eradiate/extremum_segment.h>
-#include <mitsuba/render/eradiate/tracking.h>
-#include <drjit/call.h>
 
 #include <optional>
 
 NAMESPACE_BEGIN(mitsuba)
+
+/**
+ * \brief Traversal state carried between successive \c next calls of an
+ * \c ExtremumStructure.
+ *
+ * Holds what a structure cannot cheaply recover per segment: local ray
+ * information, current visited index and traversal distance. The traversal
+ * is over once mint >= maxt.
+ *
+ * Ray information are stored as origin and direction to keep the struct lean.
+ */
+template <typename Float, typename Spectrum>
+struct ExtremumState {
+    MI_IMPORT_CORE_TYPES()
+
+    /// Ray origin in structure-local coordinates.
+    Point3f o;
+
+    /// Ray direction in structure-local coordinates, never renormalised.
+    Vector3f d;
+
+    /// Current cell index.
+    Vector3i pi;
+
+    /// Entry distance of the next segment. Exact in \c t.
+    Float mint;
+
+    /// End of the traversal range.
+    Float maxt;
+
+    DRJIT_STRUCT(ExtremumState, o, d, pi, mint, maxt)
+};
 
 /**
  * \brief Abstract base class for extremum structures
@@ -19,9 +49,8 @@ NAMESPACE_BEGIN(mitsuba)
  * This enables efficient use of tracking algorithms with locally-adaptive
  * majorants and minorants.
  *
- * To minimize virtual function overhead, the ``traverse_extremum()`` method
- * encapsulates the entire traversal loop internally, requiring only a single
- * virtual call per distance sample.
+ * Structures follow the pattern of an iterator: the traversal is initialized
+ * with ``begin``, and segments are served in order with ``next``.
  *
  * The extremum structure needs to be built using the ``update_extremum``
  * function, it is **not** called automatically in the constructor. The caller,
@@ -31,9 +60,6 @@ template <typename Float, typename Spectrum>
 class MI_EXPORT_LIB ExtremumStructure : public JitObject<ExtremumStructure<Float, Spectrum>> {
 public:
     MI_IMPORT_TYPES(Medium, Sampler, Volume)
-
-    using TrackingStateType    = TrackingState<Float, Spectrum>;
-    using TrackingFunctionType = TrackingFunction<Float, Spectrum>;
 
     /// Destructor
     ~ExtremumStructure();
@@ -71,43 +97,47 @@ public:
      */
     virtual void build(const Volume *volume) = 0;
 
+    /**
+     * \brief Set up a stateful traversal along \c ray.
+     *
+     * Transforms the ray to structure-local coordinates, locates the entry
+     * cell and clips <tt>[mint, maxt]</tt> to the structure's domain. Called
+     * once per ray; the returned state is then advanced with ``next``
+     * until <tt>state.mint >= state.maxt</tt>.
+     *
+     * \param ray   The ray along which the structure is traversed.
+     * \param mint  The minimum traversal distance.
+     * \param maxt  The maximum traversal distance.
+     *
+     * \return      The initalized ``ExtremumState``. Call ``next`` to get the
+     *              first and subsequent segment starting from mint.
+     *
+     * Not a vcall method, called on scalar pointers only.
+     */
+    virtual ExtremumState begin(const Ray3f &ray, Float mint, Float maxt,
+                                       Mask active = true) const = 0;
 
     /**
-     * \brief Traverse the extremum along a ray and applies a callback at each
-     * encountered segment.
+     * \brief Return the segment starting at <tt>state.mint</tt> and advance
+     * \c state past it.
      *
-     * This method traverses the extremum structure segment by segment. At each
-     * segment, the callback ``func`` is called to advance the ``state``. This
-     * is useful for example to implement Delta Tracking, Ratio Tracking, and
-     * Residual Ratio Tracking. The callback is typically defined in the
-     * integrator.
+     * This function traverses the Extremum structure, serving Extremum
+     * segments, and advancing the \c state, much like an iterator. The
+     * traversal is over when <tt>state.mint >= state.maxt</tt>.
      *
-     * \param ray           Ray along which to sample
-     * \param mint          Minimum distance to consider
-     * \param maxt          Maximum distance to consider
-     * \param channel       Channel from which to sample
-     * \param state         Mutable tracking state carried through the traversal loop
-     * \param func          Callback function called at every segment.
-     * \param active        Mask for active lanes
+     * \param state State that tracks traversal through the structure. Should
+     *              be initialized from ``begin``.
+     * \param ray   The world ray ``begin`` was called with.
      *
-     * \return
-     *      The final tracking state, that includes the medium interaction if
-     *      a real scattering event was sampled, and the throughput and pdfs
-     *      accumulated throughout the traversal.
+     * \return      The Exrtemum segment with <tt>segment.mint</tt> the old
+     *              <tt>state.mint</tt> and <tt>segment.maxt</tt> the new one.
+     *              A structure with internal gaps returns zero-valued segments
+     *              for them.
      *
-     * Note that this function cannot be made abstract because of it would
-     * force the requirement for bindings, which are incompatible with
-     * function types.
+     * Not a vcall method, called on scalar pointers only.
      */
-    virtual TrackingStateType traverse_extremum(
-        const Ray3f &ray,
-        Float mint,
-        Float maxt,
-        UInt32 channel,
-        TrackingStateType state,
-        TrackingFunctionType *func,
-        Mask active = true
-    ) const;
+    virtual ExtremumSegment next(ExtremumState &state, const Ray3f &ray,
+                                 Mask active = true) const = 0;
 
     // Note: this is currently dead code. It is kept in case it is needed in the future.
     /**
@@ -116,12 +146,11 @@ public:
      * This method performs point evaluation at interaction point specified in
      * local space.
      *
-     * \param it            Interaction interaction point in local space
-     * \param active        Mask for active lanes
+     * \param it        Interaction interaction point in local space
+     * \param active    Mask for active lanes
      *
-     * \return
-     *      The minorant and majorant values at the medium interaction point.
-     *      Clamped values outside bounds.
+     * \return          The minorant and majorant values at the medium
+     *                  interaction point. Clamped values outside bounds.
      *
      */
     virtual std::tuple<Float, Float> eval_1(
@@ -153,14 +182,3 @@ protected:
 MI_EXTERN_CLASS(ExtremumStructure)
 NAMESPACE_END(mitsuba)
 
-// -----------------------------------------------------------------------
-//! @{ \name Enables vectorized method calls on Dr.Jit medium arrays
-// -----------------------------------------------------------------------
-
-DRJIT_CALL_TEMPLATE_BEGIN(mitsuba::ExtremumStructure)
-    DRJIT_CALL_METHOD(traverse_extremum)
-    DRJIT_CALL_METHOD(eval_1)
-DRJIT_CALL_END()
-
-//! @}
-// -----------------------------------------------------------------------
