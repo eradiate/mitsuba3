@@ -11,6 +11,16 @@ def gen_sigma_grid(medium_height, num_layers, integral, lbd):
     return ext_coefs
 
 
+def sample(medium, ray, xi, channel=0):
+    """Return (distance, weight, pdf_ratio) from ``sample_real_interaction``."""
+    ms, weight = medium.sample_real_interaction(ray, xi, channel)
+    return ms.mei.t, weight, ms.pdf_ratio
+
+
+def transmittance(medium, ray):
+    return medium.sample_transmittance(ray, 0.0, 0)
+
+
 # Mitsuba dictionary
 def create_medium_dict():
     medium_height = 100000
@@ -48,104 +58,72 @@ def test01_sample_distances_down(variant_scalar_mono_double):
     medium = create_medium_dict()
 
     gt_dists = [0.0, 74578.93910366, 82117.51365975, 88515.28423884, 98460.51859237]
-    gt_trs = [1.0, 0.75, 0.5, 0.25, 0.01]
-    gt_pdfs = [
-        7.06034444e-09,
-        2.43563215e-05,
-        5.41709938e-05,
-        2.70854969e-05,
-        3.61445783e-06,
-    ]
 
     samples = [0.0, 0.25, 0.5, 0.75, 0.99]
-    si = dr.zeros(mi.SurfaceInteraction3f)
-
     origins = mi.Point3f([0.0, 0.0, 100000.0])
     directions = mi.Vector3f([0.0, 0.0, -1.0])
     ray = mi.Ray3f(origins, directions)
 
     dists = []
-    trs = []
-    pdfs = []
-    for sample in samples:
-        mei, tr, pdf = medium.sample_interaction_analytical(ray, si, sample, 0, True)
-        dists.append(mei.t)
-        trs.append(tr)
-        pdfs.append(pdf)
+    weights = []
+    pdf_ratios = []
+    for xi in samples:
+        dist, weight, pdf_ratio = sample(medium, ray, xi)
+        dists.append(dist)
+        weights.append(weight)
+        pdf_ratios.append(pdf_ratio)
 
     assert dr.allclose(dists, gt_dists)
-    assert dr.allclose(trs, gt_trs)
-    assert dr.allclose(pdfs, gt_pdfs)
+    assert dr.allclose(weights, 0.8)
+    assert dr.allclose(pdf_ratios, 1.0)
 
 
 def test02_sample_distances_up(variant_scalar_mono_double):
     medium = create_medium_dict()
 
     gt_dists = [0.0, 7.95920400e02, 1.91770720e03, 3.83541440e03, 1.91443066e04]
-    gt_trs = [1.0, 0.75, 0.5, 0.25, 0.01]
-    gt_pdfs = [
-        3.61445783e-04,
-        2.71084337e-04,
-        1.80722892e-04,
-        9.03614458e-05,
-        1.08341988e-06,
-    ]
 
     samples = [0.0, 0.25, 0.5, 0.75, 0.99]
-    si = dr.zeros(mi.SurfaceInteraction3f)
-
     origins = mi.Point3f([0.0, 0.0, 0.0])
     directions = mi.Vector3f([0.0, 0.0, 1.0])
     ray = mi.Ray3f(origins, directions)
 
     dists = []
-    trs = []
-    pdfs = []
-    for sample in samples:
-        mei, tr, pdf = medium.sample_interaction_analytical(ray, si, sample, 0, True)
-
-        dists.append(mei.t)
-        trs.append(tr)
-        pdfs.append(pdf)
+    weights = []
+    pdf_ratios = []
+    for xi in samples:
+        dist, weight, pdf_ratio = sample(medium, ray, xi)
+        dists.append(dist)
+        weights.append(weight)
+        pdf_ratios.append(pdf_ratio)
 
     assert dr.allclose(dists, gt_dists)
-    assert dr.allclose(trs, gt_trs)
-    assert dr.allclose(pdfs, gt_pdfs)
+    assert dr.allclose(weights, 0.8)
+    assert dr.allclose(pdf_ratios, 1.0)
 
 
 def test03_sample_distances_horizontal(variant_scalar_mono_double):
     medium = create_medium_dict()
 
     gt_dists = [0.0, 2655.31469158, 6397.77055374, 12795.54110748, 42505.86749422]
-    gt_trs = [1.0, 0.75, 0.5, 0.25, 0.01]
-    gt_pdfs = [
-        1.08341988e-04,
-        8.12564910e-05,
-        5.41709940e-05,
-        2.70854970e-05,
-        1.08341988e-06,
-    ]
 
     samples = [0.0, 0.25, 0.5, 0.75, 0.99]
-    si = dr.zeros(mi.SurfaceInteraction3f)
-
     origins = mi.Point3f([0.0, 0.0, 15000.0])
     directions = mi.Vector3f([0.0, 1.0, 0.0])
     ray = mi.Ray3f(origins, directions)
 
     dists = []
-    trs = []
-    pdfs = []
-    for sample in samples:
-        mei, tr, pdf = medium.sample_interaction_analytical(ray, si, sample, 0, True)
-
-        dists.append(mei.t)
-        trs.append(tr)
-        pdfs.append(pdf)
+    weights = []
+    pdf_ratios = []
+    for xi in samples:
+        dist, weight, pdf_ratio = sample(medium, ray, xi)
+        dists.append(dist)
+        weights.append(weight)
+        pdf_ratios.append(pdf_ratio)
 
     assert dr.allclose(dists, gt_dists)
-    assert dr.allclose(trs, gt_trs)
-    assert dr.allclose(pdfs, gt_pdfs)
+    assert dr.allclose(weights, 0.8)
+    assert dr.allclose(pdf_ratios, 1.0)
 
 
 def test04_sample_distances_diag(variant_scalar_mono_double):
@@ -154,20 +132,11 @@ def test04_sample_distances_diag(variant_scalar_mono_double):
     gt_dists = [9.23464998e00, 2.65531470e03, 6.39777058e03, 2.24562174e04, dr.inf]
 
     samples = [0.001, 0.25, 0.5, 0.75, 0.99]
-    si = dr.zeros(mi.SurfaceInteraction3f)
-
     origins = mi.Point3f([0.0, 0.0, 15000.0])
     directions = mi.Vector3f([0.5, 0.5, 0.5])
     ray = mi.Ray3f(origins, directions)
 
-    dists = []
-    trs = []
-    pdfs = []
-    for idx, sample in enumerate(samples):
-        mei, tr, pdf = medium.sample_interaction_analytical(ray, si, sample, 0, True)
-        dists.append(mei.t)
-        trs.append(tr)
-        pdfs.append(pdf)
+    dists = [sample(medium, ray, xi)[0] for xi in samples]
 
     for idx in range(len(gt_dists)):
         if dr.isinf(gt_dists[idx]) and dr.isinf(gt_dists[idx]) == dr.isinf(dists[idx]):
@@ -191,24 +160,15 @@ def test05_sample_distances_heights(variant_scalar_mono_double):
     ]
 
     heights = [0.0, 9800.0, 10100.0, 27500.0, 40020.0, 75000, 98000.0]
-    sample = 0.3
+    xi = 0.3
     direction = mi.Vector3f([0.0, 0.0, 1.0])
     rays = []
-
-    si = dr.zeros(mi.SurfaceInteraction3f)
 
     for h in heights:
         origin = mi.Point3f([0.0, 0.0, h])
         rays.append(mi.Ray3f(origin, direction))
 
-    dists = []
-    trs = []
-    pdfs = []
-    for idx, ray in enumerate(rays):
-        mei, tr, pdf = medium.sample_interaction_analytical(ray, si, sample, 0, True)
-        dists.append(mei.t)
-        trs.append(tr)
-        pdfs.append(pdf)
+    dists = [sample(medium, ray, xi)[0] for ray in rays]
 
     for idx in range(len(gt_dists)):
         if dr.isinf(gt_dists[idx]) and dr.isinf(gt_dists[idx]) == dr.isinf(dists[idx]):
@@ -234,17 +194,11 @@ def test06_eval_transmittance_up(variant_scalar_mono_double):
     heights = [0.0, 5000.0, 15000.0, 25000.0, 45000.0, 75000, 100000.0]
     direction = [0.0, 0.0, 1.0]
     rays = []
-    si = dr.zeros(mi.SurfaceInteraction3f, 1)
-    si.t = dr.inf
-
     for h in heights:
         origin = [0.0, 0.0, h]
         rays.append(mi.Ray3f(origin, direction))
 
-    trs = []
-    for ray in rays:
-        tr = medium.transmittance_eval_analytical(ray, si, True)
-        trs.append(tr)
+    trs = [transmittance(medium, ray) for ray in rays]
 
     assert dr.allclose(trs, gt_trs)
 
@@ -265,17 +219,11 @@ def test07_eval_transmittance_down(variant_scalar_mono):
     heights = [0.0, 9000.0, 15000.0, 29800.0, 45000.0, 70020, 100000.0]
     direction = [0.0, 0.0, -1.0]
     rays = []
-    si = dr.zeros(mi.SurfaceInteraction3f, 1)
-    si.t = dr.inf
-
     for h in heights:
         origin = [0.0, 0.0, h]
         rays.append(mi.Ray3f(origin, direction))
 
-    trs = []
-    for ray in rays:
-        tr = medium.transmittance_eval_analytical(ray, si, True)
-        trs.append(tr)
+    trs = [transmittance(medium, ray) for ray in rays]
 
     assert dr.allclose(trs, gt_trs)
 
@@ -335,28 +283,29 @@ def _ref_distance_rgb(xi, channel):
 
 def test09_sample_interaction_rgb(variant_scalar_rgb):
     medium = _create_rgb_medium()
-    si = dr.zeros(mi.SurfaceInteraction3f)
     ray = mi.Ray3f(mi.Point3f(0.0, 0.0, 0.0), mi.Vector3f(0.0, 0.0, 1.0))
 
     # (xi, channel): chosen so each channel scatters in a different layer
     for xi, channel in ((0.5, 0), (0.5, 1), (0.3, 2)):
-        mei, tr, pdf = medium.sample_interaction_analytical(ray, si, xi, channel, True)
+        dist, weight, pdf_ratio = sample(medium, ray, xi, channel)
         expected_t, layer_idx = _ref_distance_rgb(xi, channel)
         expected_tr = _ref_tr_rgb(0.0, expected_t)
         expected_pdf = expected_tr * _RGB_SIGMA_T[layer_idx]
+        expected_pdf_ratio = expected_pdf / expected_pdf[channel]
+        expected_weight = (
+            0.5 * _RGB_SIGMA_T[layer_idx] * expected_tr / expected_pdf[channel]
+        )
 
-        assert dr.allclose(float(mei.t), float(expected_t), atol=1e-5)
-        assert dr.allclose(tr, expected_tr.tolist(), atol=1e-5)
-        assert dr.allclose(pdf, expected_pdf.tolist(), atol=1e-5)
+        assert dr.allclose(float(dist), float(expected_t), atol=1e-5)
+        assert dr.allclose(weight, expected_weight.tolist(), atol=1e-5)
+        assert dr.allclose(pdf_ratio, expected_pdf_ratio.tolist(), atol=1e-5)
 
 
 def test08_transmittance_eval_rgb(variant_scalar_rgb):
     medium = _create_rgb_medium()
-    si = dr.zeros(mi.SurfaceInteraction3f)
-
     # Three starting heights: full medium, top layer only, mid-layer start
     for z0 in (0.0, 0.5, 0.25):
         ray = mi.Ray3f(mi.Point3f(0.0, 0.0, z0), mi.Vector3f(0.0, 0.0, 1.0))
-        tr = medium.transmittance_eval_analytical(ray, si, True)
+        tr = transmittance(medium, ray)
         expected = _ref_tr_rgb(z0, 1.0)
         assert dr.allclose(tr, expected.tolist(), atol=1e-5)
