@@ -61,7 +61,11 @@ to, say, a :ref:`dielectric <bsdf-dielectric>` or :ref:`roughdielectric
     tracer with spectral MIS <integrator-volpathmis>`, which will produce in a
     significantly less noisy rendered image.
 
-.. warning:: This integrator does not support forward-mode differentiation.
+.. warning:: This integrator is now deprecated, use the
+    :ref:`eovolpath <eovolpath>` integrator instead. This integrator does
+    not support forward-mode differentiation.
+
+
 */
 template <typename Float, typename Spectrum>
 class PiecewiseVolumetricPathIntegrator
@@ -74,19 +78,6 @@ public:
                     MediumPtr, PhaseFunctionContext)
 
     PiecewiseVolumetricPathIntegrator(const Properties &props) : Base(props) {}
-
-    MI_INLINE
-    Float index_spectrum(const UnpolarizedSpectrum &spec,
-                         const UInt32 &idx) const {
-        Float m = spec[0];
-        if constexpr (is_rgb_v<Spectrum>) { // Handle RGB rendering
-            dr::masked(m, idx == 1u) = spec[1];
-            dr::masked(m, idx == 2u) = spec[2];
-        } else {
-            DRJIT_MARK_USED(idx);
-        }
-        return m;
-    }
 
     std::pair<Spectrum, Mask> sample(const Scene *scene, Sampler *sampler,
                                      const RayDifferential3f &ray_,
@@ -211,39 +202,23 @@ public:
             Mask act_null_scatter = false, act_medium_scatter = false,
                  escaped_medium = false;
 
-            // If the medium does not have a spectrally varying extinction,
-            // we can perform a few optimizations to speed up rendering
-            Mask is_spectral  = active_medium;
-            Mask not_spectral = false;
             if (dr::any_or<true>(active_medium)) {
-                is_spectral &= medium->has_spectral_extinction();
-                not_spectral = !is_spectral && active_medium;
-            }
-
-            if (dr::any_or<true>(active_medium)) {
-                UnpolarizedSpectrum tr  = dr::zeros<UnpolarizedSpectrum>();
-                UnpolarizedSpectrum pdf = dr::zeros<UnpolarizedSpectrum>();
-
                 Mask intersect = needs_intersection && active_medium;
                 if (dr::any_or<true>(intersect))
                     dr::masked(si, intersect) =
                         scene->ray_intersect(ray, intersect);
                 needs_intersection &= !active_medium;
 
-                std::tie(mei, tr, pdf) = medium->sample_interaction_analytical(
-                    ray, si, sampler->next_1d(active_medium), channel,
+                Ray3f medium_ray = ray;
+                medium_ray.maxt  = dr::minimum(ray.maxt, si.t);
+                auto [ms, weight] = medium->sample_real_interaction(
+                    medium_ray, sampler->next_1d(active_medium), channel,
                     active_medium);
+                mei = ms.mei;
+                dr::masked(throughput, active_medium) *= weight;
                 dr::masked(ray.maxt, active_medium &&
                                          medium->is_homogeneous() &&
                                          mei.is_valid()) = mei.t;
-
-                dr::masked(mei.t, active_medium && (si.t < mei.t)) =
-                    dr::Infinity<Float>;
-                if (dr::any_or<true>(is_spectral)) {
-                    Float tr_pdf = index_spectrum(pdf, channel);
-                    dr::masked(throughput, is_spectral) *=
-                        dr::select(tr_pdf > 0.f, tr / tr_pdf, 0.f);
-                }
 
                 escaped_medium = active_medium && !mei.is_valid();
                 active_medium &= mei.is_valid();
@@ -259,16 +234,6 @@ public:
             act_medium_scatter &= active;
 
             if (dr::any_or<true>(act_medium_scatter)) {
-                if (dr::any_or<true>(is_spectral))
-                    dr::masked(throughput, is_spectral && act_medium_scatter) *=
-                        mei.sigma_s *
-                        index_spectrum(mei.combined_extinction, channel) /
-                        index_spectrum(mei.sigma_t, channel);
-                if (dr::any_or<true>(not_spectral))
-                    dr::masked(throughput,
-                               not_spectral && act_medium_scatter) *=
-                        mei.sigma_s / mei.sigma_t;
-
                 PhaseFunctionContext phase_ctx(sampler);
                 auto phase = mei.medium->phase_function();
 
@@ -479,8 +444,10 @@ public:
             dr::masked(total_dist, active_surface && !active_medium) += si.t;
 
             if (dr::any_or<true>(active_medium)) {
-                UnpolarizedSpectrum tr =
-                    medium->transmittance_eval_analytical(ray, si, active_medium);
+                Ray3f medium_ray = ray;
+                medium_ray.maxt  = dr::minimum(ray.maxt, si.t);
+                UnpolarizedSpectrum tr = medium->sample_transmittance(
+                    medium_ray, 0.f, 0u, active_medium);
                 dr::masked(transmittance, active_medium) *= tr; // exact estimation
 
                 // consider we automatically escape the medium.
