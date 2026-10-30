@@ -1,5 +1,6 @@
 set(MI_PLUGIN_PREFIX "shapes")
 
+add_plugin(acube acube.cpp)
 add_plugin(arectangle arectangle.cpp)
 add_plugin(instancelist instancelist.cpp)
 
