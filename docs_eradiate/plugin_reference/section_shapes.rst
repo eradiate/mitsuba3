@@ -5,6 +5,8 @@ Shapes
 
 The Eradiate kernel provides two shape plugins:
 
+- ``acube`` — an analytical cube shape, equivalent to Mitsuba's ``rectangle``
+  but with optimized intersection in scalar mode.
 - ``arectangle`` — an axis-aligned rectangle shape, equivalent to
   Mitsuba's ``rectangle`` but with additional support for Eradiate's
   atmospheric scene geometry conventions.
