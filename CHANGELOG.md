@@ -6,7 +6,7 @@ strive to document breaking API changes in the release notes below.
 
 ---
 
-## v0.6.0 (upcoming release)
+## v0.6.0 (3rd November 2026)
 
 ### New features
 
