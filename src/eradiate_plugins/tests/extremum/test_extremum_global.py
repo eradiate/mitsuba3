@@ -15,7 +15,7 @@ def _make_grid_volume(values, n):
     )
 
 
-def test_build(variant_scalar_mono_double):
+def test_build(variant_scalar_mono):
     volume = _make_grid_volume([1.0, 2.0, 3.0, 4.0], 4)
     extremum = mi.load_dict({"type": "extremum_global"})
     extremum.update_extremum(volume.bbox(), volume)
@@ -25,7 +25,7 @@ def test_build(variant_scalar_mono_double):
     assert np.allclose(extremum.eval_1(it), (1.0, 4.0))
 
 
-def test_set_scale(variant_scalar_mono_double):
+def test_set_scale(variant_scalar_mono):
     volume = _make_grid_volume([1.0, 2.0, 3.0, 4.0], 4)
     extremum = mi.load_dict({"type": "extremum_global"})
     extremum.update_extremum(volume.bbox(), volume, 2.0)
@@ -38,7 +38,7 @@ def test_set_scale(variant_scalar_mono_double):
 @pytest.mark.parametrize(
     "medium_type", ["heterogeneous", "eoheterogeneous", "piecewise", "homogeneous"]
 )
-def test_update_on_sigma_t_change(variant_scalar_mono_double, medium_type):
+def test_update_on_sigma_t_change(variant_scalar_mono, medium_type):
     n = 4
     before = [1.0, 2.0, 3.0, 4.0]
     after = [5.0, 6.0, 7.0, 8.0]
@@ -67,7 +67,7 @@ def test_update_on_sigma_t_change(variant_scalar_mono_double, medium_type):
 @pytest.mark.parametrize(
     "medium_type", ["heterogeneous", "eoheterogeneous", "piecewise", "homogeneous"]
 )
-def test_update_on_scale_change(variant_scalar_mono_double, medium_type):
+def test_update_on_scale_change(variant_scalar_mono, medium_type):
     # A scale-only update must go through `set_scale()` without building
     # the extremum structure from `sigma_t`.
     volume = _make_grid_volume([1.0, 2.0, 3.0, 4.0], 4)
@@ -84,3 +84,31 @@ def test_update_on_scale_change(variant_scalar_mono_double, medium_type):
 
     got = np.array(medium.extremum_structure().eval_1(it))
     assert np.allclose(got, (2.0, 8.0))
+
+
+def test_sample_test_sampled(variant_scalar_mono):
+    # Homogeneous majorant of 3.0 over [1, 4]: segment_ot = 3 * 3 = 9.
+    volume = _make_grid_volume([3.0, 3.0], 2)
+    extremum = mi.load_dict({"type": "extremum_global"})
+    extremum.update_extremum(volume.bbox(), volume)
+
+    ray = mi.Ray3f(o=[0.5, 0.5, 0], d=[0, 0, 1])
+    distance, leftover_ot = extremum.sample_test(ray, 1.0, 4.0, target_ot=6.0)
+
+    # target_ot < segment_ot: interaction sampled inside the segment.
+    assert np.allclose(distance, 3.0)
+    assert np.allclose(leftover_ot, 6.0)
+
+
+def test_sample_test_escapes(variant_scalar_mono):
+    # Homogeneous majorant of 3.0 over [1, 4]: segment_ot = 3 * 3 = 9.
+    volume = _make_grid_volume([3.0, 3.0], 2)
+    extremum = mi.load_dict({"type": "extremum_global"})
+    extremum.update_extremum(volume.bbox(), volume)
+
+    ray = mi.Ray3f(o=[0.5, 0.5, 0], d=[0, 0, 1])
+    distance, leftover_ot = extremum.sample_test(ray, 1.0, 4.0, target_ot=12.0)
+
+    # target_ot > segment_ot: ray exits the medium before sampling.
+    assert np.isinf(distance)
+    assert np.allclose(leftover_ot, 3.0)

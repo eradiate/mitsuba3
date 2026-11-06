@@ -310,7 +310,7 @@ def _make_medium(medium_type, volume, extremum):
 
 
 @pytest.mark.parametrize("medium_type", ["heterogeneous", "eoheterogeneous"])
-def test_update_on_sigma_t_change(variant_scalar_mono_double, medium_type):
+def test_update_on_sigma_t_change(variant_scalar_mono, medium_type):
     n = 4
     resolution = mi.ScalarVector3i(1, 1, n)
     before = [1.0, 2.0, 3.0, 4.0]
@@ -333,3 +333,141 @@ def test_update_on_sigma_t_change(variant_scalar_mono_double, medium_type):
 
     got = np.array(mi.traverse(medium.extremum_structure())["data"])
     assert np.allclose(got, expected)
+
+
+def _make_x_volume(values, n, wrap_mode="clamp", to_world=None):
+    # Radial/X resolution must be the grid's fastest (last) axis.
+    data = np.array(values, dtype=float).reshape(1, 1, n)
+    d = {
+        "type": "gridvolume",
+        "grid": mi.VolumeGrid(data),
+        "filter_type": "nearest",
+        "accel": False,
+        "wrap_mode": wrap_mode,
+    }
+    if to_world is not None:
+        d["to_world"] = to_world
+    return mi.load_dict(d)
+
+
+def _make_x_extremum(bbox, volume, n, wrap_mode="clamp"):
+    extremum = mi.load_dict(
+        {
+            "type": "extremum_grid",
+            "resolution": mi.ScalarVector3i(n, 1, 1),
+            "wrap_mode": wrap_mode,
+        }
+    )
+    extremum.update_extremum(bbox, volume)
+    return extremum
+
+
+def test_sample_tight_sampled(variant_scalar_mono):
+    # 4 cells of width 0.25 along x, values [1, 2, 3, 4], domain == volume
+    # bbox. Sampled inside the 4th cell: ot(cell1..3) = 0.25 + 0.5 + 0.75,
+    # leaving 0.1 of the 1.6 target.
+    volume = _make_x_volume([1.0, 2.0, 3.0, 4.0], 4)
+    extremum = _make_x_extremum(volume.bbox(), volume, 4)
+
+    ray = mi.Ray3f(o=[0, 0.5, 0.5], d=[1, 0, 0])
+    distance, leftover_ot = extremum.sample_test(ray, 0.0, 1.0, target_ot=1.6)
+
+    assert np.allclose(distance, 0.775)
+    assert np.allclose(leftover_ot, 0.1)
+
+
+def test_sample_tight_escapes(variant_scalar_mono):
+    # Same setup as `test_sample_tight_sampled`,
+    # total ot = 0.25 * (1 + 2 + 3 + 4) = 2.5, never reached.
+    volume = _make_x_volume([1.0, 2.0, 3.0, 4.0], 4)
+    extremum = _make_x_extremum(volume.bbox(), volume, 4)
+
+    ray = mi.Ray3f(o=[0, 0.5, 0.5], d=[1, 0, 0])
+    distance, leftover_ot = extremum.sample_test(ray, 0.0, 1.0, target_ot=3.0)
+
+    assert np.isinf(distance)
+    assert np.allclose(leftover_ot, 0.5)
+
+
+@pytest.mark.parametrize(
+    "wrap_mode,expected_distance,expected_leftover",
+    [
+        # repeat: cells [1,2,3,4] tile again past x=1, so the target is
+        # spent reaching the 3rd repeated cell (value 3) before landing
+        # 0.1 into the 4th (value 4).
+        ("repeat", 1.775, 0.1),
+        # mirror: past x=1 the pattern reflects to [4,3,2,1], so the
+        # target lands directly in the first (value 4) mirrored cell.
+        ("mirror", 1.45, 0.6),
+        # clamp: past x=1 the whole remainder is one constant segment at
+        # the edge value (4), so the target lands within that segment.
+        ("clamp", 1.4, 0.6),
+    ],
+)
+def test_sample_non_tight_sampled(
+    variant_scalar_mono, wrap_mode, expected_distance, expected_leftover
+):
+    # Domain twice as wide as the volume's own [0, 1] bbox along x: the
+    # second half is only reachable through wrap_mode-driven indexing.
+    volume = _make_x_volume([1.0, 2.0, 3.0, 4.0], 4, wrap_mode=wrap_mode)
+    domain = mi.BoundingBox3f([0, 0, 0], [2, 2, 2])
+    extremum = _make_x_extremum(domain, volume, 4, wrap_mode=wrap_mode)
+
+    ray = mi.Ray3f(o=[0, 0.5, 0.5], d=[1, 0, 0])
+    distance, leftover_ot = extremum.sample_test(ray, 0.0, 2.0, target_ot=4.1)
+
+    assert np.allclose(distance, expected_distance)
+    assert np.allclose(leftover_ot, expected_leftover)
+
+
+@pytest.mark.parametrize("wrap_mode", ["clamp", "repeat", "mirror"])
+def test_sample_rotated_axis_aligned(variant_scalar_mono, wrap_mode):
+    # Volume rotated 90 degrees about z: its local x-variation now runs
+    # along world y. Domain is volume.bbox(), so the ray never leaves it and
+    # wrap_mode has no effect.
+    to_world = mi.ScalarAffineTransform4f.rotate([0, 0, 1], 90)
+    volume = _make_x_volume(
+        [1.0, 2.0, 3.0, 4.0], 4, wrap_mode=wrap_mode, to_world=to_world
+    )
+    extremum = _make_x_extremum(volume.bbox(), volume, 4, wrap_mode=wrap_mode)
+
+    ray = mi.Ray3f(o=[-0.5, 0, 0.5], d=[0, 1, 0])
+    distance, leftover_ot = extremum.sample_test(ray, 0.0, 1.0, target_ot=1.6)
+
+    assert np.allclose(distance, 0.775)
+    assert np.allclose(leftover_ot, 0.1)
+
+
+@pytest.mark.parametrize(
+    "wrap_mode,expected_distance,expected_leftover",
+    [
+        # The 2 gap cells both clip to cell 0 into one 0.75-long segment.
+        ("clamp", 1.0 + 0.35 / 3.0, 0.35),
+        # The gap cells wrap to the last 2 real cells (values 3, 4).
+        ("repeat", 0.4625, 0.85),
+        # The gap cells reflect to values (2, 1).
+        ("mirror", 1.0 + 0.1 / 3.0, 0.1),
+    ],
+)
+def test_sample_rotated(
+    variant_scalar_mono, wrap_mode, expected_distance, expected_leftover
+):
+    # Rotated 45 degrees about z, so the local x-variation runs diagonally
+    # in world space. The domain is the tightest axis-aligned box around the
+    # leaving a triangular gap between the box and the volume's actual footprint.
+    # Start on the domain edge, at local x=-0.5, 2 cells before the real
+    # data starts at x=0 heading inward.
+    to_world = mi.ScalarAffineTransform4f.rotate([0, 0, 1], 45)
+    volume = _make_x_volume(
+        [1.0, 2.0, 3.0, 4.0], 4, wrap_mode=wrap_mode, to_world=to_world
+    )
+    extremum = _make_x_extremum(volume.bbox(), volume, 4, wrap_mode=wrap_mode)
+
+    ray = mi.Ray3f(
+        o=to_world @ mi.ScalarPoint3f(-0.5, 0.5, 0.5),
+        d=to_world @ mi.ScalarVector3f(1, 0, 0),
+    )
+    distance, leftover_ot = extremum.sample_test(ray, 0.0, 1.5, target_ot=1.6)
+
+    assert np.allclose(distance, expected_distance)
+    assert np.allclose(leftover_ot, expected_leftover)
