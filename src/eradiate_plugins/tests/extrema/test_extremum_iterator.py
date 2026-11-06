@@ -98,25 +98,29 @@ def _structures():
     return [
         (
             "global",
-            _extremum(_grid_volume((4, 4, 4)), "extremum_global", None),
+            _extremum(_grid_volume((4, 4, 4)), "globalextremum", None),
             _rays(),
             (0.0, 1.0),
         ),
         (
             "grid",
-            _extremum(_grid_volume((4, 5, 3)), "extremum_grid", (2, 3, 3)),
+            _extremum(_grid_volume((4, 5, 3)), "gridextremum", (2, 3, 3)),
             _rays(),
             (0.0, 1.0),
         ),
         (
             "radial",
-            _extremum(_spherical_volume((4, 4, 4)), "extremum_spherical", (4, 1, 1)),
+            _extremum(
+                _spherical_volume((4, 4, 4)), "sphericalcoordsextremum", (4, 1, 1)
+            ),
             _spherical_rays(),
             (-1.0, 1.0),
         ),
         (
             "spherical_3d",
-            _extremum(_spherical_volume((4, 4, 4)), "extremum_spherical", (3, 4, 4)),
+            _extremum(
+                _spherical_volume((4, 4, 4)), "sphericalcoordsextremum", (3, 4, 4)
+            ),
             _spherical_rays(),
             (-1.0, 1.0),
         ),
@@ -291,7 +295,7 @@ def _step_grid(**props):
             },
             "albedo": 0.8,
             "has_spectral_extinction": False,
-            "extremum_structure": {"type": "extremum_global"},
+            "extremum": {"type": "globalextremum"},
             **props,
         }
     )
@@ -317,7 +321,7 @@ def _shells():
             },
             "albedo": 0.8,
             "has_spectral_extinction": False,
-            "extremum_structure": {"type": "extremum_spherical"},
+            "extremum": {"type": "sphericalcoordsextremum"},
         }
     )
 

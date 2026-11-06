@@ -1,5 +1,5 @@
 """Lattice tiling of extremum structures by ``repeat`` media
-(``extremum_repeat``)."""
+(``repeatextremum``)."""
 
 import drjit as dr
 import mitsuba as mi
@@ -19,12 +19,12 @@ def _tiled(lattice, region=FAR):
         }
     )
     inner = mi.load_dict(
-        {"type": "extremum_grid", "resolution": mi.ScalarVector3i(2, 1, 1)}
+        {"type": "gridextremum", "resolution": mi.ScalarVector3i(2, 1, 1)}
     )
     inner.update_extremum(volume.bbox(), volume)
     return mi.load_dict(
         {
-            "type": "extremum_repeat",
+            "type": "repeatextremum",
             "inner": inner,
             "lattice": mi.ScalarVector3f(lattice),
             "bbox_min": mi.ScalarPoint3f(*region[0]),

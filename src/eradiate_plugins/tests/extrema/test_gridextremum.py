@@ -23,9 +23,7 @@ def generate_extremum_grid(
             "to_world": transform,
         }
     )
-    extremum_struct = mi.load_dict(
-        {"type": "extremum_grid", "resolution": extremum_res}
-    )
+    extremum_struct = mi.load_dict({"type": "gridextremum", "resolution": extremum_res})
     extremum_struct.update_extremum(volume.bbox(), volume)
 
     extremum_grid = mi.traverse(extremum_struct)["data"].numpy()
@@ -197,7 +195,7 @@ def test_build_adaptive_full(variant_scalar_rgb):
     )
 
     extremum_struct = mi.load_dict(
-        {"type": "extremum_grid", "resolution": mi.ScalarVector3i(0, 0, 0)}
+        {"type": "gridextremum", "resolution": mi.ScalarVector3i(0, 0, 0)}
     )
     extremum_struct.update_extremum(volume.bbox(), volume)
 
@@ -236,7 +234,7 @@ def test_build_adaptive_partial(variant_scalar_rgb):
     fixed_y, fixed_z = 4, 2
     extremum_struct = mi.load_dict(
         {
-            "type": "extremum_grid",
+            "type": "gridextremum",
             "resolution": mi.ScalarVector3i(0, fixed_y, fixed_z),
         }
     )
@@ -278,7 +276,7 @@ def test_build_resolution_clamped_to_volume(variant_scalar_rgb):
 
     extremum_struct = mi.load_dict(
         {
-            "type": "extremum_grid",
+            "type": "gridextremum",
             "resolution": mi.ScalarVector3i(n_x, n_y * 2, n_z),
         }
     )
@@ -319,13 +317,13 @@ def test_update_on_sigma_t_change(variant_scalar_mono, medium_type):
     after = [5.0, 6.0, 7.0, 8.0]
 
     volume = _make_grid_volume(before, n)
-    extremum = mi.load_dict({"type": "extremum_grid", "resolution": resolution})
+    extremum = mi.load_dict({"type": "gridextremum", "resolution": resolution})
     medium = _make_medium(medium_type, volume, extremum)
 
     # Ground truth: an extremum structure built directly from the "after"
     # data, independently of the update mechanism under test.
     ref_volume = _make_grid_volume(after, n)
-    ref_extremum = mi.load_dict({"type": "extremum_grid", "resolution": resolution})
+    ref_extremum = mi.load_dict({"type": "gridextremum", "resolution": resolution})
     ref_extremum.update_extremum(ref_volume.bbox(), ref_volume)
     expected = np.array(mi.traverse(ref_extremum)["data"])
 
@@ -356,7 +354,7 @@ def _make_x_volume(values, n, wrap_mode="clamp", wrap=True, to_world=None):
 def _make_x_extremum(bbox, volume, n):
     extremum = mi.load_dict(
         {
-            "type": "extremum_grid",
+            "type": "gridextremum",
             "resolution": mi.ScalarVector3i(n, 1, 1),
         }
     )

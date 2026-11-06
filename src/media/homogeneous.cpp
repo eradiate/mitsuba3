@@ -135,8 +135,8 @@ template <typename Float, typename Spectrum>
 class HomogeneousMedium final : public Medium<Float, Spectrum> {
 public:
 // #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
-    MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction, m_phase_function, m_extremum_structure, m_extrema)
-    MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, ExtremumStructure)
+    MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction, m_phase_function, m_extremum, m_extrema)
+    MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, Extremum)
 
     HomogeneousMedium(const Properties &props) : Base(props) {
         m_is_homogeneous = true;
@@ -147,14 +147,12 @@ public:
         m_has_spectral_extinction = props.get<bool>("has_spectral_extinction", true);
 
         // Create a default global extremum structure
-        m_extremum_structure =
-            PluginManager::instance()->create_object<ExtremumStructure>(Properties("extremum_global"));
-        m_extrema = { m_extremum_structure };
+        m_extremum =
+            PluginManager::instance()->create_object<Extremum>(Properties("globalextremum"));
+        m_extrema = { m_extremum };
 
-        m_extremum_structure->update_extremum(
-            ScalarBoundingBox3f(-dr::Infinity<ScalarFloat>,
-                                dr::Infinity<ScalarFloat>),
-            m_sigmat.get(), m_scale);
+        ScalarBoundingBox3f extr_bbox(-dr::Infinity<ScalarFloat>, dr::Infinity<ScalarFloat>);
+        m_extremum->update_extremum(extr_bbox, m_sigmat.get(), m_scale);
         // #ERADIATE_CHANGE_END
     }
 
@@ -167,14 +165,13 @@ public:
 
 // #ERADIATE_CHANGE_BEGIN:
     void parameters_changed(const std::vector<std::string> &keys = {}) override {
-        if (string::contains(keys, "sigma_t"))
-            m_extremum_structure->update_extremum(
-                ScalarBoundingBox3f(-dr::Infinity<ScalarFloat>,
-                                    dr::Infinity<ScalarFloat>),
-                m_sigmat.get(), std::nullopt);
+        if (string::contains(keys, "sigma_t")) {
+            ScalarBoundingBox3f extr_bbox(-dr::Infinity<ScalarFloat>, dr::Infinity<ScalarFloat>);
+            m_extremum->update_extremum(extr_bbox, m_sigmat.get(), std::nullopt);
+        }
 
         if (string::contains(keys, "scale"))
-            m_extremum_structure->set_scale(m_scale);
+            m_extremum->set_scale(m_scale);
     }
 // #ERADIATE_CHANGE_END
 

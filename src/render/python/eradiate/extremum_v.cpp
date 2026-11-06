@@ -56,22 +56,15 @@ MI_PY_EXPORT(ExtremumState) {
 }
 
 /// Trampoline for derived types implemented in Python
-MI_VARIANT class PyExtremumStructure : public ExtremumStructure<Float, Spectrum> {
+MI_VARIANT class PyExtremum : public Extremum<Float, Spectrum> {
 public:
-    MI_IMPORT_TYPES(ExtremumStructure, Volume)
-    NB_TRAMPOLINE(ExtremumStructure, 7);
+    MI_IMPORT_TYPES(Extremum, Volume)
+    NB_TRAMPOLINE(Extremum, 6);
 
-    PyExtremumStructure(const Properties &props) : ExtremumStructure(props) {}
+    PyExtremum(const Properties &props) : Extremum(props) {}
 
     void build(const Volume * volume) override {
         NB_OVERRIDE_PURE(build, volume);
-    }
-
-    std::tuple<Float, Float> eval_1(
-        const Interaction3f &it,
-        Mask active
-    ) const override {
-        NB_OVERRIDE_PURE(eval_1, it, active);
     }
 
     ExtremumState begin(const Ray3f &ray, Float mint, Float maxt,
@@ -101,42 +94,39 @@ public:
         NB_OVERRIDE(parameters_changed, keys);
     }
 
-    DR_TRAMPOLINE_TRAVERSE_CB(ExtremumStructure)
+    DR_TRAMPOLINE_TRAVERSE_CB(Extremum)
 };
 
-MI_PY_EXPORT(ExtremumStructure) {
-    MI_PY_IMPORT_TYPES(ExtremumStructure)
-    using PyExtremumStructure = PyExtremumStructure<Float, Spectrum>;
+MI_PY_EXPORT(Extremum) {
+    MI_PY_IMPORT_TYPES(Extremum)
+    using PyExtremum = PyExtremum<Float, Spectrum>;
     using Properties = mitsuba::Properties;
 
-    auto extremum = MI_PY_TRAMPOLINE_CLASS(PyExtremumStructure, ExtremumStructure, Object)
+    auto extremum = MI_PY_TRAMPOLINE_CLASS(PyExtremum, Extremum, Object)
         .def(nb::init<const Properties &>(), "props"_a)
-        .def("__repr__", &ExtremumStructure::to_string)
-        .def("set_bbox", &ExtremumStructure::set_bbox,
-             "bbox"_a, D(ExtremumStructure, set_bbox))
-        .def("set_scale", &ExtremumStructure::set_scale,
-             "scale"_a, D(ExtremumStructure, set_scale))
-        .def("update_extremum", &ExtremumStructure::update_extremum,
+        .def("__repr__", &Extremum::to_string)
+        .def("set_bbox", &Extremum::set_bbox,
+             "bbox"_a, D(Extremum, set_bbox))
+        .def("set_scale", &Extremum::set_scale,
+             "scale"_a, D(Extremum, set_scale))
+        .def("update_extremum", &Extremum::update_extremum,
              "bbox"_a, "volume"_a, "scale"_a = nb::none(),
-             D(ExtremumStructure, update_extremum))
-        .def("build", &ExtremumStructure::build,
-             "volume"_a, D(ExtremumStructure, build))
-        .def("bbox", &ExtremumStructure::bbox, D(ExtremumStructure, bbox))
-        .def("begin", &ExtremumStructure::begin,
+             D(Extremum, update_extremum))
+        .def("build", &Extremum::build,
+             "volume"_a, D(Extremum, build))
+        .def("bbox", &Extremum::bbox, D(Extremum, bbox))
+        .def("begin", &Extremum::begin,
              "ray"_a, "mint"_a, "maxt"_a, "active"_a = true,
-             D(ExtremumStructure, begin))
+             D(Extremum, begin))
         .def("next",
-             [](const ExtremumStructure *ptr, ExtremumState state,
+             [](const Extremum *ptr, ExtremumState state,
                 const Ray3f &ray, Mask active) {
                  ExtremumSegment segment = ptr->next(state, ray, active);
                  return std::make_pair(segment, state);
              },
              "state"_a, "ray"_a, "active"_a = true,
              "Test utility: ``next`` on a copy of ``state``. Returns "
-             "(segment, advanced state).")
-        .def("eval_1", &ExtremumStructure::eval_1,
-             "it"_a, "active"_a = true,
-             D(ExtremumStructure, eval_1));
+             "(segment, advanced state).");
 
     drjit::bind_traverse(extremum);
 }
