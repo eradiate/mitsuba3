@@ -110,26 +110,6 @@ Medium<Float, Spectrum>::transmittance_eval_pdf(const MediumInteraction3f &mi,
 }
 
 // #ERADIATE_CHANGE_BEGIN: Piecewise Traversal & Extremum Traversal & Overlapping Media & DDIS
-MI_VARIANT
-std::tuple<typename Medium<Float, Spectrum>::MediumInteraction3f,
-           typename Medium<Float, Spectrum>::UnpolarizedSpectrum,
-           typename Medium<Float, Spectrum>::UnpolarizedSpectrum>
-Medium<Float, Spectrum>::sample_interaction_analytical(const Ray3f &/*ray*/,
-                                            const Interaction3f &/*it*/, Float /*sample*/,
-                                            UInt32 /*channel*/, Mask /*active*/) const {
-    // PiecewiseVolPathIntegrator should only be used with piecewise medium
-    NotImplementedError("sample_interaction_analytical");
-}
-
-MI_VARIANT
-typename Medium<Float, Spectrum>::UnpolarizedSpectrum
-Medium<Float, Spectrum>::transmittance_eval_analytical(const Ray3f &/*ray*/,
-                                    const Interaction3f &/*it*/,
-                                    Mask /*active*/) const {
-    // PiecewiseVolPathIntegrator should only be used with piecewise medium
-    NotImplementedError("transmittance_eval_analytical");
-}
-
 /// Helper function to index the channel of an ``UnpolarizedSpectrum``.
 template <typename Float, typename Spectrum>
 MI_INLINE Float index_spectrum(const unpolarized_spectrum_t<Spectrum> &spec,
