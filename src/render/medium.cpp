@@ -8,6 +8,7 @@
 #include <mitsuba/render/eradiate/extremum_segment.h>
 // #ERADIATE_CHANGE_BEGIN: Extremum tracking
 #include <mitsuba/core/random.h>
+#include <mitsuba/render/eradiate/phase_utils.h>
 #include <drjit/while_loop.h>
 // #ERADIATE_CHANGE_END
 
@@ -28,9 +29,10 @@ MI_VARIANT Medium<Float, Spectrum>::Medium(const Properties &props)
             m_phase_function = phase;
         }
     }
-// #ERADIATE_CHANGE_BEGIN: tracking property.
+// #ERADIATE_CHANGE_BEGIN: DDIS && tracking property.
     m_use_rrt = props.get<bool>("use_rrt", true);
     m_rr_threshold = props.get<ScalarFloat>("rr_threshold", 0.f);
+    m_ddis_threshold = props.get<ScalarFloat>("ddis_threshold", 0.f);
 // #ERADIATE_CHANGE_END
 
     if (!m_phase_function) {
@@ -48,6 +50,8 @@ MI_VARIANT void Medium<Float, Spectrum>::traverse(TraversalCallback *cb) {
     cb->put("phase_function", m_phase_function, ParamFlags::Differentiable);
 // #ERADIATE_CHANGE_BEGIN: Traverse extremum structure
     cb->put("extremum", m_extremum, ParamFlags::NonDifferentiable);
+    if (m_ddis_phase_function)
+        cb->put("ddis_phase_function", m_ddis_phase_function, ParamFlags::Differentiable);
 // #ERADIATE_CHANGE_END
 }
 
@@ -432,35 +436,50 @@ Medium<Float, Spectrum>::eval_component(const MediumInteraction3f &mei,
 }
 
 MI_VARIANT
-ref<typename Medium<Float, Spectrum>::PhaseFunction>
-Medium<Float, Spectrum>::create_ddis_phase_function() {
+std::pair<DynamicBuffer<Float>, DynamicBuffer<Float>>
+Medium<Float, Spectrum>::ddis_envelope() const {
     using FloatStorage = DynamicBuffer<Float>;
 
-    // Create the DDIS phase function as a tabulated function of the
-    // max function of the underlying phase function.
-    auto phase = phase_function();
-    FloatStorage nodes  = phase->get_envelope_nodes();
-    FloatStorage values = dr::zeros<FloatStorage>(dr::width(nodes));
-    m_phase_function->accumulate_envelope(nodes, values);
+    // Compute envelope nodes from all phase function
+    std::vector<FloatStorage> nodes_list;
+    for (uint32_t i = 0; i < component_count(); ++i) {
+        const PhaseFunction *phase = phase_function_component(i);
+        nodes_list.push_back( phase->get_envelope_nodes() );
+    }
+    FloatStorage nodes = merge_envelope_nodes( nodes_list );
 
-    auto pmgr = PluginManager::instance();
+    // Compute envelope values from envelope nodes and phase function
+    FloatStorage values = dr::zeros<FloatStorage>(dr::width(nodes));
+    for (uint32_t i = 0; i < component_count(); ++i) {
+        const PhaseFunction *phase = phase_function_component(i);
+        phase->accumulate_envelope(nodes, values);
+    }
+
+    return { nodes, values };
+}
+
+MI_VARIANT
+void Medium<Float, Spectrum>::create_ddis_phase_function() {
+    if (m_ddis_threshold <= 0.f || m_ddis_phase_function)
+        return;
+
+    auto [nodes, values] = ddis_envelope();
     Properties props_ddis("tabphase_irregular");
-    size_t shape = nodes.size();
+    size_t shape = dr::width(nodes);
     props_ddis.set_any("nodes", TensorXf(std::move(nodes), 1, &shape));
     props_ddis.set_any("values", TensorXf(std::move(values), 1, &shape));
-    return pmgr->create_object<PhaseFunction>(props_ddis);
+    m_ddis_phase_function =
+        PluginManager::instance()->create_object<PhaseFunction>(props_ddis);
 }
 
 MI_VARIANT
 void Medium<Float, Spectrum>::update_ddis_phase_function() {
     using FloatStorage = DynamicBuffer<Float>;
 
-    if (m_ddis_threshold <= 0.f || m_ddis_phase_function == nullptr)
+    if (!m_ddis_phase_function)
         return;
 
-    FloatStorage nodes  = m_phase_function->get_envelope_nodes();
-    FloatStorage values = dr::zeros<FloatStorage>(dr::width(nodes));
-    m_phase_function->accumulate_envelope(nodes, values);
+    auto [nodes, values] = ddis_envelope();
 
     struct ValuesCallback : TraversalCallback {
         FloatStorage *target_nodes = nullptr;

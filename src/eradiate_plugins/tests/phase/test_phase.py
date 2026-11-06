@@ -191,7 +191,9 @@ def _ddis_phase_tree(combo, shared):
     raise ValueError(combo)
 
 
-@pytest.mark.parametrize("medium_type", ["piecewise", "eoheterogeneous"])
+@pytest.mark.parametrize(
+    "medium_type", ["homogeneous", "heterogeneous", "piecewise", "eoheterogeneous"]
+)
 @pytest.mark.parametrize("phase_combo", ["hg", "blendphase", "multiphase"])
 def test_ddis_phase_function_update(
     variant_scalar_mono_double, medium_type, phase_combo
@@ -209,10 +211,21 @@ def test_ddis_phase_function_update(
             medium_type, _ddis_phase_tree(phase_combo, shared)
         ),
     }
-    scene = mi.load_dict({"type": "scene", **media})
+    scene = mi.load_dict(
+        {
+            "type": "scene",
+            **{
+                name: {"type": "cube", "interior": medium}
+                for name, medium in media.items()
+            },
+        }
+    )
 
     params = mi.eradiate.traverse(scene)
-    g_key = next(k for k in params.keys() if k.endswith(".g"))
+    for name, medium in media.items():
+        _assert_ddis_table(params, f"{name}.interior_medium", [medium.phase_function()])
+
+    g_key = next(k for k in params.keys() if k.endswith(".g"))  # noqa: SIM118
     params[g_key] = 0.8
     params.update()
 
@@ -220,15 +233,100 @@ def test_ddis_phase_function_update(
         # Recompute the expected DDIS envelope directly from the medium's
         # (now updated) phase function, and compare against the DDIS phase
         # function's tabulated values exposed as scene parameters.
-        phase = medium.phase_function()
-        nodes = phase.get_envelope_nodes()
-        expected = dr.zeros(type(nodes), dr.width(nodes))
-        phase.accumulate_envelope(nodes, expected)
+        _assert_ddis_table(params, f"{name}.interior_medium", [medium.phase_function()])
 
-        got = params[f"{name}.ddis_phase_function.values"]
-        assert dr.allclose(got, expected), (
-            f"DDIS phase function of medium '{name}' was not updated"
-        )
+
+def _scene_with_medium(medium, attach="interior"):
+    """Load a scene that reaches ``medium`` through a shape's interior or
+    exterior, or through a sensor. Return the scene parameters and the key
+    prefix of the medium."""
+    if attach == "sensor":
+        scene = {
+            "type": "scene",
+            "sensor": {
+                "type": "radiancemeter",
+                "origin": [0, 0, 0],
+                "direction": [0, 0, 1],
+                "film": {"type": "hdrfilm", "width": 1, "height": 1},
+                "medium": medium,
+            },
+        }
+        prefix = "sensor.medium"
+    else:
+        scene = {"type": "scene", "box": {"type": "cube", attach: medium}}
+        prefix = f"box.{attach}_medium"
+    return mi.eradiate.traverse(mi.load_dict(scene)), prefix
+
+
+def _ddis_table(params, prefix):
+    return (
+        params[f"{prefix}.ddis_phase_function.nodes"],
+        params[f"{prefix}.ddis_phase_function.values"],
+    )
+
+
+def _assert_ddis_table(params, prefix, phases):
+    """The DDIS table at ``prefix`` is the envelope of ``phases``: their merged
+    nodes and, at each node, the maximum of their values."""
+    storage = type(phases[0].get_envelope_nodes())
+    nodes = storage(
+        np.unique(np.concatenate([np.array(p.get_envelope_nodes()) for p in phases]))
+    )
+    values = dr.zeros(storage, dr.width(nodes))
+    for phase in phases:
+        phase.accumulate_envelope(nodes, values)
+
+    got_nodes, got_values = _ddis_table(params, prefix)
+    assert dr.width(got_nodes) == dr.width(nodes)
+    assert dr.allclose(got_nodes, nodes)
+    assert dr.allclose(got_values, values)
+
+
+@pytest.mark.parametrize("attach", ["interior", "exterior", "sensor"])
+def test_ddis_phase_function_scene_build(variant_scalar_mono_double, attach):
+    """The scene builds the DDIS phase function of a medium it reaches through a
+    shape's interior, a shape's exterior or a sensor."""
+    phase = mi.load_dict({"type": "hg", "g": 0.7})
+    medium = {"type": "homogeneous", "phase": phase, "ddis_threshold": 0.5}
+    params, prefix = _scene_with_medium(medium, attach)
+    _assert_ddis_table(params, prefix, [phase])
+
+
+def test_ddis_phase_function_disabled(variant_scalar_mono_double):
+    """With the default ``ddis_threshold``, no DDIS phase function is built."""
+    medium = {"type": "homogeneous"}
+    params, prefix = _scene_with_medium(medium)
+    assert f"{prefix}.ddis_phase_function.nodes" not in params
+
+
+@pytest.mark.parametrize(
+    "component_thresholds, overlap_threshold, enabled",
+    [
+        ((-1.0, -1.0), None, False),
+        ((-1.0, 0.3), None, True),  # maximum over the components
+        ((0.3, 0.3), -1.0, False),  # an explicit value wins
+        ((-1.0, -1.0), 0.2, True),
+    ],
+)
+def test_ddis_threshold_overlap(
+    variant_scalar_mono_double, component_thresholds, overlap_threshold, enabled
+):
+    """An ``overlap`` uses its own ``ddis_threshold`` when set, the largest of its
+    components' otherwise, and builds a DDIS phase function only if it is
+    positive."""
+    overlap = {"type": "overlap"}
+    for i, threshold in enumerate(component_thresholds):
+        overlap[f"comp_{i}"] = {
+            "type": "piecewise",
+            "sigma_t": 0.5,
+            "albedo": 0.8,
+            "ddis_threshold": threshold,
+        }
+    if overlap_threshold is not None:
+        overlap["ddis_threshold"] = overlap_threshold
+
+    params, prefix = _scene_with_medium(overlap)
+    assert (f"{prefix}.ddis_phase_function.nodes" in params) == enabled
 
 
 def test_ddis_phase_function_overlap_matches_multiphase(variant_scalar_mono_double):
@@ -240,53 +338,112 @@ def test_ddis_phase_function_overlap_matches_multiphase(variant_scalar_mono_doub
     phase1 = mi.load_dict({"type": "isotropic"})
     phase2 = mi.load_dict({"type": "hg", "g": -0.6})
 
-    overlap = mi.load_dict(
-        {
-            "type": "overlap",
-            "comp_a": {
-                "type": "piecewise",
-                "sigma_t": 0.5,
-                "albedo": 0.8,
-                "phase": phase0,
-            },
-            "comp_b": {
-                "type": "piecewise",
-                "sigma_t": 0.3,
-                "albedo": 0.6,
-                "phase": phase1,
-            },
-            "comp_c": {
-                "type": "piecewise",
-                "sigma_t": 0.7,
-                "albedo": 0.9,
-                "phase": phase2,
-            },
-        }
-    )
-    multiphase_ref = mi.load_dict(
-        {
+    overlap = {
+        "type": "overlap",
+        "comp_a": {
             "type": "piecewise",
             "sigma_t": 0.5,
             "albedo": 0.8,
-            "phase": {
-                "type": "multiphase",
-                "phase0": phase0,
-                "weight_0": 1.0,
-                "phase1": phase1,
-                "weight_1": 2.5,
-                "phase2": phase2,
-                "weight_2": 0.4,
-            },
-        }
-    )
+            "phase": phase0,
+            "ddis_threshold": 0.5,
+        },
+        "comp_b": {
+            "type": "piecewise",
+            "sigma_t": 0.3,
+            "albedo": 0.6,
+            "phase": phase1,
+            "ddis_threshold": 0.5,
+        },
+        "comp_c": {
+            "type": "piecewise",
+            "sigma_t": 0.7,
+            "albedo": 0.9,
+            "phase": phase2,
+            "ddis_threshold": 0.5,
+        },
+    }
+    multiphase_ref = {
+        "type": "piecewise",
+        "sigma_t": 0.5,
+        "albedo": 0.8,
+        "phase": {
+            "type": "multiphase",
+            "phase0": phase0,
+            "weight_0": 1.0,
+            "phase1": phase1,
+            "weight_1": 2.5,
+            "phase2": phase2,
+            "weight_2": 0.4,
+        },
+        "ddis_threshold": 0.5,
+    }
 
-    overlap_params = mi.eradiate.traverse(overlap)
-    ref_params = mi.eradiate.traverse(multiphase_ref)
+    overlap_params, overlap_prefix = _scene_with_medium(overlap)
+    ref_params, ref_prefix = _scene_with_medium(multiphase_ref)
 
-    got_nodes = overlap_params["ddis_phase_function.nodes"]
-    got_values = overlap_params["ddis_phase_function.values"]
-    expected_nodes = ref_params["ddis_phase_function.nodes"]
-    expected_values = ref_params["ddis_phase_function.values"]
+    got_nodes, got_values = _ddis_table(overlap_params, overlap_prefix)
+    expected_nodes, expected_values = _ddis_table(ref_params, ref_prefix)
 
+    assert dr.width(got_nodes) == dr.width(expected_nodes)
     assert dr.allclose(got_nodes, expected_nodes)
     assert dr.allclose(got_values, expected_values)
+
+    # The scene only reaches the components through the overlap, so they get
+    # no DDIS phase function of their own.
+    for i in range(3):
+        key = f"{overlap_prefix}.component{i}.ddis_phase_function.nodes"
+        assert key not in overlap_params
+
+
+def test_ddis_phase_function_overlap_update(variant_scalar_mono_double):
+    """Changing a component's phase function refreshes the ``overlap``'s DDIS
+    phase function, and does not build one for the component."""
+    phases = [mi.load_dict({"type": "hg", "g": g}) for g in (0.3, -0.6)]
+    overlap = {"type": "overlap"}
+    for i, phase in enumerate(phases):
+        overlap[f"comp_{i}"] = {
+            "type": "piecewise",
+            "sigma_t": 0.5,
+            "albedo": 0.8,
+            "phase": phase,
+            "ddis_threshold": 0.5,
+        }
+
+    params, prefix = _scene_with_medium(overlap)
+    params[f"{prefix}.component1.phase_function.g"] = 0.9
+    params.update()
+    _assert_ddis_table(params, prefix, phases)
+    for i in range(2):
+        assert f"{prefix}.component{i}.ddis_phase_function.nodes" not in params
+
+
+def test_ddis_phase_function_repeat(variant_scalar_mono_double):
+    """A ``repeat`` of an ``overlap`` builds its DDIS phase function from every
+    component of the inner medium and refreshes it when one of them changes; the
+    inner ``overlap`` builds none."""
+    phases = [mi.load_dict({"type": "hg", "g": g}) for g in (0.3, -0.6)]
+    inner = {"type": "overlap"}
+    for i, phase in enumerate(phases):
+        inner[f"comp_{i}"] = {
+            "type": "eoheterogeneous",
+            "sigma_t": {"type": "constvolume", "value": 1.0},
+            "albedo": 0.8,
+            "aabb_min": mi.ScalarPoint3f(0.0),
+            "aabb_max": mi.ScalarPoint3f(1.0),
+            "phase": phase,
+            "ddis_threshold": 0.5,
+        }
+    repeat = {
+        "type": "repeat",
+        "inner": inner,
+        "aabb_min": mi.ScalarPoint3f(-20.0),
+        "aabb_max": mi.ScalarPoint3f(20.0),
+    }
+
+    params, prefix = _scene_with_medium(repeat)
+    _assert_ddis_table(params, prefix, phases)
+
+    params[f"{prefix}.inner.component1.phase_function.g"] = 0.9
+    params.update()
+    _assert_ddis_table(params, prefix, phases)
+    assert f"{prefix}.inner.ddis_phase_function.nodes" not in params

@@ -153,7 +153,8 @@ class HeterogeneousMedium final : public Medium<Float, Spectrum> {
 public:
 // #ERADIATE_CHANGE_BEGIN: Extremum iterators
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
-                    m_phase_function, m_extremum, m_extrema)
+                    m_phase_function, m_extremum, m_extrema,
+                    update_ddis_phase_function)
     MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, Extremum)
 // #ERADIATE_CHANGE_END
 
@@ -198,6 +199,9 @@ public:
 // #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
     void parameters_changed(const std::vector<std::string> &keys = {}) override {
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
+
+        if(string::contains(keys, "phase_function"))
+            update_ddis_phase_function();
 
         if (string::contains(keys, "sigma_t"))
             m_extremum->update_extremum(

@@ -185,6 +185,12 @@ public:
         return m_phase_function.get();
     }
 
+    /// Return the phase function of the \c component of this medium
+    virtual const PhaseFunction *
+    phase_function_component(ScalarUInt32 /*component*/) const {
+        return m_phase_function.get();
+    }
+
     /**
      * \brief Phase function of \c component, and the interaction at which
      * to evaluate it.
@@ -235,22 +241,24 @@ public:
      * changed.
      *
      * This method is to be called by media's `parameters_changed()` anytime
-     * its phase function is modified. The default implementation
-     * is a no-op; subclasses that maintain a DDIS phase function override it.
+     * its phase function is modified.
      */
-    virtual void update_ddis_phase_function();
+    void update_ddis_phase_function();
+
+    /**
+     * \brief Create the DDIS phase function from its components phases.
+     *
+     * This method is called by the ``Scene``'s constructor and builds a DDIS
+     * phase function on any root media held by a shape or or a sensor.
+     */
+    void create_ddis_phase_function();
 
 protected:
-    /**
-     * \brief Create the tabphase irregular plugin used as DDIS phase function.
-     *
-     * This method is an helper function for child classes.
-     */
-    virtual ref<PhaseFunction> create_ddis_phase_function();
+    std::pair<DynamicBuffer<Float>, DynamicBuffer<Float>> ddis_envelope() const;
 
 public:
-
 // #ERADIATE_CHANGE_END
+
     void traverse(TraversalCallback *callback) override;
 
     /// Return a human-readable representation of the Medium
@@ -290,8 +298,8 @@ protected:
     /// Ratio tracking Russian roulette threshold, disabled if not positive.
     ScalarFloat m_rr_threshold = 0.f;
 
-    ref<PhaseFunction> m_ddis_phase_function = nullptr;
-    ScalarFloat m_ddis_threshold = 0.f;
+    ref<PhaseFunction> m_ddis_phase_function;
+    ScalarFloat m_ddis_threshold;
 
     MI_DECLARE_TRAVERSE_CB(m_phase_function, m_extremum,
                            m_ddis_phase_function, m_ddis_threshold)

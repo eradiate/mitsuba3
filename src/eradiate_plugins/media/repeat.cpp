@@ -51,9 +51,8 @@ template <typename Float, typename Spectrum>
 class RepeatMedium final : public Medium<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
-                    m_phase_function, m_extrema,
-                    m_ddis_phase_function, m_ddis_threshold,
-                    ddis_phase_function, ddis_threshold
+                    m_phase_function, m_extrema, m_ddis_threshold,
+                    update_ddis_phase_function
                 )
     MI_IMPORT_TYPES(Scene, Sampler, PhaseFunction, PhaseFunctionPtr,
                     Extremum)
@@ -112,15 +111,19 @@ public:
             m_extrema.push_back(extremum);
         }
 
-        m_ddis_threshold = m_inner->ddis_threshold();
-        m_ddis_phase_function = const_cast<PhaseFunction *>(m_inner->ddis_phase_function());
+        if (!props.has_property("ddis_threshold")) {
+            m_ddis_threshold = m_inner->ddis_threshold();
+        }
     }
 
     void traverse(TraversalCallback *cb) override {
         cb->put("inner", m_inner, ParamFlags::Differentiable);
-        if (m_ddis_phase_function != nullptr)
-            cb->put("ddis_phase_function",m_ddis_phase_function, ParamFlags::Differentiable);
         Base::traverse(cb);
+    }
+
+    void parameters_changed(const std::vector<std::string> &keys) override {
+        if(string::contains(keys, "inner"))
+            update_ddis_phase_function();
     }
 
     UnpolarizedSpectrum
@@ -158,6 +161,10 @@ public:
     phase_function(const MediumInteraction3f &mei, const UInt32 &component,
                    Mask active) const override {
         return m_inner->phase_function(fold(mei), component, active);
+    }
+
+    const PhaseFunction *phase_function_component(ScalarUInt32 component) const override {
+        return m_inner->phase_function_component(component);
     }
 
     std::tuple<Mask, Float, Float>

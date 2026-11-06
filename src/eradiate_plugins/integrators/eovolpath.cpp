@@ -482,8 +482,10 @@ public:
             UInt32 medium_component = 0;
 
             if (dr::any_or<true>(active_medium)) {
-                dr::masked(ddis_threshold, active_medium && m_use_ddis) =
-                    medium->ddis_threshold();
+                Mask has_ddis_phase = medium->ddis_phase_function() != nullptr;
+
+                dr::masked(ddis_threshold,
+                    active_medium && m_use_ddis && has_ddis_phase) = medium->ddis_threshold();
 
                 auto [ms, weight] = medium->sample_real_interaction(
                     ray, sampler->next_1d(active_medium), channel,
