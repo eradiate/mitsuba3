@@ -151,9 +151,11 @@ and both parameters are allowed to be spectrally varying.
 template <typename Float, typename Spectrum>
 class HeterogeneousMedium final : public Medium<Float, Spectrum> {
 public:
+// #ERADIATE_CHANGE_BEGIN: Extremum iterators
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
-                    m_phase_function, m_extremum_structure)
-    MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, ExtremumStructure, ExtremumStructurePtr)
+                    m_phase_function, m_extremum_structure, m_extrema)
+    MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, ExtremumStructure)
+// #ERADIATE_CHANGE_END
 
     HeterogeneousMedium(const Properties &props) : Base(props) {
         m_is_homogeneous = false;
@@ -164,7 +166,6 @@ public:
         m_has_spectral_extinction = props.get<bool>("has_spectral_extinction", true);
 
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
-        m_min_density = dr::opaque<Float>(m_scale * m_sigmat->min());
 
 // #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
         for (auto &prop : props.objects()) {
@@ -180,6 +181,7 @@ public:
             m_extremum_structure =
                 PluginManager::instance()->create_object<ExtremumStructure>(Properties("extremum_global"));
         }
+        m_extrema = { m_extremum_structure };
 
         m_extremum_structure->update_extremum(
             m_sigmat->bbox(), m_sigmat.get(), m_scale);
@@ -196,7 +198,6 @@ public:
 // #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
     void parameters_changed(const std::vector<std::string> &keys = {}) override {
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
-        m_min_density = dr::opaque<Float>(m_scale * m_sigmat->min());
 
         if (string::contains(keys, "sigma_t"))
             m_extremum_structure->update_extremum(
@@ -213,15 +214,6 @@ public:
         MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
         return m_max_density;
     }
-
-// #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
-    UnpolarizedSpectrum
-    get_minorant(const MediumInteraction3f & /* mi */,
-                 Mask active) const override {
-        MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
-        return m_min_density;
-    }
-// #ERADIATE_CHANGE_END
 
     std::tuple<UnpolarizedSpectrum, UnpolarizedSpectrum, UnpolarizedSpectrum>
     get_scattering_coefficients(const MediumInteraction3f &mi,
@@ -242,6 +234,13 @@ public:
         return m_sigmat->bbox().ray_intersect(ray);
     }
 
+// #ERADIATE_CHANGE_BEGIN: Overlapping media
+    virtual Mask
+    in_aabb(const Point3f &pos) const override {
+        return m_sigmat->bbox().contains(pos);
+    }
+// #ERADIATE_CHANGE_END
+
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "HeterogeneousMedium[" << std::endl
@@ -260,9 +259,6 @@ private:
     ref<Volume> m_sigmat, m_albedo;
     ScalarFloat m_scale;
     Float m_max_density;
-// #ERADIATE_CHANGE_BEGIN: Refactored for extremum structure support
-    Float m_min_density;
-// #ERADIATE_CHANGE_END
 
     MI_TRAVERSE_CB(Base, m_sigmat, m_albedo, m_max_density)
 };

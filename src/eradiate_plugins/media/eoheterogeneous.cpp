@@ -87,12 +87,12 @@ template <typename Float, typename Spectrum>
 class EOHeterogeneousMedium final : public Medium<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Medium, m_is_homogeneous, m_has_spectral_extinction,
-                    m_phase_function, m_extremum_structure,
+                    m_phase_function, m_extremum_structure, m_extrema,
                     m_ddis_phase_function, m_ddis_threshold,
                     create_ddis_phase_function, update_ddis_phase_function
                 )
     MI_IMPORT_TYPES(Scene, Sampler, Texture, Volume, ExtremumStructure,
-                    ExtremumStructurePtr, PhaseFunction)
+                    PhaseFunction)
     using FloatStorage = DynamicBuffer<Float>;
 
     EOHeterogeneousMedium(const Properties &props) : Base(props) {
@@ -104,7 +104,6 @@ public:
         m_has_spectral_extinction = props.get<bool>("has_spectral_extinction", true);
 
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
-        m_min_density = dr::opaque<Float>(m_scale * m_sigmat->min());
 
         for (auto &prop : props.objects()) {
             if (auto *extremum = prop.try_get<ExtremumStructure>()) {
@@ -119,6 +118,7 @@ public:
             m_extremum_structure =
                 PluginManager::instance()->create_object<ExtremumStructure>(Properties("extremum_global"));
         }
+        m_extrema = { m_extremum_structure };
 
         m_ddis_threshold = props.get<ScalarFloat>("ddis_threshold", 0.1f);
 
@@ -151,7 +151,6 @@ public:
 
     void parameters_changed(const std::vector<std::string> &keys) override {
         m_max_density = dr::opaque<Float>(m_scale * m_sigmat->max());
-        m_min_density = dr::opaque<Float>(m_scale * m_sigmat->min());
 
         if(string::contains(keys, "phase_function"))
             update_ddis_phase_function();
@@ -174,13 +173,6 @@ public:
         return m_max_density;
     }
 
-    UnpolarizedSpectrum
-    get_minorant(const MediumInteraction3f & /* mi */,
-                 Mask active) const override {
-        MI_MASKED_FUNCTION(ProfilerPhase::MediumEvaluate, active);
-        return m_min_density;
-    }
-
     std::tuple<UnpolarizedSpectrum, UnpolarizedSpectrum, UnpolarizedSpectrum>
     get_scattering_coefficients(const MediumInteraction3f &mi,
                                 Mask active) const override {
@@ -200,6 +192,11 @@ public:
         return m_aabb.ray_intersect(ray);
     }
 
+    virtual Mask
+    in_aabb(const Point3f &pos) const override {
+        return m_aabb.contains(pos);
+    }
+
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "EOHeterogeneousMedium[" << std::endl
@@ -217,7 +214,6 @@ private:
     ref<Volume> m_sigmat, m_albedo;
     ScalarFloat m_scale;
     Float m_max_density;
-    Float m_min_density;
     ScalarBoundingBox3f m_aabb;
 
     MI_TRAVERSE_CB(Base, m_sigmat, m_albedo, m_scale, m_max_density, m_aabb)

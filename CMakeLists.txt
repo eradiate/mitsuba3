@@ -41,6 +41,14 @@ if(MI_THROW_TRAPS_DEBUGGER)
   add_definitions(-DMI_THROW_TRAPS_DEBUGGER)
 endif()
 
+# #ERADIATE_CHANGE_BEGIN: Overlapping media
+# Every medium a point can overlap costs a whole ExtremumState of tracking
+# loop state, so this is a compile-time bound.
+set(MI_MAX_OVERLAPPING_MEDIA 4 CACHE STRING
+    "Maximum number of media an overlap medium can combine")
+add_definitions(-DMI_MAX_OVERLAPPING_MEDIA=${MI_MAX_OVERLAPPING_MEDIA})
+# #ERADIATE_CHANGE_END
+
 option(MI_PROFILER_ITTNOTIFY "Forward profiler events (to Intel VTune)?" OFF)
 option(MI_PROFILER_NVTX      "Forward profiler events (to NVIDIA Nsight)?" OFF)
 
