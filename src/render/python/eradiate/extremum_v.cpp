@@ -3,6 +3,7 @@
 #include <mitsuba/render/eradiate/extremum_segment.h>
 #include <mitsuba/python/python.h>
 #include <nanobind/trampoline.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
@@ -40,10 +41,14 @@ MI_PY_EXPORT(ExtremumSegment) {
 // has not been solved yet.
 MI_VARIANT class PyExtremumStructure : public ExtremumStructure<Float, Spectrum> {
 public:
-    MI_IMPORT_TYPES(ExtremumStructure)
-    NB_TRAMPOLINE(ExtremumStructure, 4);
+    MI_IMPORT_TYPES(ExtremumStructure, Volume)
+    NB_TRAMPOLINE(ExtremumStructure, 5);
 
     PyExtremumStructure(const Properties &props) : ExtremumStructure(props) {}
+
+    void build(const Volume * volume) override {
+        NB_OVERRIDE_PURE(build, volume);
+    }
 
     std::tuple<Float, Float> eval_1(
         const Interaction3f &it,
@@ -87,6 +92,15 @@ MI_PY_EXPORT(ExtremumStructure) {
     auto extremum = MI_PY_TRAMPOLINE_CLASS(PyExtremumStructure, ExtremumStructure, Object)
         .def(nb::init<const Properties &>(), "props"_a)
         .def("__repr__", &ExtremumStructure::to_string)
+        .def("set_bbox", &ExtremumStructure::set_bbox,
+             "bbox"_a, D(ExtremumStructure, set_bbox))
+        .def("set_scale", &ExtremumStructure::set_scale,
+             "scale"_a, D(ExtremumStructure, set_scale))
+        .def("update_extremum", &ExtremumStructure::update_extremum,
+             "bbox"_a, "volume"_a, "scale"_a = nb::none(),
+             D(ExtremumStructure, update_extremum))
+        .def("build", &ExtremumStructure::build,
+             "volume"_a, D(ExtremumStructure, build))
         .def("bbox", &ExtremumStructure::bbox, D(ExtremumStructure, bbox));
 
     drjit::bind_traverse(extremum);
