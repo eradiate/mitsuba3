@@ -12256,11 +12256,17 @@ static const char *__doc_mitsuba_VolumeParametrization_VolumeParametrization = R
 
 static const char *__doc_mitsuba_VolumeParametrization_VolumeParametrization_2 = R"doc()doc";
 
-static const char *__doc_mitsuba_VolumeParametrization_flag = R"doc()doc";
+static const char *__doc_mitsuba_VolumeParametrization_flag = R"doc(The volume coordinate flag, default to grid.)doc";
 
-static const char *__doc_mitsuba_VolumeParametrization_to_world = R"doc()doc";
+static const char *__doc_mitsuba_VolumeParametrization_to_world = R"doc(The volume transform)doc";
 
-static const char *__doc_mitsuba_VolumeParametrization_uv_range = R"doc()doc";
+static const char *__doc_mitsuba_VolumeParametrization_uv_range =
+R"doc(The local space range spanned by the volume e.g. dim 0 -> [rmin, rmax]
+in spherical coords.)doc";
+
+static const char *__doc_mitsuba_VolumeParametrization_wrap = R"doc(Specifies if the volume wraps.)doc";
+
+static const char *__doc_mitsuba_VolumeParametrization_wrap_mode = R"doc(The wrapping behaviour when exiting the volume boundaries.)doc";
 
 static const char *__doc_mitsuba_Volume_PinGuard =
 R"doc(A Scoped Guard that pins the reference count of the volume.
