@@ -6,6 +6,72 @@ strive to document breaking API changes in the release notes below.
 
 ---
 
+## v0.6.0 (upcoming)
+
+### Extremum Refactoring
+
+- **Renaming**: the `ExtremumStructure` plugin has been renamed to `Extremum`.
+  Folders were renamed from `extremum` to `extrema`. Extremum structures plugin
+  ids and files were renamed from `extremum_*` to `*extremum`
+  (PR [57](https://github.com/eradiate/mitsuba3/pull/57)).
+- **Interface**: the `Extremum` interface has been simplified to avoid
+  duplication of volumes, transform, and other parameters that are required by
+  both the medium and the extrema. A new `build` function has been added that
+  is called by the medium. The extrema are undefined before `build` is called
+  (PR [41](https://github.com/eradiate/mitsuba3/pull/41)).
+- **Traversal**: dropped `traverse_extremum` and replaced it by a iterator-style
+  API that exposes `begin` and `next`. Note that those are not DRJIT methods and
+  can only be used on scalar pointers. The functions now have Python bindings.
+  The medium now also exposes three new virtual methods `sample_real_interaction`,
+  `sample_transmittance`, and `sample_transmittance_pdf`, which by default
+  implement delta tracking, ratio tracking and residual ratio tracking. Those
+  can be consumed by integrators e.g. `eovolpath`. A russian roulette mechanism
+  was added to conditionally terminate path with low transmittance and the
+  threshold can be controlled with `rr_threshold`
+  (PR [52](https://github.com/eradiate/mitsuba3/pull/52)).
+- **Overlapping**: support for overlapping media with a new `overlap` medium and
+  and traversal support. By default, supports 4 overlapping media at a time
+  which can be modified as a compiler option in `MI_MAX_OVERLAPPING_MEDIA`
+  (PR [52](https://github.com/eradiate/mitsuba3/pull/41)).
+- **Repeat**: support for periodic media with a new `repeat` media that can
+  wrap any other media except another repeat
+  (PR [53](https://github.com/eradiate/mitsuba3/pull/53)).
+- **Tests**: new render tests that compare `volpath` reference of various scenes
+  that include heterogeneous media. The reference are added to the
+  `data_eradiate` submodule. Add `extremum` to the xml parser
+  (PR [54](https://github.com/eradiate/mitsuba3/pull/54)).
+
+### New features
+
+- **Analytical cube**: add a new cube plugin which defines an analytical cube
+  intersection. Can improve performance by up to 10% for atmospheric scenes with
+  little geometry in scalar mode. Does not work in cuda
+  (PR [60](https://github.com/eradiate/mitsuba3/pull/60)).
+
+### Bug fixes
+
+- **DDIS phase**: Clip the envelope range to avoid out of bound errors in CUDA
+  (PR [51](https://github.com/eradiate/mitsuba3/pull/51)).
+- **Bbox traversal**: fix edge case of ray parallel with the z-axis report false
+  positive intersection (PR [51](https://github.com/eradiate/mitsuba3/pull/51)).
+- **Extremum spherical**: correct fillmax evaluation position
+  (PR [51](https://github.com/eradiate/mitsuba3/pull/51))
+
+### Improvements
+
+- **DDIS refactor**: refactor the DDIS phase function generation mechanism so
+  that only media visible from the scene create a DDIS phase function. Note
+  that the phase functions are not create if there are no associated scenes.
+  Media with nested media can either get the maximum `ddis_threshold` value of
+  its nested components or override it with its own value
+  (PR [59](https://github.com/eradiate/mitsuba3/pull/59)).
+- **Piecewise folding**: refactored the piecewise medium so that it uses the
+  new `sample_real_interaction` and `sample_transmittance` methods, removing
+  the need for `sample_analytical_interaction` and
+  `transmittance_eval_analytical`. `piecewise_volpath` was entirely removed and
+  superseded by `eovolpath`
+  (PR [58](https://github.com/eradiate/mitsuba3/pull/58)).
+
 ## v0.6.0 (3rd November 2026)
 
 ### New features
