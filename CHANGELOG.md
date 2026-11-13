@@ -47,6 +47,17 @@ strive to document breaking API changes in the release notes below.
   intersection. Can improve performance by up to 10% for atmospheric scenes with
   little geometry in scalar mode. Does not work in cuda
   (PR [60](https://github.com/eradiate/mitsuba3/pull/60)).
+- **`mapcoordsvolume`**: a new plugin mapping world coordinates onto an
+  irregularly-spaced grid. Two implementations remap a single irregular
+  Z axis and are interchangeable with each other. One is optimized for
+  exponential density profiles and the other performs a plain binary
+  search. A third implementation serves a different purpose: it
+  combines a spherical coordinate remap with an irregular radial grid.
+  It matches `sphericalcoordsvolume`'s shell conventions. Both
+  plain data arrays and regular volumes are supported as storage
+  backends. The system is extensible through Mitsuba's `expand()`
+  mechanism and a template class for combining several mapping methods
+  (PR [61](https://github.com/eradiate/mitsuba3/pull/61)).
 
 ### Bug fixes
 
@@ -71,6 +82,8 @@ strive to document breaking API changes in the release notes below.
   `transmittance_eval_analytical`. `piecewise_volpath` was entirely removed and
   superseded by `eovolpath`
   (PR [58](https://github.com/eradiate/mitsuba3/pull/58)).
+
+---
 
 ## v0.6.0 (3rd November 2026)
 
