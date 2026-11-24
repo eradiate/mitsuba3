@@ -6,6 +6,13 @@ strive to document breaking API changes in the release notes below.
 
 ---
 
+## v0.6.1 (25th November 2026)
+
+## Bug fixes
+
+- Fixed `ShapeKDTree` memory leak in the `NativeAccel` class
+  (PR [#62](https://github.com/eradiate/mitsuba3/pull/62)).
+
 ## v0.6.0 (3rd November 2026)
 
 ### New features
