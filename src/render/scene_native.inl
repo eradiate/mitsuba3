@@ -15,7 +15,9 @@ template <typename Float, typename Spectrum>
 void NativeAccel<Float, Spectrum>::init(Scene<Float, Spectrum> *scene,
                                         const Properties &props) {
     accel = new ShapeKDTree<Float, Spectrum>(props);
-    accel->inc_ref();
+// #ERADIATE_CHANGE_BEGIN: Fix ShapeKDTree leak (free functions delete at zero count)
+    inc_ref(accel);
+// #ERADIATE_CHANGE_END
 
     if constexpr (dr::is_llvm_v<Float>)
         shapes_registry_ids = build_registry_ids<Float, Spectrum>(scene->m_shapes);
@@ -50,7 +52,9 @@ void NativeAccel<Float, Spectrum>::rebuild(
                             [](void *p) {
                                 auto *kdtree = (ShapeKDTree<Float, Spectrum> *) p;
                                 kdtree->clear();
-                                kdtree->dec_ref();
+// #ERADIATE_CHANGE_BEGIN: Fix ShapeKDTree leak (free functions delete at zero count)
+                                dec_ref(kdtree);
+// #ERADIATE_CHANGE_END
                             },
                             payload);
                 },
@@ -87,7 +91,9 @@ void NativeAccel<Float, Spectrum>::release() {
         // ray tracing calls remain.
         accel_handle = 0;
     } else {
-        accel->dec_ref();
+// #ERADIATE_CHANGE_BEGIN: Fix ShapeKDTree leak (free functions delete at zero count)
+        dec_ref(accel);
+// #ERADIATE_CHANGE_END
     }
     accel = nullptr;
 }
