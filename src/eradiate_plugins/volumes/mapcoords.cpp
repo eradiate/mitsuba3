@@ -679,7 +679,7 @@ Irregular coordinate mapping (:monosp:`mapcoordsvolume`)
    - Nested volume plugin supplying the density data, addressed in
      the remapped coordinates. Required for the ``volume`` backend.
      Unused for the ``flat`` backend.
-   - —
+   - |exposed|
 
  * - data
    - |tensor|
@@ -687,7 +687,7 @@ Irregular coordinate mapping (:monosp:`mapcoordsvolume`)
      coordinates with one value per cell and no interpolation.
      Required for the ``flat`` backend. Unused for the ``volume``
      backend.
-   - ✓
+   - |exposed|, |differentiable|
 
  * - wrap_mode
    - |string|
