@@ -444,221 +444,6 @@ Float irregular_cell_to_fraction(
 
 
 /**
- * Irregular guided mapping
- *
- * Remaps an arbitrary, strictly-increasing sequence of cell boundaries in
- * [0, 1] read from a "boundaries_x"/"boundaries_y"/"boundaries_z" volume,
- * chosen by the Axis template parameter, one point per entry. The other
- * two axes pass through unchanged. Axis is fixed at compile time (0 = x,
- * 1 = y, 2 = z).
- *
- * Locating which cell a query falls into is done with a guide table
- * instead of a direct binary search: a little memory is spent at construction
- * on a coarse index that points to buckets of actual boundaries data.
- *
- * Each boundary is assigned to one of a fixed set of buckets by a cheap,
- * order-preserving function of its value. The buckets end up ordered the same
- * way the boundaries themselves are. A query searches only its own bucket,
- * identified using the same cheap function. The vast majority of the data
- * point is thus ruled out.
- *
- * The indexing function used is the integer reinterpretation of a value's
- * IEEE 754 floating-point representation: for positive values, this
- * reinterpretation increases monotonically with the value itself. Discarding
- * its lowest bits then yields a bucket whose width doubles each time the
- * magnitude of the values it covers doubles. This benefits any data whose fine
- * detail sits among its smaller values and coarser detail among its larger
- * ones.
- *
- */
-
-template <typename Float, typename Spectrum, size_t Axis>
-struct IrregularGuidedMapping {
-public:
-    static_assert(Axis < 3,
-        "IrregularGuidedMapping: Axis must be 0 (x), 1 (y) or 2 (z)");
-
-    MI_IMPORT_TYPES()
-    using FloatStorage   = DynamicBuffer<Float>;
-    using UInt32Storage  = DynamicBuffer<UInt32>;
-    using UInt64Storage  = DynamicBuffer<UInt64>;
-    using ScalarUIntBits = dr::uint_array_t<ScalarFloat>;
-
-    IrregularGuidedMapping(const Properties &props) {
-        static constexpr const char *key =
-            (Axis == 0) ? "boundaries_x" :
-            (Axis == 1) ? "boundaries_y" : "boundaries_z";
-
-        const TensorXf &bt = props.get_any<TensorXf>(key);
-        auto n_points = (uint32_t) bt.size();
-        if (n_points < 2)
-            Throw("IrregularGuidedMapping: '%s' must have at least 2 "
-                  "points (got %d)", key, (int) n_points);
-
-        std::vector<ScalarFloat> b(n_points);
-        for (uint32_t i = 0; i < n_points; ++i)
-            b[i] = dr::slice(bt.array(), i);
-
-        for (uint32_t i = 1; i < n_points; ++i)
-            if (!(b[i] > b[i - 1]))
-                Throw("IrregularGuidedMapping: '%s' must be strictly "
-                      "increasing (entry %d: %f <= entry %d: %f)",
-                      key, i, b[i], i - 1, b[i - 1]);
-        if (b.front() != 0.f || b.back() != 1.f)
-            Throw("IrregularGuidedMapping: '%s' must start at 0 and "
-                  "end at 1 (got %f .. %f)", key, b.front(), b.back());
-
-        m_n_cells = n_points - 1;
-        m_inv_n = 1.f / (Float) m_n_cells;
-        m_boundaries = dr::load<FloatStorage>(b.data(), b.size());
-
-        m_bits0 = bits_of(b[0]);
-
-        auto build_table = [&](uint32_t shift, std::vector<uint32_t> &t) -> uint32_t {
-            std::vector<uint32_t> bin(n_points);
-            for (uint32_t j = 0; j < n_points; ++j)
-                bin[j] = (uint32_t) bucket(b[j], m_bits0, shift);
-
-            uint32_t kmax = bin.back();
-            t.assign(kmax + 2, 0);
-            for (uint32_t k = 0, j = 0; k <= kmax + 1; ++k) {
-                while (j < n_points && bin[j] < k) ++j;
-                t[k] = j;
-            }
-            uint32_t max_run = 0;
-            for (uint32_t k = 0; k <= kmax; ++k)
-                max_run = dr::maximum(max_run, t[k + 1] - t[k]);
-            return max_run;
-        };
-
-        constexpr uint32_t bit_width = sizeof(ScalarUIntBits) * 8;
-        ScalarUIntBits bits_last = bits_of(b.back());
-        uint64_t max_table_size = (uint64_t) n_points * 64u;
-
-        uint32_t best_shift = 0, best_max_run = n_points;
-        std::vector<uint32_t> scratch;
-        for (int s = (int) bit_width - 1; s >= 0; --s) {
-            uint32_t shift = (uint32_t) s;
-            uint64_t projected_size = (uint64_t) ((bits_last - m_bits0) >> shift) + 2u;
-            if (projected_size > max_table_size)
-                break;
-
-            uint32_t max_run = build_table(shift, scratch);
-            if (max_run < best_max_run) {
-                best_max_run = max_run;
-                best_shift = shift;
-            }
-        }
-
-        m_shift = best_shift;
-
-        std::vector<uint32_t> t;
-        m_max_run = build_table(m_shift, t);
-
-        std::vector<uint64_t> packed(t.size() - 1);
-        for (size_t k = 0; k < packed.size(); ++k)
-            packed[k] = (uint64_t) t[k + 1] << 32 | (uint64_t) t[k];
-        m_table64 = dr::load<UInt64Storage>(packed.data(), packed.size());
-
-        if constexpr (!dr::is_jit_v<Float>)
-            m_boundaries_ptr = m_boundaries.data();
-
-        std::cout << "IrregularGuidedMapping: shift=" << m_shift
-                  << ", max boundaries per bucket=" << m_max_run << std::endl;
-    }
-
-    template <typename T>
-    static dr::uint_array_t<T> bits_of(T x) {
-        return dr::reinterpret_array<dr::uint_array_t<T>>(x);
-    }
-
-    template <typename T>
-    static dr::uint_array_t<T> bucket(T x, ScalarUIntBits bits0, uint32_t shift) {
-        return (bits_of(x) - dr::uint_array_t<T>(bits0)) >> shift;
-    }
-
-    /// Guide table + binary search lookup, with no coherence assumption.
-    UInt32 lookup_cell(Float x, Mask active) const {
-        x = dr::clip(x, Float(0.f), dr::OneMinusEpsilon<Float>);
-
-        UInt32 k = UInt32(bucket(x, m_bits0, m_shift));
-
-        UInt64 packed = dr::gather<UInt64>(m_table64, k, active);
-        UInt32 t_lo = UInt32(packed);
-        UInt32 t_hi = UInt32(packed >> 32);
-        UInt32 cell = dr::select(t_lo > 0u, t_lo - 1u, UInt32(0u));
-        UInt32 hi = dr::minimum(t_hi, m_n_cells);
-
-        UInt32 found = dr::binary_search<UInt32>(
-            cell, hi + 1u,
-            [&](UInt32 i) DRJIT_INLINE_LAMBDA {
-                if constexpr (!dr::is_jit_v<Float>)
-                    return m_boundaries_ptr[i] <= x;
-                else
-                    return dr::gather<Float>(m_boundaries, i, active) <= x;
-            });
-
-        hi = dr::maximum(hi, cell + 1u);
-        return dr::clip(found, cell + 1u, hi) - 1u;
-    }
-
-    std::tuple<Point3f, Float, Float> apply(const Point3f &p, Mask active) const {
-        Float x = p[Axis];
-        UInt32 cell = lookup_cell(x, active);
-        Point3f result = p;
-        if constexpr (!dr::is_jit_v<Float>) {
-            Float lo = m_boundaries_ptr[cell];
-            Float hi = m_boundaries_ptr[cell + 1u];
-            result[Axis] = irregular_fraction_from_bounds<Float>(m_inv_n, cell, x, lo, hi);
-        } else {
-            result[Axis] = irregular_cell_to_fraction(m_boundaries, m_n_cells, cell, x, active);
-        }
-        return { result, dr::Infinity<ScalarFloat>, -dr::Infinity<ScalarFloat> };
-    }
-
-    Float locate_scalar(Float x) const {
-        return irregular_cell_to_fraction(m_boundaries, m_n_cells, lookup_cell(x, true), x, true);
-    }
-
-    std::tuple<BoundingBox3f, Float, Float> extremum(BoundingBox3f region) const {
-        Float lo = locate_scalar(region.min[Axis]);
-        Float hi = locate_scalar(region.max[Axis]);
-        region.min[Axis] = dr::minimum(lo, hi);
-        region.max[Axis] = dr::maximum(lo, hi);
-        return { region, dr::Infinity<ScalarFloat>, -dr::Infinity<ScalarFloat> };
-    }
-
-    ScalarFloat max() const { return -dr::Infinity<ScalarFloat>; }
-    ScalarFloat min() const { return  dr::Infinity<ScalarFloat>; }
-
-    VolumeCoordFlag coord_flag() const { return VolumeCoordFlag::Grid; }
-    ScalarBoundingBox3f coord_range() const {
-        return ScalarBoundingBox3f(ScalarPoint3f(0.f), ScalarPoint3f(1.f));
-    }
-
-    std::string to_string() const {
-        static constexpr const char *axis_name =
-            (Axis == 0) ? "x" : (Axis == 1) ? "y" : "z";
-        std::ostringstream oss;
-        oss << "IrregularGuidedMapping[axis=" << axis_name
-            << ", n_cells=" << m_n_cells
-            << ", shift=" << m_shift << ", max_run=" << m_max_run << "]";
-        return oss.str();
-    }
-
-private:
-    FloatStorage  m_boundaries;
-    UInt64Storage m_table64;
-    const ScalarFloat *m_boundaries_ptr = nullptr;
-    uint32_t m_n_cells    = 0;
-    Float m_inv_n         = 0.f;
-    ScalarUIntBits m_bits0 = 0;
-    uint32_t m_shift      = 0;
-    uint32_t m_max_run    = 0;
-};
-
-
-/**
  * Irregular Search Mapping
  * 
  * Irregular-grid mapping via a straightforward binary search
@@ -873,14 +658,11 @@ Irregular coordinate mapping (:monosp:`mapcoordsvolume`)
 
  * - mapping
    - |string|
-   - Selects the remapping strategy. Three values exist: ``guided``,
-     ``search`` and ``spherical``. ``guided`` builds a bit-pattern
-     guide table at construction, tuned for exponential-like Z
-     profiles. ``search`` performs a binary search over the Z
-     boundaries instead; it produces identical results to
-     ``guided``. ``spherical`` remaps Cartesian points to normalized
-     spherical coordinates first, then applies an irregular guided
-     remap to the radial axis.
+   - Selects the remapping strategy. Two values exist: ``search`` and
+     ``spherical``. ``search`` locates the Z cell with a binary search
+     over the Z boundaries. ``spherical`` remaps Cartesian points to
+     normalized spherical coordinates first, then locates the radial
+     cell with a binary search over the radial boundaries.
    - —
 
  * - backend
@@ -929,14 +711,14 @@ frame to local data frame, selected at construction time using the
 generic Mitsuba volume, selected using the ``backend`` parameter.
 Each mapping uses a different set of parameters, described below.
 
-.. pluginparameters:: Search/Guided mapping-specific parameters
+.. pluginparameters:: Search mapping-specific parameters
 
  * - boundaries_z
    - |tensor|
    - Strictly increasing sequence of Z cell boundaries in [0, 1],
      with at least 2 points. Must start at 0 and end at 1. Defines
-     the irregular Z grid. Required for ``guided`` and ``search``
-     mappings. Unused for ``spherical``.
+     the irregular Z grid. Required for ``search``. Unused for
+     ``spherical``.
    - —
 
 .. pluginparameters:: Spherical mapping-specific parameters
@@ -997,7 +779,7 @@ public:
         props.mark_queried("mapping");
         props.mark_queried("backend");
 
-        if (m_mapping == "guided" || m_mapping == "search") {
+        if (m_mapping == "search") {
             if (m_backend == "volume") {
                 if (!props.has_property("volume"))
                     Throw("MapCoordsVolume: backend=\"volume\" requires a \"volume\" property");
@@ -1031,7 +813,7 @@ public:
                     props.mark_queried(key);
         } else {
             Throw("MapCoordsVolume: unknown \"mapping\" = \"%s\" (expected "
-                  "\"guided\", \"search\" or \"spherical\")", m_mapping);
+                  "\"search\" or \"spherical\")", m_mapping);
         }
 
         if (props.has_property("wrap_mode")) {
@@ -1047,25 +829,19 @@ public:
     std::vector<ref<Object>> expand() const override {
         using VolumeBackend  = Volume<Float, Spectrum>;
         using FlatBackend    = dr::Tensor<DynamicBuffer<Float>>;
-        using Guided         = IrregularGuidedMapping<Float, Spectrum, 2>;
         using Search         = IrregularSearchMapping<Float, Spectrum, 2>;
         using Spherical      = SphericalMapping<Float, Spectrum>;
-        using GuidedRadius   = IrregularGuidedMapping<Float, Spectrum, 0>;
+        using SearchRadius   = IrregularSearchMapping<Float, Spectrum, 0>;
 
         ref<Object> result;
 
-        if (m_mapping == "guided") {
-            if (m_backend == "volume")
-                result = (Object *) new MappingChain<Float, Spectrum, VolumeBackend, Guided>(m_props);
-            else
-                result = (Object *) new MappingChain<Float, Spectrum, FlatBackend, Guided>(m_props);
-        } else if (m_mapping == "search") {
+        if (m_mapping == "search") {
             if (m_backend == "volume")
                 result = (Object *) new MappingChain<Float, Spectrum, VolumeBackend, Search>(m_props);
             else
                 result = (Object *) new MappingChain<Float, Spectrum, FlatBackend, Search>(m_props);
         } else {
-            result = (Object *) new MappingChain<Float, Spectrum, FlatBackend, Spherical, GuidedRadius>(m_props);
+            result = (Object *) new MappingChain<Float, Spectrum, FlatBackend, Spherical, SearchRadius>(m_props);
         }
 
         return { result };

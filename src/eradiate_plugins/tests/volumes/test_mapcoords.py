@@ -3,7 +3,6 @@ import mitsuba as mi
 import numpy as np
 import pytest
 
-MAPPINGS = ["guided", "search"]
 CART_BACKENDS = ["volume", "flat"]
 
 
@@ -29,7 +28,7 @@ def _volume_backend(values):
     )
 
 
-def _make_volume(boundaries_z, values, mapping="guided", backend="volume"):
+def _make_volume(boundaries_z, values, backend="volume", mapping="search"):
     d = {
         "type": "mapcoordsvolume",
         "mapping": mapping,
@@ -44,22 +43,21 @@ def _make_volume(boundaries_z, values, mapping="guided", backend="volume"):
 
 
 @pytest.mark.parametrize("backend", CART_BACKENDS)
-@pytest.mark.parametrize("mapping", MAPPINGS)
-def test_construct(variant_scalar_rgb, mapping, backend):
+def test_construct(variant_scalar_rgb, backend):
     """Boundary arrays avoid length 3, which the dict parser mistakes for an RGB color."""
-    volume = _make_volume([0.0, 0.3, 0.7, 1.0], [1.0, 2.0, 3.0], mapping, backend)
+    volume = _make_volume([0.0, 0.3, 0.7, 1.0], [1.0, 2.0, 3.0], backend)
     assert volume is not None
 
     with pytest.raises(Exception):
-        _make_volume([1.0], [1.0], mapping, backend)
+        _make_volume([1.0], [1.0], backend)
 
     with pytest.raises(Exception):
-        _make_volume([0.0, 0.5, 0.5, 1.0], [1.0, 2.0, 3.0], mapping, backend)
+        _make_volume([0.0, 0.5, 0.5, 1.0], [1.0, 2.0, 3.0], backend)
 
     with pytest.raises(Exception):
-        _make_volume([0.1, 0.4, 0.7, 1.0], [1.0, 2.0, 3.0], mapping, backend)
+        _make_volume([0.1, 0.4, 0.7, 1.0], [1.0, 2.0, 3.0], backend)
     with pytest.raises(Exception):
-        _make_volume([0.0, 0.3, 0.6, 0.9], [1.0, 2.0, 3.0], mapping, backend)
+        _make_volume([0.0, 0.3, 0.6, 0.9], [1.0, 2.0, 3.0], backend)
 
 
 def test_construct_unknown_mapping(variant_scalar_rgb):
@@ -69,17 +67,16 @@ def test_construct_unknown_mapping(variant_scalar_rgb):
 
 def test_construct_unknown_backend(variant_scalar_rgb):
     with pytest.raises(Exception):
-        _make_volume([0.0, 1.0], [1.0], mapping="guided", backend="nonsense")
+        _make_volume([0.0, 1.0], [1.0], backend="nonsense")
 
 
-@pytest.mark.parametrize("mapping", MAPPINGS)
-def test_construct_stale_property(variant_scalar_rgb, mapping):
+def test_construct_stale_property(variant_scalar_rgb):
     """data/volume belong to one backend each; expand() leaves the other one unreferenced."""
     with pytest.raises(Exception):
         mi.load_dict(
             {
                 "type": "mapcoordsvolume",
-                "mapping": mapping,
+                "mapping": "search",
                 "backend": "volume",
                 "boundaries_z": mi.TensorXf([0.0, 1.0]),
                 "volume": _volume_backend([1.0]),
@@ -90,7 +87,7 @@ def test_construct_stale_property(variant_scalar_rgb, mapping):
         mi.load_dict(
             {
                 "type": "mapcoordsvolume",
-                "mapping": mapping,
+                "mapping": "search",
                 "backend": "flat",
                 "boundaries_z": mi.TensorXf([0.0, 1.0]),
                 "data": mi.TensorXf(np.array([1.0]).reshape(1, 1, 1)),
@@ -100,13 +97,12 @@ def test_construct_stale_property(variant_scalar_rgb, mapping):
 
 
 @pytest.mark.parametrize("backend", CART_BACKENDS)
-@pytest.mark.parametrize("mapping", MAPPINGS)
-def test_traverse_update(variant_scalar_rgb, mapping, backend):
+def test_traverse_update(variant_scalar_rgb, backend):
     """mi.traverse() must expose the backend's data as a live, updatable
     parameter"""
     boundaries_z = [0.0, 0.3, 0.7, 1.0]
     values = [1.0, 2.0, 3.0]
-    volume = _make_volume(boundaries_z, values, mapping, backend)
+    volume = _make_volume(boundaries_z, values, backend)
 
     key = "data" if backend == "flat" else "volume.data"
     params = mi.traverse(volume)
@@ -124,12 +120,9 @@ def test_traverse_update(variant_scalar_rgb, mapping, backend):
 
 
 @pytest.mark.parametrize("backend", CART_BACKENDS)
-@pytest.mark.parametrize("mapping", MAPPINGS)
-def test_single_cell(variant_scalar_rgb, mapping, backend):
-    """Degenerate one-cell profile: boundaries_z=[0, 1], a single value.
-    Binary search and the bit-pattern guide table must both handle a
-    single cell without a dedicated special case."""
-    volume = _make_volume([0.0, 1.0], [1.0], mapping, backend)
+def test_single_cell(variant_scalar_rgb, backend):
+    """Degenerate one-cell profile: boundaries_z=[0, 1], a single value."""
+    volume = _make_volume([0.0, 1.0], [1.0], backend)
 
     for z in [0.0, 0.3, 0.5, 0.7, 1.0]:
         it = mi.Interaction3f()
@@ -146,11 +139,10 @@ def test_single_cell(variant_scalar_rgb, mapping, backend):
 
 
 @pytest.mark.parametrize("backend", CART_BACKENDS)
-@pytest.mark.parametrize("mapping", MAPPINGS)
-def test_eval_matches_cell(variant_scalar_rgb, mapping, backend):
+def test_eval_matches_cell(variant_scalar_rgb, backend):
     boundaries_z = [0.0, 0.1, 0.2, 0.3, 0.4, 0.7, 1.0]
     values = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
-    volume = _make_volume(boundaries_z, values, mapping, backend)
+    volume = _make_volume(boundaries_z, values, backend)
 
     cell_midpoints = [
         0.5 * (boundaries_z[i] + boundaries_z[i + 1]) for i in range(len(values))
@@ -161,36 +153,34 @@ def test_eval_matches_cell(variant_scalar_rgb, mapping, backend):
         assert dr.allclose(volume.eval_1(it), expected)
 
 
-def test_mapping_backend_agree(variant_scalar_rgb):
-    """All four (mapping, backend) combinations compute the exact same inverse mapping."""
+def test_backends_agree(variant_scalar_rgb):
+    """Both backends compute the exact same inverse mapping."""
     boundaries_z = np.concatenate([[0.0], np.sort(np.random.default_rng(0).random(9)), [1.0]])
     boundaries_z = np.unique(boundaries_z)
     values = np.random.default_rng(1).uniform(0.0, 5.0, len(boundaries_z) - 1)
     zs = np.random.default_rng(2).uniform(0.0, 1.0, 50)
 
     reference = None
-    for mapping in MAPPINGS:
-        for backend in CART_BACKENDS:
-            volume = _make_volume(list(boundaries_z), list(values), mapping, backend)
-            results = []
-            for z in zs:
-                it = mi.Interaction3f()
-                it.p = [0.5, 0.5, float(z)]
-                results.append(float(volume.eval_1(it)))
-            results = np.array(results)
-            if reference is None:
-                reference = results
-            else:
-                assert np.allclose(results, reference), (mapping, backend)
+    for backend in CART_BACKENDS:
+        volume = _make_volume(list(boundaries_z), list(values), backend)
+        results = []
+        for z in zs:
+            it = mi.Interaction3f()
+            it.p = [0.5, 0.5, float(z)]
+            results.append(float(volume.eval_1(it)))
+        results = np.array(results)
+        if reference is None:
+            reference = results
+        else:
+            assert np.allclose(results, reference), backend
 
 
 @pytest.mark.parametrize("backend", CART_BACKENDS)
-@pytest.mark.parametrize("mapping", MAPPINGS)
-def test_extremum_irregular_profile(variant_scalar_rgb, mapping, backend):
+def test_extremum_irregular_profile(variant_scalar_rgb, backend):
     """Regions must narrow through the mapping before bounding the backend."""
     boundaries_z = [0.0, 0.1, 0.2, 0.3, 0.4, 0.7, 1.0]
     values = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
-    volume = _make_volume(boundaries_z, values, mapping, backend)
+    volume = _make_volume(boundaries_z, values, backend)
 
     resolution = mi.ScalarVector3i(1, 1, 2)
     extremum_struct = _build_extremum(volume, resolution)
@@ -201,9 +191,8 @@ def test_extremum_irregular_profile(variant_scalar_rgb, mapping, backend):
 
 
 @pytest.mark.parametrize("backend", CART_BACKENDS)
-@pytest.mark.parametrize("mapping", MAPPINGS)
 @pytest.mark.parametrize("seed", range(3))
-def test_extremum_safety_random(variant_scalar_rgb, mapping, backend, seed):
+def test_extremum_safety_random(variant_scalar_rgb, backend, seed):
     """Every sampled value lies within its region's reported minorant/majorant."""
     rng = np.random.default_rng(seed)
 
@@ -216,7 +205,7 @@ def test_extremum_safety_random(variant_scalar_rgb, mapping, backend, seed):
     n_cells = len(boundaries_z) - 1
 
     values = rng.uniform(0.0, 5.0, n_cells)
-    volume = _make_volume(list(boundaries_z), list(values), mapping, backend)
+    volume = _make_volume(list(boundaries_z), list(values), backend)
 
     n_extremum_cells = int(rng.integers(2, 6))
     resolution = mi.ScalarVector3i(1, 1, n_extremum_cells)
@@ -239,7 +228,7 @@ def test_extremum_safety_random(variant_scalar_rgb, mapping, backend, seed):
             it.p = [0.5, 0.5, float(z)]
             value = float(volume.eval_1(it))
             assert minorant - 1e-5 <= value <= majorant + 1e-5, (
-                f"seed={seed}, mapping={mapping}, backend={backend}, "
+                f"seed={seed}, backend={backend}, "
                 f"cell={i}, z={z}: value {value} outside [{minorant}, {majorant}]"
             )
 
@@ -248,7 +237,7 @@ def _make_wrap_volume(values_x, wrap_mode=None):
     data = np.array(values_x, dtype=float).reshape(1, 1, len(values_x))
     d = {
         "type": "mapcoordsvolume",
-        "mapping": "guided",
+        "mapping": "search",
         "backend": "flat",
         "boundaries_z": mi.TensorXf(np.array([0.0, 1.0])),
         "data": mi.TensorXf(data),
@@ -354,8 +343,7 @@ def test_spherical_partial_sphere(variant_scalar_rgb):
 
 @pytest.mark.slow
 @pytest.mark.parametrize("backend", CART_BACKENDS)
-@pytest.mark.parametrize("mapping", MAPPINGS)
-def test_render_beer_lambert(mapping, backend):
+def test_render_beer_lambert(backend):
     """Beer-Lambert closed-form transmittance check through the full render path, scalar and LLVM."""
     boundaries_z = np.array([0.0, 0.1, 0.25, 0.4, 0.6, 0.8, 1.0])
     sigma = np.array([0.2, 1.2, 0.3, 2.5, 0.6, 1.8])
@@ -367,7 +355,7 @@ def test_render_beer_lambert(mapping, backend):
             continue
         mi.set_variant(variant)
 
-        sigma_t = _make_volume(boundaries_z.tolist(), sigma.tolist(), mapping, backend)
+        sigma_t = _make_volume(boundaries_z.tolist(), sigma.tolist(), backend)
         scene = mi.load_dict(
             {
                 "type": "scene",
@@ -403,6 +391,6 @@ def test_render_beer_lambert(mapping, backend):
         )
         img = np.array(mi.render(scene, seed=0))
         assert np.isclose(img.mean(), expected, rtol=0.05), (
-            f"variant={variant}, mapping={mapping}, backend={backend}: "
+            f"variant={variant}, backend={backend}: "
             f"{img.mean()} vs {expected}"
         )
