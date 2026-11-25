@@ -1,0 +1,31 @@
+name: Upload wheels to PyPI manually
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'ID of the "Build Python wheels" run whose artifacts are uploaded'
+        required: true
+
+permissions:
+  actions: read  # Download artifacts from another run
+
+jobs:
+  upload_pypi:
+    name: Upload wheels to PyPI
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+
+      - run: ls -l dist
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_PASSWORD }}
