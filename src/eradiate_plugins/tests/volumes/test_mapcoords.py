@@ -3,7 +3,7 @@ import mitsuba as mi
 import numpy as np
 import pytest
 
-CART_BACKENDS = ["volume", "flat"]
+BACKENDS = ["volume", "flat"]
 
 
 def _build_extremum(volume, resolution, extremum_type="gridextremum"):
@@ -42,7 +42,7 @@ def _make_volume(boundaries_z, values, backend="volume", mapping="search"):
     return mi.load_dict(d)
 
 
-@pytest.mark.parametrize("backend", CART_BACKENDS)
+@pytest.mark.parametrize("backend", BACKENDS)
 def test_construct(variant_scalar_rgb, backend):
     """Boundary arrays avoid length 3, which the dict parser mistakes for an RGB color."""
     volume = _make_volume([0.0, 0.3, 0.7, 1.0], [1.0, 2.0, 3.0], backend)
@@ -96,7 +96,7 @@ def test_construct_stale_property(variant_scalar_rgb):
         )
 
 
-@pytest.mark.parametrize("backend", CART_BACKENDS)
+@pytest.mark.parametrize("backend", BACKENDS)
 def test_traverse_update(variant_scalar_rgb, backend):
     """mi.traverse() must expose the backend's data as a live, updatable
     parameter"""
@@ -119,7 +119,7 @@ def test_traverse_update(variant_scalar_rgb, backend):
     assert dr.allclose(volume.eval_1(it), 10.0)
 
 
-@pytest.mark.parametrize("backend", CART_BACKENDS)
+@pytest.mark.parametrize("backend", BACKENDS)
 def test_single_cell(variant_scalar_rgb, backend):
     """Degenerate one-cell profile: boundaries_z=[0, 1], a single value."""
     volume = _make_volume([0.0, 1.0], [1.0], backend)
@@ -138,7 +138,7 @@ def test_single_cell(variant_scalar_rgb, backend):
     assert np.allclose(extremum_grid, [[1.0, 1.0]] * n_cells)
 
 
-@pytest.mark.parametrize("backend", CART_BACKENDS)
+@pytest.mark.parametrize("backend", BACKENDS)
 def test_eval_matches_cell(variant_scalar_rgb, backend):
     boundaries_z = [0.0, 0.1, 0.2, 0.3, 0.4, 0.7, 1.0]
     values = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
@@ -161,7 +161,7 @@ def test_backends_agree(variant_scalar_rgb):
     zs = np.random.default_rng(2).uniform(0.0, 1.0, 50)
 
     reference = None
-    for backend in CART_BACKENDS:
+    for backend in BACKENDS:
         volume = _make_volume(list(boundaries_z), list(values), backend)
         results = []
         for z in zs:
@@ -175,7 +175,7 @@ def test_backends_agree(variant_scalar_rgb):
             assert np.allclose(results, reference), backend
 
 
-@pytest.mark.parametrize("backend", CART_BACKENDS)
+@pytest.mark.parametrize("backend", BACKENDS)
 def test_extremum_irregular_profile(variant_scalar_rgb, backend):
     """Regions must narrow through the mapping before bounding the backend."""
     boundaries_z = [0.0, 0.1, 0.2, 0.3, 0.4, 0.7, 1.0]
@@ -190,7 +190,7 @@ def test_extremum_irregular_profile(variant_scalar_rgb, backend):
     assert np.allclose(extremum_grid, expected)
 
 
-@pytest.mark.parametrize("backend", CART_BACKENDS)
+@pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize("seed", range(3))
 def test_extremum_safety_random(variant_scalar_rgb, backend, seed):
     """Every sampled value lies within its region's reported minorant/majorant."""
@@ -342,7 +342,7 @@ def test_spherical_partial_sphere(variant_scalar_rgb):
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("backend", CART_BACKENDS)
+@pytest.mark.parametrize("backend", BACKENDS)
 def test_render_beer_lambert(backend):
     """Beer-Lambert closed-form transmittance check through the full render path, scalar and LLVM."""
     boundaries_z = np.array([0.0, 0.1, 0.25, 0.4, 0.6, 0.8, 1.0])
