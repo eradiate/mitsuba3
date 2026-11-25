@@ -74,7 +74,11 @@ struct backend_traits {
         return { backend.min(), backend.max() };
     }
 
-    static Point3f tex_wrap(const Storage &, const Point3f &p) { return p; }
+    static Point3f tex_wrap(dr::WrapMode, const Point3f &p) { return p; }
+
+    static VolumeParametrization<ScalarFloat> parametrization(const Storage &storage, dr::WrapMode) {
+        return storage->parametrization();
+    }
 
 };
 
@@ -96,23 +100,13 @@ struct backend_traits<Float, Spectrum, dr::Tensor<DynamicBuffer<Float>>> {
 
     struct Storage {
         Backend value;
-        dr::WrapMode wrap_mode;
-        Storage() : value(), wrap_mode(dr::WrapMode::Clamp) { }
-        Storage(Backend &&v, dr::WrapMode wm) : value(std::move(v)), wrap_mode(wm) { }
+        Storage() = default;
+        Storage(Backend &&v) : value(std::move(v)) { }
         Backend &operator*() const { return const_cast<Backend &>(value); }
     };
 
     static Storage construct(const Properties &props) {
-        std::string wrap_mode_str = props.get<std::string>("wrap_mode", "clamp");
-        dr::WrapMode wrap_mode = dr::WrapMode::Clamp;
-        if (wrap_mode_str == "repeat")
-            wrap_mode = dr::WrapMode::Repeat;
-        else if (wrap_mode_str == "mirror")
-            wrap_mode = dr::WrapMode::Mirror;
-        else if (wrap_mode_str != "clamp")
-            Throw("mapcoordsvolume: unknown wrap_mode \"%s\"", wrap_mode_str);
-
-        Storage storage(Backend(props.get_any<TensorXf>("data")), wrap_mode);
+        Storage storage(Backend(props.get_any<TensorXf>("data")));
         if (props.has_property("volume"))
             (void) props.get<ref<Object>>("volume");
         return storage;
@@ -127,12 +121,8 @@ struct backend_traits<Float, Spectrum, dr::Tensor<DynamicBuffer<Float>>> {
     }
 
     static std::string describe(const Storage &storage) {
-        const char *wrap_mode_str =
-            storage.wrap_mode == dr::WrapMode::Repeat ? "repeat" :
-            storage.wrap_mode == dr::WrapMode::Mirror ? "mirror" : "clamp";
         std::ostringstream oss;
-        oss << "FlatTensor[dimensions=" << dimensions(*storage)
-            << ", wrap_mode=\"" << wrap_mode_str << "\"]";
+        oss << "FlatTensor[dimensions=" << dimensions(*storage) << "]";
         return oss.str();
     }
 
@@ -156,7 +146,7 @@ struct backend_traits<Float, Spectrum, dr::Tensor<DynamicBuffer<Float>>> {
         Mask valid = bbox.valid();
 
         Vector3i res = dimensions(backend);
-        Vector3i voxel_min = dr::maximum(dr::floor(bbox.min * Vector3f(res)), Vector3i(0));
+        Vector3i voxel_min = dr::clip(dr::floor2int<Vector3i>(bbox.min * Vector3f(res)), Vector3i(0), res - 1);
         Vector3i voxel_max = dr::minimum(dr::floor(bbox.max * Vector3f(res)), res - 1);
 
         auto z0 = voxel_min.z();
@@ -220,9 +210,15 @@ struct backend_traits<Float, Spectrum, dr::Tensor<DynamicBuffer<Float>>> {
         return dr::select(m <= 1.f, m, 2.f - m);
     }
 
-    static Point3f tex_wrap(const Storage &storage, const Point3f &p) {
-        dr::WrapMode mode = storage.wrap_mode;
+    static Point3f tex_wrap(dr::WrapMode mode, const Point3f &p) {
         return Point3f(wrap_axis(mode, p.x()), wrap_axis(mode, p.y()), wrap_axis(mode, p.z()));
+    }
+
+    static VolumeParametrization<ScalarFloat> parametrization(const Storage &, dr::WrapMode mode) {
+        VolumeParametrization<ScalarFloat> param;
+        param.wrap      = true;
+        param.wrap_mode = mode;
+        return param;
     }
 
 };
@@ -261,7 +257,8 @@ public:
     using BackendStorage = typename BackendDispatch::Storage;
 
     MappingChain(const Properties &props)
-    : Base(props), m_mappings(MapTypes(props)...), m_backend(BackendDispatch::construct(props)) {
+    : Base(props), m_mappings(MapTypes(props)...), m_backend(BackendDispatch::construct(props)),
+      m_wrap_mode(parse_wrap_mode(props.get<std::string_view>("wrap_mode", "clamp"))) {
         m_resolution = props.get<ScalarVector3i>(
             "resolution", BackendDispatch::dimensions(*m_backend));
         if (dr::any(m_resolution < 1))
@@ -275,7 +272,8 @@ public:
 
     VolumeParametrization<ScalarFloat> parametrization() const override {
         const auto &first_mapping = std::get<0>(m_mappings);
-        VolumeParametrization<ScalarFloat> param;
+        VolumeParametrization<ScalarFloat> param =
+            BackendDispatch::parametrization(m_backend, m_wrap_mode);
         param.to_world = m_to_local.inverse();
         param.flag = first_mapping.coord_flag();
         param.uv_range = first_mapping.coord_range(); // The first mapping decides the chain's
@@ -301,7 +299,7 @@ public:
                 }()
             ), ...);
         }, m_mappings);
-        result = BackendDispatch::tex_wrap(m_backend, result);
+        result = BackendDispatch::tex_wrap(m_wrap_mode, result);
         return { result, extra_min, extra_max };
     }
 
@@ -334,7 +332,9 @@ public:
             ((oss << "    " << string::indent(mappings.to_string(), 4)
                   << "," << std::endl), ...);
         }, m_mappings);
-        oss << "  ]," << std::endl << "  volume = ";
+        oss << "  ]," << std::endl
+            << "  wrap_mode = " << wrap_mode_name(m_wrap_mode) << "," << std::endl
+            << "  volume = ";
         oss << BackendDispatch::describe(m_backend);
         oss << std::endl << "]";
         return oss.str();
@@ -389,8 +389,27 @@ public:
     }
 
 private:
+    static dr::WrapMode parse_wrap_mode(std::string_view name) {
+        if (name == "clamp")
+            return dr::WrapMode::Clamp;
+        if (name == "repeat")
+            return dr::WrapMode::Repeat;
+        if (name == "mirror")
+            return dr::WrapMode::Mirror;
+        Throw("mapcoordsvolume: unknown wrap_mode \"%s\"", name);
+    }
+
+    static const char *wrap_mode_name(dr::WrapMode mode) {
+        switch (mode) {
+            case dr::WrapMode::Repeat: return "repeat";
+            case dr::WrapMode::Mirror: return "mirror";
+            default:                   return "clamp";
+        }
+    }
+
     std::tuple<MapTypes...> m_mappings;
     BackendStorage m_backend;
+    dr::WrapMode m_wrap_mode;
     ScalarVector3i m_resolution;
 };
 
@@ -758,6 +777,10 @@ private:
  * the zenith angle from +Z and phi the azimuth from the (+X, +Z)
  * plane.
  *
+ * The ``uv_to_spherical`` transform maps the data's [0, 1]^3 cube to these
+ * spherical coordinates. Its inverse is applied to the remapped point. It
+ * places data that covers part of the sphere.
+ *
  * Points with r outside [rmin, rmax] fall outside this mapping's domain.
  * Rather than a per-sample fallback, their contribution is folded into
  * the fillmin/fillmax "extra" min/max pair extremum() already supports
@@ -777,13 +800,16 @@ public:
 
         m_fillmin = props.get<ScalarFloat>("fillmin", 0.f);
         m_fillmax = props.get<ScalarFloat>("fillmax", 0.f);
+
+        m_spherical_to_uv = props.get<ScalarAffineTransform4f>(
+            "uv_to_spherical", ScalarAffineTransform4f()).inverse();
     }
 
     std::tuple<Point3f, Float, Float> apply(const Point3f &p, Mask /*active*/) const {
         Float r = dr::norm(p);
-        Point3f result(
+        Point3f result = m_spherical_to_uv * Point3f(
             (r - m_rmin) / (m_rmax - m_rmin),
-            dr::acos(p.z() / r) * dr::InvPi<ScalarFloat>,
+            dr::atan2(dr::sqrt(dr::square(p.x()) + dr::square(p.y())), p.z()) * dr::InvPi<ScalarFloat>,
             dr::atan2(p.y(), p.x()) * dr::InvTwoPi<ScalarFloat> + .5f
         );
 
@@ -807,10 +833,13 @@ public:
         extra_min = dr::select(above_rmax, Float(m_fillmax), extra_min);
         extra_max = dr::select(above_rmax, Float(m_fillmax), extra_max);
 
-        region.min = dr::clip(region.min, 0.f, 1.f);
-        region.max = dr::clip(region.max, 0.f, 1.f);
+        BoundingBox3f uv;
+        for (size_t i = 0; i < 8; ++i)
+            uv.expand(m_spherical_to_uv * region.corner(i));
+        uv.min = dr::clip(uv.min, 0.f, 1.f);
+        uv.max = dr::clip(uv.max, 0.f, 1.f);
 
-        return { region, extra_min, extra_max };
+        return { uv, extra_min, extra_max };
     }
 
     ScalarFloat max() const { return dr::maximum(m_fillmin, m_fillmax); }
@@ -830,6 +859,7 @@ public:
 
 private:
     ScalarFloat m_rmin, m_rmax, m_fillmin, m_fillmax;
+    ScalarAffineTransform4f m_spherical_to_uv;
 };
 
 
@@ -947,6 +977,13 @@ Each mapping uses a different set of parameters, described below.
      Default: 1
    - —
 
+ * - uv_to_spherical
+   - |transform|
+   - Transform from the data's [0, 1]³ cube to the normalized spherical
+     coordinates (r, θ / π, φ / 2π + 1/2). Places data that covers part
+     of the sphere. Only used by ``spherical``. Default: identity
+   - —
+
 */
 
 template <typename Float, typename Spectrum>
@@ -989,7 +1026,7 @@ public:
                 Throw("MapCoordsVolume: mapping=\"spherical\" missing required \"boundaries_x\" property");
             props.mark_queried("boundaries_x");
 
-            for (const char *key : { "rmin", "rmax", "fillmin", "fillmax" })
+            for (const char *key : { "rmin", "rmax", "fillmin", "fillmax", "uv_to_spherical" })
                 if (props.has_property(key))
                     props.mark_queried(key);
         } else {
