@@ -28,7 +28,7 @@
 
 #define ERADIATE_MI_VERSION_MAJOR 0
 #define ERADIATE_MI_VERSION_MINOR 6
-#define ERADIATE_MI_VERSION_PATCH 0
+#define ERADIATE_MI_VERSION_PATCH 1
 
 /// Current release of Eradiate's custom Mitsuba version
 #define ERADIATE_MI_VERSION                                                    \
