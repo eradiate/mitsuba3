@@ -315,6 +315,43 @@ def test_spherical_irregular_radius_shifts_result(variant_scalar_rgb):
     assert not dr.allclose(trivial.eval_1(it), irregular.eval_1(it))
 
 
+def test_spherical_partial_sphere(variant_scalar_rgb):
+    """2 x 2 patch covering colatitudes [60, 64] deg and azimuths [0, 40] deg:
+
+                    colatitude 61   colatitude 63
+        azimuth 10        1               2
+        azimuth 30        3               4
+    """
+    uv_to_spherical = (
+        mi.ScalarTransform4f()
+        .translate([0.0, 60.0 / 180.0, 0.5])
+        .scale([1.0, 4.0 / 180.0, 40.0 / 360.0])
+    )
+    volume = mi.load_dict(
+        {
+            "type": "mapcoordsvolume",
+            "mapping": "spherical",
+            "backend": "flat",
+            "data": mi.TensorXf(np.array([[1.0, 2.0], [3.0, 4.0]]).reshape(2, 2, 1)),
+            "boundaries_x": mi.TensorXf(np.array([0.0, 1.0])),
+            "uv_to_spherical": uv_to_spherical,
+        }
+    )
+
+    theta, phi = np.deg2rad(63.0), np.deg2rad(30.0)
+    it = mi.Interaction3f()
+    it.p = [0.5 * np.sin(theta) * np.cos(phi), 0.5 * np.sin(theta) * np.sin(phi), 0.5 * np.cos(theta)]
+    assert dr.allclose(volume.eval_1(it), 4.0)
+
+    # Colatitude cells [0, 90] and [90, 180] deg. The first contains the
+    # patch; the second only sees the clamped colatitude-63 row.
+    extremum = _build_extremum(
+        volume, mi.ScalarVector3i(1, 2, 1), extremum_type="sphericalcoordsextremum"
+    )
+    min_max = mi.traverse(extremum)["data"].numpy().reshape(-1, 2)
+    assert np.allclose(min_max, [[1, 4], [2, 4]], rtol=1e-5)
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize("backend", CART_BACKENDS)
 @pytest.mark.parametrize("mapping", MAPPINGS)
