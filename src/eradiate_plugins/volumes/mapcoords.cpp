@@ -68,7 +68,7 @@ struct backend_traits {
         return backend.extremum(bbox, local);
     }
 
-    static ScalarVector3i resolution(const Backend &backend) { return backend.resolution(); }
+    static ScalarVector3i dimensions(const Backend &backend) { return backend.resolution(); }
 
     static std::pair<ScalarFloat, ScalarFloat> minmax(const Backend &backend) {
         return { backend.min(), backend.max() };
@@ -131,7 +131,7 @@ struct backend_traits<Float, Spectrum, dr::Tensor<DynamicBuffer<Float>>> {
             storage.wrap_mode == dr::WrapMode::Repeat ? "repeat" :
             storage.wrap_mode == dr::WrapMode::Mirror ? "mirror" : "clamp";
         std::ostringstream oss;
-        oss << "FlatTensor[dimensions=" << resolution(*storage)
+        oss << "FlatTensor[dimensions=" << dimensions(*storage)
             << ", wrap_mode=\"" << wrap_mode_str << "\"]";
         return oss.str();
     }
@@ -141,7 +141,7 @@ struct backend_traits<Float, Spectrum, dr::Tensor<DynamicBuffer<Float>>> {
     }
 
     static inline Float eval_1(const Backend &backend, const Interaction3f &it, Mask active) {
-        ScalarVector3i res = resolution(backend);
+        ScalarVector3i res = dimensions(backend);
         Vector3i coord = dr::clip(
             dr::floor2int<Vector3i>(it.p * Vector3f(res)), Vector3i(0), Vector3i(res) - 1);
         UInt32 idx = dr::fmadd(dr::fmadd(coord.z(), res.y(), coord.y()), res.x(), coord.x());
@@ -155,7 +155,7 @@ struct backend_traits<Float, Spectrum, dr::Tensor<DynamicBuffer<Float>>> {
         bbox.clip(BoundingBox3f(Point3f(0.f), Point3f(1.f)));
         Mask valid = bbox.valid();
 
-        Vector3i res = resolution(backend);
+        Vector3i res = dimensions(backend);
         Vector3i voxel_min = dr::maximum(dr::floor(bbox.min * Vector3f(res)), Vector3i(0));
         Vector3i voxel_max = dr::minimum(dr::floor(bbox.max * Vector3f(res)), res - 1);
 
@@ -202,7 +202,7 @@ struct backend_traits<Float, Spectrum, dr::Tensor<DynamicBuffer<Float>>> {
         return { min_val, max_val };
     }
 
-    static ScalarVector3i resolution(const Backend &backend) {
+    static ScalarVector3i dimensions(const Backend &backend) {
         return { (int) backend.shape(2), (int) backend.shape(1), (int) backend.shape(0) };
     }
 
@@ -261,7 +261,13 @@ public:
     using BackendStorage = typename BackendDispatch::Storage;
 
     MappingChain(const Properties &props)
-    : Base(props), m_mappings(MapTypes(props)...), m_backend(BackendDispatch::construct(props)) { }
+    : Base(props), m_mappings(MapTypes(props)...), m_backend(BackendDispatch::construct(props)) {
+        m_resolution = props.get<ScalarVector3i>(
+            "resolution", BackendDispatch::dimensions(*m_backend));
+        if (dr::any(m_resolution < 1))
+            Throw("mapcoordsvolume: \"resolution\" must be at least 1 along "
+                  "each axis (got %s)", m_resolution);
+    }
 
     typename Base::PinGuard pin() const override {
         return BackendDispatch::pin(m_backend, this);
@@ -364,7 +370,7 @@ public:
         return { dr::minimum(min, extra_min), dr::maximum(max, extra_max) };
     }
 
-    ScalarVector3i resolution() const override { return BackendDispatch::resolution(*m_backend); }
+    ScalarVector3i resolution() const override { return m_resolution; }
 
     ScalarFloat max() const override {
         ScalarFloat result = BackendDispatch::minmax(*m_backend).second;
@@ -385,6 +391,7 @@ public:
 private:
     std::tuple<MapTypes...> m_mappings;
     BackendStorage m_backend;
+    ScalarVector3i m_resolution;
 };
 
 
@@ -879,6 +886,13 @@ Irregular coordinate mapping (:monosp:`mapcoordsvolume`)
      plugin handles its own wrapping in that case.
    - —
 
+ * - resolution
+   - |vector|
+   - Resolution reported to extremum structures, in the coordinates
+     before remapping. ``gridextremum`` caps its requested resolution
+     at this value. Defaults to the dimensions of the density data.
+   - —
+
 This plugin implements several coordinate mapping strategies from world
 frame to local data frame, selected at construction time using the
 ``mapping`` parameter. The data can be stored as a 3D tensor or a more
@@ -988,6 +1002,9 @@ public:
                 Throw("MapCoordsVolume: \"wrap_mode\" only applies to backend=\"flat\"");
             props.mark_queried("wrap_mode");
         }
+
+        if (props.has_property("resolution"))
+            props.mark_queried("resolution");
     }
 
     std::vector<ref<Object>> expand() const override {
