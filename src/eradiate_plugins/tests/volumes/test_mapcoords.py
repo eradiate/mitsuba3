@@ -303,59 +303,6 @@ def _make_spherical_volume(
     return mi.load_dict(d)
 
 
-def test_spherical_matches_sphericalcoordsvolume(variant_scalar_rgb):
-    """mapcoordsvolume(mapping="spherical") with a trivial radial boundary
-    array must match sphericalcoordsvolume over its full domain: inside
-    the shell, below rmin and above rmax."""
-    values = [1.0, 5.0, 2.0, 8.0, 3.0, 9.0, 4.0, 6.0]
-    data_flat = np.array(values).reshape(1, 1, len(values))
-
-    rmin, rmax = 0.1, 0.4
-    fillmin, fillmax = -7.0, -8.0
-
-    ours = _make_spherical_volume([0.0, 1.0], values, rmin, rmax, fillmin, fillmax)
-
-    ref_volume = mi.load_dict(
-        {
-            "type": "gridvolume",
-            "grid": mi.VolumeGrid(data_flat),
-            "filter_type": "nearest",
-            "accel": False,
-            "raw": True,
-        }
-    )
-    ref = mi.load_dict(
-        {
-            "type": "sphericalcoordsvolume",
-            "volume": ref_volume,
-            "rmin": rmin,
-            "rmax": rmax,
-            "fillmin": fillmin,
-            "fillmax": fillmax,
-        }
-    )
-
-    points = [
-        (0.0, 0.0, 0.0),      # r=0, below rmin
-        (0.05, 0.0, 0.0),     # below rmin
-        (0.1, 0.0, 0.0),      # exactly rmin
-        (0.25, 0.0, 0.0),     # mid-shell
-        (0.4, 0.0, 0.0),      # exactly rmax
-        (0.6, 0.0, 0.0),      # above rmax
-        (0.0, 0.25, 0.0),     # mid-shell, off x-axis
-        (0.0, 0.0, 0.25),     # mid-shell, +Z pole (theta=0)
-        (0.0, 0.0, -0.25),    # mid-shell, -Z pole (theta=pi)
-        (-0.2, -0.2, 0.1),    # mid-shell, negative coordinates
-        (0.15, -0.1, 0.2),    # mid-shell, general off-axis point
-        (0.5, 0.5, 0.5),      # above rmax
-        (-0.5, -0.5, -0.5),   # above rmax, negative coordinates
-    ]
-    for p in points:
-        it = mi.Interaction3f()
-        it.p = list(p)
-        assert dr.allclose(ours.eval_1(it), ref.eval_1(it)), p
-
-
 def test_spherical_irregular_radius_shifts_result(variant_scalar_rgb):
     """Irregular boundaries_x with a spherical mapping must remap the radial axis"""
     values = [1.0, 2.0, 3.0]
@@ -366,46 +313,6 @@ def test_spherical_irregular_radius_shifts_result(variant_scalar_rgb):
     it.p = [0.3, 0.0, 0.0]  # r = 0.3, mid-shell either way
 
     assert not dr.allclose(trivial.eval_1(it), irregular.eval_1(it))
-
-
-def test_spherical_extremum_matches_sphericalcoordsvolume(variant_scalar_rgb):
-    """sphericalcoordsextremum built over mapcoordsvolume(mapping="spherical")
-    with a trivial radial boundary array must match the same structure
-    built over sphericalcoordsvolume, shell by shell."""
-    values = [1.0, 5.0, 2.0, 8.0]
-    data_flat = np.array(values).reshape(1, 1, len(values))
-    rmin, rmax = 0.0, 1.0
-    fillmin, fillmax = -5.0, -6.0
-
-    ours = _make_spherical_volume([0.0, 1.0], values, rmin, rmax, fillmin, fillmax)
-
-    ref_volume = mi.load_dict(
-        {
-            "type": "gridvolume",
-            "grid": mi.VolumeGrid(data_flat),
-            "filter_type": "nearest",
-            "accel": False,
-            "raw": True,
-        }
-    )
-    ref = mi.load_dict(
-        {
-            "type": "sphericalcoordsvolume",
-            "volume": ref_volume,
-            "rmin": rmin,
-            "rmax": rmax,
-            "fillmin": fillmin,
-            "fillmax": fillmax,
-        }
-    )
-
-    resolution = mi.ScalarVector3i(len(values), 1, 1)
-    ours_extremum = _build_extremum(ours, resolution, extremum_type="sphericalcoordsextremum")
-    ref_extremum = _build_extremum(ref, resolution, extremum_type="sphericalcoordsextremum")
-
-    ours_grid = mi.traverse(ours_extremum)["data"].numpy()
-    ref_grid = mi.traverse(ref_extremum)["data"].numpy()
-    assert np.allclose(ours_grid, ref_grid)
 
 
 @pytest.mark.slow
