@@ -163,48 +163,35 @@ struct backend_traits<Float, Spectrum, dr::Tensor<DynamicBuffer<Float>>> {
                      Vector3i(0), res - 1);
         Vector3i voxel_max =
             dr::minimum(dr::floor(bbox.max * Vector3f(res)), res - 1);
+        Vector3i range = voxel_max - voxel_min + 1;
 
-        auto z0       = voxel_min.z();
+        Int32 x = 0, y = 0, z = 0;
         Float min_val = dr::Infinity<Float>, max_val = -dr::Infinity<Float>;
+        Mask active = valid;
 
-        std::tie(z0, min_val, max_val) = dr::while_loop(
-            std::make_tuple(z0, min_val, max_val),
-            [valid, voxel_max](const auto &z, const auto &, const auto &) {
-                return valid && (z <= voxel_max.z());
-            },
-            [&backend, valid, voxel_min, voxel_max, res](auto &z, auto &min_val,
-                                                         auto &max_val) {
-                auto y0                        = voxel_min.y();
-                std::tie(y0, min_val, max_val) = dr::while_loop(
-                    std::make_tuple(y0, min_val, max_val),
-                    [valid, voxel_max](const auto &y, const auto &,
-                                       const auto &) {
-                        return valid && (y <= voxel_max.y());
-                    },
-                    [&backend, valid, voxel_min, voxel_max, res,
-                     z](auto &y, auto &min_val, auto &max_val) {
-                        auto x0                        = voxel_min.x();
-                        std::tie(x0, min_val, max_val) = dr::while_loop(
-                            std::make_tuple(x0, min_val, max_val),
-                            [valid, voxel_max](const auto &x, const auto &,
-                                               const auto &) {
-                                return valid && (x <= voxel_max.x());
-                            },
-                            [&backend, valid, res, z, y](auto &x, auto &min_val,
-                                                         auto &max_val) {
-                                UInt32 idx = dr::fmadd(
-                                    dr::fmadd(UInt32(z), UInt32(res.y()),
-                                              UInt32(y)),
-                                    UInt32(res.x()), UInt32(x));
-                                Float val = dr::gather<Float>(backend.array(),
-                                                              idx, valid);
-                                min_val   = dr::minimum(min_val, val);
-                                max_val   = dr::maximum(max_val, val);
-                                x += 1;
-                            });
-                        y += 1;
-                    });
-                z += 1;
+        std::tie(x, y, z, min_val, max_val, active) = dr::while_loop(
+            std::make_tuple(x, y, z, min_val, max_val, active),
+            [](const auto &, const auto &, const auto &, const auto &,
+               const auto &, const auto &active) { return active; },
+            [&backend, voxel_min, range, res](auto &x, auto &y, auto &z,
+                                              auto &min_val, auto &max_val,
+                                              auto &active) {
+                Vector3i v = voxel_min + Vector3i(x, y, z);
+                UInt32 idx =
+                    UInt32((v.z() * res.y() + v.y()) * res.x() + v.x());
+                Float val = dr::gather<Float>(backend.array(), idx, active);
+                dr::masked(min_val, active) = dr::minimum(min_val, val);
+                dr::masked(max_val, active) = dr::maximum(max_val, val);
+
+                // Advance x, carrying into y then z
+                x += 1;
+                Mask carry_x = x >= range.x();
+                x            = dr::select(carry_x, 0, x);
+                y            = dr::select(carry_x, y + 1, y);
+                Mask carry_y = carry_x && (y >= range.y());
+                y            = dr::select(carry_y, 0, y);
+                z            = dr::select(carry_y, z + 1, z);
+                active &= z < range.z();
             });
 
         min_val = dr::select(valid, min_val, Float(0.f));
