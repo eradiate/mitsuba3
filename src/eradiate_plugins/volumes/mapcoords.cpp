@@ -289,40 +289,45 @@ public:
         Base::traverse(cb);
     }
 
-    std::tuple<Point<Float, 3>, Float, Float> apply(const Point<Float, 3>& p, Mask active) const {
+    // Returns the point in backend coordinates, and a value with a mask for
+    // points that have no data in the backend (e.g. outside [rmin, rmax] in
+    // SphericalMapping). eval() returns that value where the mask is set.
+    // The first mapping that sets the mask decides the value.
+    std::tuple<Point<Float, 3>, Float, Mask> apply(const Point<Float, 3>& p, Mask active) const {
         Point<Float, 3> result = m_to_local * p;
-        Float extra_min = dr::Infinity<ScalarFloat>, extra_max = -dr::Infinity<ScalarFloat>;
+        Float fill_value = 0.f;
+        Mask filled = false;
         std::apply([&](const auto &...mappings) {
             ((
                 [&] {
-                    auto [next, e_min, e_max] = mappings.apply(result, active);
+                    auto [next, v, f] = mappings.apply(result, active);
                     result = next;
-                    extra_min = dr::minimum(extra_min, e_min);
-                    extra_max = dr::maximum(extra_max, e_max);
+                    fill_value = dr::select(filled, fill_value, v);
+                    filled |= f;
                 }()
             ), ...);
         }, m_mappings);
         result = BackendDispatch::tex_wrap(m_wrap_mode, result);
-        return { result, extra_min, extra_max };
+        return { result, fill_value, filled };
     }
 
-    inline std::tuple<Interaction3f, Float, Float> map_interaction(const Interaction3f &it, Mask active) const {
-        auto [p, e_min, e_max] = apply(it.p, active);
-        return { Interaction3f(it.t, it.time, it.wavelengths, p, it.n), e_min, e_max };
+    inline std::tuple<Interaction3f, Float, Mask> map_interaction(const Interaction3f &it, Mask active) const {
+        auto [p, fill_value, filled] = apply(it.p, active);
+        return { Interaction3f(it.t, it.time, it.wavelengths, p, it.n), fill_value, filled };
     }
 
     UnpolarizedSpectrum eval(const Interaction3f &it, Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::TextureEvaluate, active);
-        auto [mapped_it, e_min, e_max] = map_interaction(it, active);
-        UnpolarizedSpectrum value = BackendDispatch::eval(*m_backend, mapped_it, active);
-        return dr::select(e_min <= e_max, e_min, value);
+        auto [mapped_it, fill_value, filled] = map_interaction(it, active);
+        UnpolarizedSpectrum value = BackendDispatch::eval(*m_backend, mapped_it, active && !filled);
+        return dr::select(filled, fill_value, value);
     }
 
     Float eval_1(const Interaction3f &it, Mask active = true) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::TextureEvaluate, active);
-        auto [mapped_it, e_min, e_max] = map_interaction(it, active);
-        Float value = BackendDispatch::eval_1(*m_backend, mapped_it, active);
-        return dr::select(e_min <= e_max, e_min, value);
+        auto [mapped_it, fill_value, filled] = map_interaction(it, active);
+        Float value = BackendDispatch::eval_1(*m_backend, mapped_it, active && !filled);
+        return dr::select(filled, fill_value, value);
     }
 
     std::string to_string() const override {
@@ -506,10 +511,10 @@ public:
         return dr::clip(lo, start + 1u, start + len - 1u) - 1u;
     }
 
-    std::tuple<Point3f, Float, Float> apply(const Point3f &p, Mask active) const {
+    std::tuple<Point3f, Float, Mask> apply(const Point3f &p, Mask active) const {
         Point3f result = p;
         result[Axis] = locate_scalar(p[Axis], active);
-        return { result, dr::Infinity<ScalarFloat>, -dr::Infinity<ScalarFloat> };
+        return { result, 0.f, false };
     }
 
     Float locate_scalar(Float x, Mask active = true) const {
@@ -587,7 +592,7 @@ public:
             "uv_to_spherical", ScalarAffineTransform4f()).inverse();
     }
 
-    std::tuple<Point3f, Float, Float> apply(const Point3f &p, Mask /*active*/) const {
+    std::tuple<Point3f, Float, Mask> apply(const Point3f &p, Mask /*active*/) const {
         Float r = dr::norm(p);
         Point3f result = m_spherical_to_uv * Point3f(
             (r - m_rmin) * m_inv_dr,
@@ -595,14 +600,10 @@ public:
             dr::atan2(p.y(), p.x()) * dr::InvTwoPi<ScalarFloat> + .5f
         );
 
-        Float extra_min = dr::Infinity<ScalarFloat>, extra_max = -dr::Infinity<ScalarFloat>;
         Mask below_rmin = r < m_rmin, above_rmax = r > m_rmax;
-        extra_min = dr::select(below_rmin, Float(m_fillmin), extra_min);
-        extra_max = dr::select(below_rmin, Float(m_fillmin), extra_max);
-        extra_min = dr::select(above_rmax, Float(m_fillmax), extra_min);
-        extra_max = dr::select(above_rmax, Float(m_fillmax), extra_max);
+        Float fill_value = dr::select(below_rmin, Float(m_fillmin), Float(m_fillmax));
 
-        return { result, extra_min, extra_max };
+        return { result, fill_value, below_rmin || above_rmax };
     }
 
     // Paired with extremum_spherical, the region is already expressed in 
