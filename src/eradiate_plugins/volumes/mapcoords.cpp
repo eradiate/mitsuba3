@@ -49,7 +49,7 @@ struct backend_traits {
     }
 
     static void traverse(Storage &storage, TraversalCallback *cb) {
-        cb->put("volume", storage.get(), ParamFlags::NonDifferentiable);
+        cb->put("volume", storage.get(), ParamFlags::Differentiable);
     }
 
     static std::string describe(const Storage &storage) {
@@ -84,7 +84,7 @@ struct backend_traits {
 
 
 /**
- * Specialization for a Tensor backend
+ * Specialization for a Tensor storage backend
  *
  * This backend uses plain tensors to hold the data and performs no
  * interpolation. It is meant for volumes whose true data is piecewise-constant
@@ -106,10 +106,7 @@ struct backend_traits<Float, Spectrum, dr::Tensor<DynamicBuffer<Float>>> {
     };
 
     static Storage construct(const Properties &props) {
-        Storage storage(Backend(props.get_any<TensorXf>("data")));
-        if (props.has_property("volume"))
-            (void) props.get<ref<Object>>("volume");
-        return storage;
+        return Storage(Backend(props.get_any<TensorXf>("data")));
     }
 
     static PinGuard pin(const Storage &, const Volume<Float, Spectrum> *owner) {
@@ -237,7 +234,7 @@ public:
      * Mappings are applied in chain, in the order of occurence in the MapTypes
      * variadic template parameter.
      *
-     * Mappings are constructed one after each other in the order of occurence
+     * Mappings are constructed one after the other in the order of occurence
      * in the MapTypes variadic template parameter. They are passed the
      * properties of the current constructor to maintain a compact dict
      * interface.
@@ -477,8 +474,7 @@ public:
                   "points (got %d)", key, (int) n_points);
 
         std::vector<ScalarFloat> b(n_points);
-        for (uint32_t i = 0; i < n_points; ++i)
-            b[i] = dr::slice(bt.array(), i);
+        dr::store(b.data(), bt.array());
 
         for (uint32_t i = 1; i < n_points; ++i)
             if (!(b[i] > b[i - 1]))
@@ -506,13 +502,7 @@ public:
 
     std::tuple<Point3f, Float, Float> apply(const Point3f &p, Mask active) const {
         Point3f result = p;
-        if constexpr (Axis == 2) {
-            Float x = p[Axis];
-            UInt32 cell = searchsorted<UInt32>(m_boundaries, 0u, m_n_cells + 1u, x, active);
-            result[Axis] = irregular_cell_to_fraction(m_boundaries, m_n_cells, cell, x, active);
-        } else {
-            result[Axis] = locate_scalar(p[Axis], active);
-        }
+        result[Axis] = locate_scalar(p[Axis], active);
         return { result, dr::Infinity<ScalarFloat>, -dr::Infinity<ScalarFloat> };
     }
 
@@ -580,8 +570,9 @@ public:
     SphericalMapping(const Properties &props) {
         m_rmin = props.get<ScalarFloat>("rmin", 0.f);
         m_rmax = props.get<ScalarFloat>("rmax", 1.f);
-        if (m_rmin > m_rmax)
+        if (m_rmin >= m_rmax)
             Throw("SphericalMapping: 'rmin' must be lower than 'rmax'");
+        m_inv_dr = 1.f / (m_rmax - m_rmin);
 
         m_fillmin = props.get<ScalarFloat>("fillmin", 0.f);
         m_fillmax = props.get<ScalarFloat>("fillmax", 0.f);
@@ -593,7 +584,7 @@ public:
     std::tuple<Point3f, Float, Float> apply(const Point3f &p, Mask /*active*/) const {
         Float r = dr::norm(p);
         Point3f result = m_spherical_to_uv * Point3f(
-            (r - m_rmin) / (m_rmax - m_rmin),
+            (r - m_rmin) * m_inv_dr,
             dr::atan2(dr::sqrt(dr::square(p.x()) + dr::square(p.y())), p.z()) * dr::InvPi<ScalarFloat>,
             dr::atan2(p.y(), p.x()) * dr::InvTwoPi<ScalarFloat> + .5f
         );
@@ -643,7 +634,7 @@ public:
     }
 
 private:
-    ScalarFloat m_rmin, m_rmax, m_fillmin, m_fillmax;
+    ScalarFloat m_rmin, m_rmax, m_inv_dr, m_fillmin, m_fillmax;
     ScalarAffineTransform4f m_spherical_to_uv;
 };
 
@@ -679,7 +670,7 @@ Irregular coordinate mapping (:monosp:`mapcoordsvolume`)
    - Nested volume plugin supplying the density data, addressed in
      the remapped coordinates. Required for the ``volume`` backend.
      Unused for the ``flat`` backend.
-   - |exposed|
+   - |exposed|, |differentiable|
 
  * - data
    - |tensor|
