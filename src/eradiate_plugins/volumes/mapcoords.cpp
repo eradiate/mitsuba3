@@ -90,6 +90,8 @@ struct backend_traits {
  * interpolation. It is meant for volumes whose true data is piecewise-constant
  * per cell (one value per layer, no continuous field to filter).
  *
+ * This backend is single-channel only.
+ *
  */
 
 template <typename Float, typename Spectrum>
@@ -106,6 +108,10 @@ struct backend_traits<Float, Spectrum, dr::Tensor<DynamicBuffer<Float>>> {
     };
 
     static Storage construct(const Properties &props) {
+        if constexpr (dr::size_v<UnpolarizedSpectrum> != 1)
+            Throw("MapCoordsVolume: backend=\"flat\" holds single-channel data "
+                  "and requires a variant with a single spectral channel "
+                  "(got %zu channels)", (size_t) dr::size_v<UnpolarizedSpectrum>);
         return Storage(Backend(props.get_any<TensorXf>("data")));
     }
 
@@ -662,7 +668,7 @@ Irregular coordinate mapping (:monosp:`mapcoordsvolume`)
      exist: ``volume`` and ``flat``. ``volume`` wraps a nested
      volume plugin and is the default. ``flat`` owns a flat tensor
      directly, with no interpolation. ``mapping = "spherical"``
-     only supports ``flat``.
+     only supports ``flat``. The flat backend is single-channel only.
    - —
 
  * - volume
