@@ -17,7 +17,7 @@ NAMESPACE_BEGIN(mitsuba)
  * mappings. A mapping is defined as an object able to perform a transformation
  * of a point in a 3D coord system to another through an "apply" method. This
  * library provides builtin mappings and tools to combine them or maintain
- * compatitibility with other Mitsuba interfaces.
+ * compatibility with other Mitsuba interfaces.
  *
  */
 
@@ -244,10 +244,10 @@ public:
      * coordinates. Accepts an arbitrary number of mappings through a variadic
      * MapTypes template parameter.
      *
-     * Mappings are applied in chain, in the order of occurence in the MapTypes
+     * Mappings are applied in chain, in the order of occurrence in the MapTypes
      * variadic template parameter.
      *
-     * Mappings are constructed one after the other in the order of occurence
+     * Mappings are constructed one after the other in the order of occurrence
      * in the MapTypes variadic template parameter. They are passed the
      * properties of the current constructor to maintain a compact dict
      * interface.
@@ -256,7 +256,8 @@ public:
      * applying the Volume<Float, Spectrum> interface's "to_local" attribute
      * before applying the chain of mappings.
      *
-     * Extremum properties are defined using the target backend coordinates.
+     * Extremum queries take regions in the input coordinates of the first
+     * mapping. The chain remaps them to the backend coordinates.
      */
 
     MI_IMPORT_BASE(Volume, m_to_local, m_bbox)
@@ -606,10 +607,8 @@ private:
  * spherical coordinates. Its inverse is applied to the remapped point. It
  * places data that covers part of the sphere.
  *
- * Points with r outside [rmin, rmax] fall outside this mapping's domain.
- * Rather than a per-sample fallback, their contribution is folded into
- * the fillmin/fillmax "extra" min/max pair extremum() already supports
- * for any mapping that bypasses the backend over part of its domain.
+ * Points with r below rmin take the value fillmin, and points with r above
+ * rmax take the value fillmax.
  */
 
 template <typename Float, typename Spectrum> struct SphericalMapping {
@@ -644,7 +643,8 @@ public:
                         dr::InvPi<ScalarFloat>,
                     dr::atan2(p.y(), p.x()) * dr::InvTwoPi<ScalarFloat> + .5f);
 
-        Mask below_rmin = r<m_rmin, above_rmax = r> m_rmax;
+        Mask below_rmin = r < m_rmin;
+        Mask above_rmax = r > m_rmax;
         Float fill_value =
             dr::select(below_rmin, Float(m_fillmin), Float(m_fillmax));
 
@@ -716,7 +716,7 @@ Irregular coordinate mapping (:monosp:`mapcoordsvolume`)
    - |string|
    - Selects where the remapped density data lives. Two values
      exist: ``volume`` and ``flat``. ``volume`` wraps a nested
-     volume plugin and is the default. ``flat`` owns a flat tensor
+     volume plugin and is the default. ``flat`` stores a flat tensor
      directly, with no interpolation. ``mapping = "spherical"``
      only supports ``flat``. The flat backend is single-channel only.
    - —
@@ -742,7 +742,7 @@ Irregular coordinate mapping (:monosp:`mapcoordsvolume`)
      ``clamp``, ``repeat`` and ``mirror``, with ``clamp`` as
      default. Only valid for the ``flat`` backend. Setting it for
      the ``volume`` backend raises an error, since the nested volume
-     plugin handles its own wrapping in that case.
+     plugin handles wrapping in that case.
    - —
 
  * - resolution
@@ -794,9 +794,9 @@ Each mapping uses a different set of parameters, described below.
 
  * - rmin
    - |float|
-   - Radius for the inner limit of the spherical shell, relative to
-     the local [0, 1]³ cube's center. The cube's own face sits at
-     r = 1. Only used by ``spherical``. Default: 0
+   - Radius of the inner limit of the spherical shell, in the local
+     frame. The shell is centered at the local origin. Only used by
+     ``spherical``. Default: 0
    - —
 
  * - rmax
