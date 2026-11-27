@@ -820,101 +820,55 @@ class MapCoordsVolume final : public Volume<Float, Spectrum> {
 public:
     MI_IMPORT_BASE(Volume)
 
-    MapCoordsVolume(const Properties &props) : Base(props), m_props(props) {
-        m_mapping = props.get<std::string>("mapping");
-        m_backend = props.get<std::string>("backend", "volume");
-        props.mark_queried("mapping");
-        props.mark_queried("backend");
-
-        if (m_mapping == "search") {
-            if (m_backend == "volume") {
-                if (!props.has_property("volume"))
-                    Throw("MapCoordsVolume: backend=\"volume\" requires a "
-                          "\"volume\" property");
-                props.mark_queried("volume");
-            } else if (m_backend == "flat") {
-                if (!props.has_property("data"))
-                    Throw("MapCoordsVolume: backend=\"flat\" requires a "
-                          "\"data\" property");
-                props.mark_queried("data");
-            } else {
-                Throw("MapCoordsVolume: unknown \"backend\" = \"%s\" (expected "
-                      "\"volume\" or \"flat\")",
-                      m_backend);
-            }
-
-            if (!props.has_property("boundaries_z"))
-                Throw("MapCoordsVolume: missing required \"boundaries_z\" "
-                      "property");
-            props.mark_queried("boundaries_z");
-        } else if (m_mapping == "spherical") {
-            if (m_backend != "flat")
-                Throw("MapCoordsVolume: mapping=\"spherical\" only supports "
-                      "backend=\"flat\"");
-
-            if (!props.has_property("data"))
-                Throw("MapCoordsVolume: backend=\"flat\" requires a \"data\" "
-                      "property");
-            props.mark_queried("data");
-
-            if (!props.has_property("boundaries_x"))
-                Throw("MapCoordsVolume: mapping=\"spherical\" missing required "
-                      "\"boundaries_x\" property");
-            props.mark_queried("boundaries_x");
-
-            for (const char *key :
-                 { "rmin", "rmax", "fillmin", "fillmax", "uv_to_spherical" })
-                if (props.has_property(key))
-                    props.mark_queried(key);
-        } else {
-            Throw("MapCoordsVolume: unknown \"mapping\" = \"%s\" (expected "
-                  "\"search\" or \"spherical\")",
-                  m_mapping);
-        }
-
-        if (props.has_property("wrap_mode")) {
-            if (m_backend != "flat")
-                Throw("MapCoordsVolume: \"wrap_mode\" only applies to "
-                      "backend=\"flat\"");
-            props.mark_queried("wrap_mode");
-        }
-
-        if (props.has_property("resolution"))
-            props.mark_queried("resolution");
-    }
-
-    std::vector<ref<Object>> expand() const override {
+    MapCoordsVolume(const Properties &props) : Base(props) {
         using VolumeBackend = Volume<Float, Spectrum>;
         using FlatBackend   = dr::Tensor<DynamicBuffer<Float>>;
         using Search        = IrregularSearchMapping<Float, Spectrum, 2>;
         using Spherical     = SphericalMapping<Float, Spectrum>;
         using SearchRadius  = IrregularSearchMapping<Float, Spectrum, 0>;
 
-        ref<Object> result;
+        std::string mapping = props.get<std::string>("mapping");
+        std::string backend = props.get<std::string>("backend", "volume");
 
-        if (m_mapping == "search") {
-            if (m_backend == "volume")
-                result =
+        if (backend != "volume" && backend != "flat")
+            Throw("MapCoordsVolume: unknown \"backend\" = \"%s\" (expected "
+                  "\"volume\" or \"flat\")",
+                  backend);
+
+        // The nested volume handles wrapping with the volume backend
+        if (backend == "volume" && props.has_property("wrap_mode"))
+            Throw("MapCoordsVolume: \"wrap_mode\" only applies to "
+                  "backend=\"flat\"");
+
+        if (mapping == "search") {
+            if (backend == "volume")
+                m_volume =
                     (Object *) new MappingChain<Float, Spectrum, VolumeBackend,
-                                                Search>(m_props);
+                                                Search>(props);
             else
-                result =
+                m_volume =
                     (Object *) new MappingChain<Float, Spectrum, FlatBackend,
-                                                Search>(m_props);
-        } else {
-            result =
+                                                Search>(props);
+        } else if (mapping == "spherical") {
+            if (backend != "flat")
+                Throw("MapCoordsVolume: mapping=\"spherical\" only supports "
+                      "backend=\"flat\"");
+            m_volume =
                 (Object *) new MappingChain<Float, Spectrum, FlatBackend,
-                                            Spherical, SearchRadius>(m_props);
+                                            Spherical, SearchRadius>(props);
+        } else {
+            Throw("MapCoordsVolume: unknown \"mapping\" = \"%s\" (expected "
+                  "\"search\" or \"spherical\")",
+                  mapping);
         }
-
-        return { result };
     }
+
+    std::vector<ref<Object>> expand() const override { return { m_volume }; }
 
     MI_DECLARE_CLASS(MapCoordsVolume)
 
 protected:
-    Properties m_props;
-    std::string m_mapping, m_backend;
+    ref<Object> m_volume;
 };
 
 MI_EXPORT_PLUGIN(MapCoordsVolume)
